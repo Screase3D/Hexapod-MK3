@@ -78,12 +78,11 @@ class ServoController {
 
   bool torque_req_ = false;
   bool estop_ = false;
-  bool outputs_off_ = false;  // Ausgänge sind (laut letztem Schreiben) aus
   bool cal_dirty_ = false;
   String inhibit_;
   float slew_deg_per_s_ = SERVO_SLEW_DEG_PER_S;
 
-  uint16_t last_ticks_[NUM_BOARDS][CHANNELS_PER_BOARD];
+  uint16_t last_ticks_[NUM_BOARDS][Pca9685::kChannels];
   bool force_write_ = true;
   uint32_t last_check_ms_ = 0;
 };

@@ -2,8 +2,6 @@
 
 #include <math.h>
 
-ServoController servos;
-
 namespace {
 constexpr uint32_t BOARD_CHECK_PERIOD_MS = 2000;
 
@@ -15,6 +13,8 @@ struct BoardRange {
 };
 BoardRange g_range[NUM_BOARDS];
 }  // namespace
+
+ServoController servos;
 
 ServoController::ServoController() {
   mutex_ = xSemaphoreCreateMutex();
@@ -62,7 +62,7 @@ float ServoController::clampUs(float us) {
 }
 
 void ServoController::update(float dt_s) {
-  uint16_t ticks[NUM_BOARDS][16] = {};
+  uint16_t ticks[NUM_BOARDS][Pca9685::kChannels] = {};
 
   lock();
   const bool want_on = torque_req_ && !estop_ && inhibit_.isEmpty();
@@ -93,7 +93,6 @@ void ServoController::update(float dt_s) {
     const ServoMapEntry& m = SERVO_MAP[i];
     if (boards_[m.board]) ticks[m.board][m.channel] = boards_[m.board]->usToTicks(c.current_us);
   }
-  outputs_off_ = !want_on;
   unlock();
 
   // Ab hier nur noch I2C (ausschließlich dieser Task greift auf den Bus zu)

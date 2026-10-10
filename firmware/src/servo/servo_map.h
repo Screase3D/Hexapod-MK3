@@ -34,7 +34,6 @@ constexpr ServoMapEntry SERVO_MAP[NUM_SERVOS] = {
 };
 
 constexpr int NUM_BOARDS = 2;
-constexpr int CHANNELS_PER_BOARD = 9;  // CH0..CH8 belegt
 
 inline constexpr int servoId(int leg, int joint) { return leg * JOINTS_PER_LEG + joint; }
 inline constexpr int servoLeg(int id) { return id / JOINTS_PER_LEG; }
