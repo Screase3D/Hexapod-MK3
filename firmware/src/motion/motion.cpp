@@ -60,16 +60,23 @@ Mode mode() {
 }
 
 void applyPoseJson(JsonVariantConst o) {
-  const PoseLimits& L = POSE_LIMITS;
+  // JSON außerhalb des kritischen Abschnitts auswerten, nur das Kopieren sperren
   portENTER_CRITICAL(&g_mux);
-  kin::BodyPose& p = g_target.pose;
+  PoseState next = g_target;
+  portEXIT_CRITICAL(&g_mux);
+
+  const PoseLimits& L = POSE_LIMITS;
+  kin::BodyPose& p = next.pose;
   if (o["x"].is<float>()) p.x = clampf(o["x"], -L.shift_max, L.shift_max);
   if (o["y"].is<float>()) p.y = clampf(o["y"], -L.shift_max, L.shift_max);
   if (o["z"].is<float>()) p.z = clampf(o["z"], L.height_min, L.height_max);
   if (o["roll"].is<float>()) p.roll_deg = clampf(o["roll"], -L.tilt_max, L.tilt_max);
   if (o["pitch"].is<float>()) p.pitch_deg = clampf(o["pitch"], -L.tilt_max, L.tilt_max);
   if (o["yaw"].is<float>()) p.yaw_deg = clampf(o["yaw"], -L.yaw_max, L.yaw_max);
-  if (o["stance"].is<float>()) g_target.stance = clampf(o["stance"], L.stance_min, L.stance_max);
+  if (o["stance"].is<float>()) next.stance = clampf(o["stance"], L.stance_min, L.stance_max);
+
+  portENTER_CRITICAL(&g_mux);
+  g_target = next;
   portEXIT_CRITICAL(&g_mux);
 }
 
