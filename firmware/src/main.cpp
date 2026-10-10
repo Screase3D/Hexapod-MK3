@@ -6,7 +6,9 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <WiFi.h>
 #include <Wire.h>
+#include <esp_sleep.h>
 
 #include "config.h"
 #include "net/camera.h"
@@ -42,8 +44,21 @@ void controlTask(void*) {
   }
 }
 
-// Akku-Tiefentladeschutz: Servos sperren, bis die Spannung wieder steigt
+// Akku-Tiefentladeschutz (2S ohne BMS):
+//  1. kritisch  -> Servos sperren, bis die Spannung wieder steigt
+//  2. sehr tief -> Tiefschlaf, damit der ESP die Zellen nicht weiter leert
 void updateSafety() {
+  if (battery.shutdownRequired()) {
+    Serial.printf("[Akku] %.2f V - Tiefschlaf zum Schutz der Zellen. Laden, dann Reset.\n",
+                  battery.voltage());
+    servos.emergencyStop();
+    delay(3 * CONTROL_PERIOD_MS);  // Regel-Task schaltet die PCA-Ausgänge ab
+    statusLeds.off();
+    WiFi.mode(WIFI_OFF);
+    Serial.flush();
+    esp_deep_sleep_start();  // ohne Weckquelle: nur Reset/Neustart weckt auf
+  }
+
   static bool inhibited = false;
   if (g_battery_cutoff && !inhibited) {
     servos.setInhibit("Akku leer");
@@ -116,7 +131,7 @@ void setup() {
 
   xTaskCreatePinnedToCore(controlTask, "control", 4096, nullptr, CONTROL_TASK_PRIO, nullptr,
                           CONTROL_TASK_CORE);
-  Serial.println("Bereit. Servos sind aus - Torque in der Weboberflaeche einschalten.");
+  Serial.println("Bereit. Servos sind aus - Torque in der Weboberfläche einschalten.");
 }
 
 void loop() {

@@ -19,6 +19,7 @@ class StatusLeds {
 
   void begin();
   void setMode(Mode m) { mode_ = m; }
+  void off() { writeEyes(0, 0, 0); }
   Mode mode() const { return mode_; }
   // Zyklisch aufrufen (ca. 20-50 Hz) für Animationen
   void update();

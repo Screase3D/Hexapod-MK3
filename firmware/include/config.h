@@ -56,7 +56,7 @@ constexpr int CAM_PIN_PCLK  = 13;
 constexpr int CAM_XCLK_HZ   = 20000000;
 
 // ---------------------------------------------------------------------------
-// Akku (2S Li-Ion, OHNE BMS -> Software muss tiefentladung verhindern!)
+// Akku (2S Li-Ion, OHNE BMS -> Software muss Tiefentladung verhindern!)
 // ---------------------------------------------------------------------------
 constexpr float BAT_DIVIDER_RATIO = (100.0f + 47.0f) / 47.0f;  // ~3.128
 constexpr float BAT_CELLS         = 2.0f;
@@ -65,7 +65,11 @@ constexpr float BAT_EMPTY_V       = 6.40f;   // 3.20 V/Zelle (0 % in der Anzeige
 constexpr float BAT_WARN_V        = 6.80f;   // 3.40 V/Zelle -> Warnung
 constexpr float BAT_CRITICAL_V    = 6.40f;   // 3.20 V/Zelle -> Servos aus
 constexpr float BAT_PRESENT_V     = 4.50f;   // darunter: kein Akku (USB-Betrieb)
-constexpr uint32_t BAT_CRITICAL_HOLD_MS = 5000;  // so lange unter Grenze -> Abschaltung
+constexpr uint32_t BAT_CRITICAL_HOLD_MS = 5000;  // so lange unter Grenze -> Servos aus
+// Unterhalb dieser Spannung geht der ESP in den Tiefschlaf, damit er die
+// Zellen nicht weiter entlädt (Aufwecken nur per Reset nach dem Laden).
+constexpr float BAT_SHUTDOWN_V    = 6.00f;   // 3.00 V/Zelle
+constexpr uint32_t BAT_SHUTDOWN_HOLD_MS = 10000;
 
 // ---------------------------------------------------------------------------
 // Servos / Beine

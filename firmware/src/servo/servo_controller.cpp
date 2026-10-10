@@ -43,7 +43,7 @@ bool ServoController::begin(TwoWire& wire) {
   }
 
   lock();
-  if (!cal_.load()) log_w("Keine gueltige Kalibrierung im NVS - Standardwerte aktiv");
+  if (!cal_.load()) log_w("Keine gültige Kalibrierung im NVS - Standardwerte aktiv");
   // Startsollwert: Neutralstellung laut Kalibrierung (Servos bleiben aber aus)
   for (int i = 0; i < NUM_SERVOS; ++i) {
     ch_[i].target_us = ch_[i].current_us = cal_.degToUs(i, 0.0f);
@@ -245,7 +245,7 @@ ServoCal ServoController::getCal(int id) {
 
 bool ServoController::setCal(int id, const ServoCal& c, String& err) {
   if (id < 0 || id >= NUM_SERVOS) {
-    err = "ungueltige Servo-ID";
+    err = "ungültige Servo-ID";
     return false;
   }
   if (!Calibration::validate(c, err)) return false;
@@ -258,7 +258,7 @@ bool ServoController::setCal(int id, const ServoCal& c, String& err) {
 
 bool ServoController::captureZero(int id, String& err) {
   if (id < 0 || id >= NUM_SERVOS) {
-    err = "ungueltige Servo-ID";
+    err = "ungültige Servo-ID";
     return false;
   }
   lock();
@@ -270,7 +270,7 @@ bool ServoController::captureZero(int id, String& err) {
 
 bool ServoController::captureReference(int id, float deg, String& err) {
   if (id < 0 || id >= NUM_SERVOS) {
-    err = "ungueltige Servo-ID";
+    err = "ungültige Servo-ID";
     return false;
   }
   if (fabsf(deg) < 10.0f) {

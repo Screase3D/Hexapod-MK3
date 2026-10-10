@@ -4,11 +4,12 @@
 // REST (JSON):
 //   GET  /api/status            Systemstatus
 //   GET  /api/calibration       komplette Servokalibrierung
-//   POST /api/calibration       Kalibrierung importieren (noch nicht gespeichert)
+//   POST /api/calibration       Kalibrierung importieren (wird sofort gespeichert)
 //   GET  /api/camera            Kameraeinstellungen
 //   POST /api/camera            Kameraeinstellungen ändern (persistent)
 //   GET  /api/wifi              WLAN-Status
 //   POST /api/wifi              {"ssid","pass"} speichern | {"clear":true}
+//   POST /api/estop             Not-Aus (Fallback, falls WebSocket hängt)
 //   POST /api/reboot            Neustart
 //
 // WebSocket /ws: Steuerbefehle als JSON {"cmd": ...}, siehe docs/api.md.

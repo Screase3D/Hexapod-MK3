@@ -16,6 +16,8 @@ class BatteryMonitor {
   float voltage() const { return voltage_; }
   int percent() const;
   State state() const { return state_; }
+  // true, wenn die Spannung lange genug unter BAT_SHUTDOWN_V lag
+  bool shutdownRequired() const { return shutdown_; }
   static const char* stateName(State s);
   void toJson(JsonObject obj) const;
 
@@ -26,6 +28,8 @@ class BatteryMonitor {
   bool initialized_ = false;
   State state_ = State::NoBattery;
   uint32_t below_critical_since_ = 0;
+  uint32_t below_shutdown_since_ = 0;
+  bool shutdown_ = false;
 };
 
 extern BatteryMonitor battery;

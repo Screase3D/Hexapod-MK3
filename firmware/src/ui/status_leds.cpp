@@ -17,7 +17,7 @@ uint8_t scale(uint8_t v, float k) { return (uint8_t)lroundf(v * k * LED_MAX_BRIG
 
 void StatusLeds::begin() {
   ok_ = rmtInit(PIN_EYES_LED, RMT_TX_MODE, RMT_MEM_NUM_BLOCKS_1, RMT_TICK_HZ);
-  if (!ok_) log_e("RMT fuer Augen-LEDs (GPIO %d) fehlgeschlagen", PIN_EYES_LED);
+  if (!ok_) log_e("RMT für Augen-LEDs (GPIO %d) fehlgeschlagen", PIN_EYES_LED);
   update();
 }
 

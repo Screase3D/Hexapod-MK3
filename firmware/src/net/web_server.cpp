@@ -40,7 +40,7 @@ esp_err_t sendResult(httpd_req_t* req, bool ok, const String& msg, const char* s
 
 bool readJsonBody(httpd_req_t* req, JsonDocument& doc, String& err) {
   if (req->content_len == 0 || req->content_len > MAX_BODY_LEN) {
-    err = "leerer oder zu grosser Body";
+    err = "leerer oder zu großer Body";
     return false;
   }
   String body;
@@ -142,7 +142,7 @@ esp_err_t wifiPostHandler(httpd_req_t* req) {
   if (!readJsonBody(req, doc, err)) return sendResult(req, false, err);
   if (doc["clear"] | false) {
     wifi::clearCredentials();
-    return sendResult(req, true, "WLAN-Daten geloescht - nach Neustart Access-Point-Modus");
+    return sendResult(req, true, "WLAN-Daten gelöscht - nach Neustart Access-Point-Modus");
   }
   String ssid = doc["ssid"] | "";
   String pass = doc["pass"] | "";
@@ -150,6 +150,12 @@ esp_err_t wifiPostHandler(httpd_req_t* req) {
     return sendResult(req, false, "SSID 1-32 Zeichen, Passwort leer oder 8-64 Zeichen");
   }
   return sendResult(req, true, "Gespeichert - wird nach Neustart verwendet");
+}
+
+// Not-Aus auch ohne WebSocket erreichbar
+esp_err_t estopHandler(httpd_req_t* req) {
+  servos.emergencyStop();
+  return sendResult(req, true, "Not-Aus ausgelöst");
 }
 
 esp_err_t rebootHandler(httpd_req_t* req) {
@@ -264,6 +270,7 @@ bool begin() {
   registerUri("/api/camera", HTTP_POST, cameraPostHandler);
   registerUri("/api/wifi", HTTP_GET, wifiGetHandler);
   registerUri("/api/wifi", HTTP_POST, wifiPostHandler);
+  registerUri("/api/estop", HTTP_POST, estopHandler);
   registerUri("/api/reboot", HTTP_POST, rebootHandler);
   registerUri("/ws", HTTP_GET, wsHandler, true);
   registerUri("/*", HTTP_GET, assetHandler);

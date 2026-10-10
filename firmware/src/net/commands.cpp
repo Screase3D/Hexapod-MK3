@@ -25,7 +25,7 @@ bool validId(JsonVariantConst in, int& id, JsonDocument& out) {
   id = in["id"];
   if (id < 0 || id >= NUM_SERVOS) {
     out["ok"] = false;
-    out["msg"] = "id ausserhalb 0..17";
+    out["msg"] = "id außerhalb 0..17";
     return false;
   }
   return true;
@@ -60,7 +60,7 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     result(out, servos.setTorque(on, &err), err);
   } else if (strcmp(cmd, "estop") == 0) {
     servos.emergencyStop();
-    result(out, true, "Not-Aus ausgeloest");
+    result(out, true, "Not-Aus ausgelöst");
   } else if (strcmp(cmd, "estop_clear") == 0) {
     servos.clearEmergencyStop();
     result(out, true, "Not-Aus freigegeben (Servos bleiben aus)");
@@ -108,12 +108,12 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     attachCal(out, id);
   } else if (strcmp(cmd, "cal_zero") == 0) {
     if (!validId(in, id, out)) return;
-    result(out, servos.captureZero(id, err), err.isEmpty() ? "Neutralstellung uebernommen" : err);
+    result(out, servos.captureZero(id, err), err.isEmpty() ? "Neutralstellung übernommen" : err);
     attachCal(out, id);
   } else if (strcmp(cmd, "cal_ref") == 0) {
     if (!validId(in, id, out)) return;
     bool ok = servos.captureReference(id, in["deg"] | 45.0f, err);
-    result(out, ok, ok ? "Referenzwinkel uebernommen" : err);
+    result(out, ok, ok ? "Referenzwinkel übernommen" : err);
     attachCal(out, id);
   } else if (strcmp(cmd, "cal_invert") == 0) {
     if (!validId(in, id, out)) return;

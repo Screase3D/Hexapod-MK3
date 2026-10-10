@@ -23,14 +23,22 @@ httpd_handle_t g_httpd = nullptr;
 std::atomic<int> g_stream_clients{0};
 Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15};
 
+struct FramesizeInfo {
+  framesize_t id;
+  const char* name;
+};
+constexpr FramesizeInfo FRAMESIZES[] = {
+    {FRAMESIZE_QVGA, "QVGA 320×240"},  {FRAMESIZE_CIF, "CIF 400×296"},
+    {FRAMESIZE_VGA, "VGA 640×480"},    {FRAMESIZE_SVGA, "SVGA 800×600"},
+    {FRAMESIZE_XGA, "XGA 1024×768"},   {FRAMESIZE_HD, "HD 1280×720"},
+    {FRAMESIZE_SXGA, "SXGA 1280×1024"}, {FRAMESIZE_UXGA, "UXGA 1600×1200"},
+};
+
 bool validFramesize(int fs) {
-  switch (fs) {
-    case FRAMESIZE_QVGA: case FRAMESIZE_CIF: case FRAMESIZE_VGA: case FRAMESIZE_SVGA:
-    case FRAMESIZE_XGA: case FRAMESIZE_HD: case FRAMESIZE_SXGA: case FRAMESIZE_UXGA:
-      return true;
-    default:
-      return false;
+  for (const auto& f : FRAMESIZES) {
+    if (f.id == fs) return true;
   }
+  return false;
 }
 
 void loadSettings() {
@@ -68,7 +76,7 @@ void applyToSensor() {
 esp_err_t sendUnavailable(httpd_req_t* req) {
   httpd_resp_set_status(req, "503 Service Unavailable");
   httpd_resp_set_type(req, "text/plain");
-  return httpd_resp_sendstr(req, "Kamera nicht verfuegbar");
+  return httpd_resp_sendstr(req, "Kamera nicht verfügbar");
 }
 
 esp_err_t streamHandler(httpd_req_t* req) {
@@ -160,7 +168,7 @@ bool begin() {
   config.grab_mode = CAMERA_GRAB_LATEST;
 
   if (!psramFound()) {
-    log_w("Kein PSRAM - Kamera mit reduzierter Aufloesung");
+    log_w("Kein PSRAM - Kamera mit reduzierter Auflösung");
     config.frame_size = FRAMESIZE_VGA;
     config.fb_count = 1;
     config.fb_location = CAMERA_FB_IN_DRAM;
@@ -185,7 +193,7 @@ bool startStreamServer() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = STREAM_PORT;
   config.ctrl_port = 32769;  // muss sich vom Server auf Port 80 unterscheiden
-  config.max_open_sockets = 3;
+  config.max_open_sockets = 2;
   config.max_uri_handlers = 4;
   config.lru_purge_enable = true;
   config.core_id = 0;
@@ -216,7 +224,7 @@ bool applyJson(JsonVariantConst obj, String& err) {
   if (obj["framesize"].is<int>()) {
     int fs = obj["framesize"];
     if (!validFramesize(fs)) {
-      err = "ungueltige Aufloesung";
+      err = "ungültige Auflösung";
       return false;
     }
     if (!psramFound() && fs > FRAMESIZE_VGA) {
@@ -244,6 +252,13 @@ void toJson(JsonObject obj) {
   obj["max_fps"] = g_settings.max_fps;
   obj["clients"] = g_stream_clients.load();
   obj["port"] = STREAM_PORT;
+  JsonArray sizes = obj["framesizes"].to<JsonArray>();
+  for (const auto& f : FRAMESIZES) {
+    if (!psramFound() && f.id > FRAMESIZE_VGA) break;
+    JsonObject o = sizes.add<JsonObject>();
+    o["id"] = (int)f.id;
+    o["name"] = f.name;
+  }
   if (g_ok) {
     sensor_t* s = esp_camera_sensor_get();
     if (s) {

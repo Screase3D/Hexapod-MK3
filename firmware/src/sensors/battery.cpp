@@ -54,6 +54,14 @@ bool BatteryMonitor::update() {
   }
 
   uint32_t now = millis();
+  if (state_ == State::Critical && voltage_ < BAT_SHUTDOWN_V) {
+    if (below_shutdown_since_ == 0) below_shutdown_since_ = now ? now : 1;
+    shutdown_ = now - below_shutdown_since_ >= BAT_SHUTDOWN_HOLD_MS;
+  } else {
+    below_shutdown_since_ = 0;
+    shutdown_ = false;
+  }
+
   if (state_ == State::Critical) {
     if (below_critical_since_ == 0) below_critical_since_ = now ? now : 1;
     return now - below_critical_since_ >= BAT_CRITICAL_HOLD_MS;

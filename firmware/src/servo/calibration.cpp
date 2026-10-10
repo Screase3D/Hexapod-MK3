@@ -93,20 +93,20 @@ float Calibration::usToDeg(int id, float us) const {
 bool Calibration::validate(const ServoCal& c, String& err) {
   if (!isfinite(c.center_us) || !isfinite(c.us_per_deg) ||
       !isfinite(c.min_deg) || !isfinite(c.max_deg)) {
-    err = "ungueltige Zahl";
+    err = "ungültige Zahl";
     return false;
   }
   if (c.center_us < SERVO_ABS_MIN_US || c.center_us > SERVO_ABS_MAX_US) {
-    err = "center_us ausserhalb 500..2500";
+    err = "center_us außerhalb 500..2500";
     return false;
   }
   float slope = fabsf(c.us_per_deg);
   if (slope < 4.0f || slope > 25.0f) {
-    err = "us_per_deg muss betragsmaessig zwischen 4 und 25 liegen";
+    err = "us_per_deg muss betragsmäßig zwischen 4 und 25 liegen";
     return false;
   }
   if (c.min_deg >= 0.0f || c.max_deg <= 0.0f || c.min_deg < -135.0f || c.max_deg > 135.0f) {
-    err = "Grenzen muessen -135 <= min < 0 < max <= 135 erfuellen";
+    err = "Grenzen müssen -135 <= min < 0 < max <= 135 erfüllen";
     return false;
   }
   return true;
@@ -147,7 +147,7 @@ bool Calibration::entryFromJson(JsonVariantConst obj, ServoCal& out, String& err
 bool Calibration::fromJson(JsonVariantConst root, String& err) {
   JsonArrayConst arr = root["servos"].as<JsonArrayConst>();
   if (arr.isNull() || arr.size() != NUM_SERVOS) {
-    err = "erwarte Feld 'servos' mit 18 Eintraegen";
+    err = "erwarte Feld 'servos' mit 18 Einträgen";
     return false;
   }
   ServoCal next[NUM_SERVOS];
@@ -155,7 +155,7 @@ bool Calibration::fromJson(JsonVariantConst root, String& err) {
   for (JsonVariantConst e : arr) {
     int id = e["id"] | -1;
     if (id < 0 || id >= NUM_SERVOS || seen[id]) {
-      err = "ungueltige oder doppelte id";
+      err = "ungültige oder doppelte id";
       return false;
     }
     if (!entryFromJson(e, next[id], err)) {
