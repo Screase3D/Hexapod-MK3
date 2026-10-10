@@ -49,10 +49,8 @@ firmware/                            PlatformIO-Projekt
    hat Probleme mit sehr langen Pfaden):
    ```
    git clone https://github.com/Screase3D/Hexapod-MK3.git
-   cd Hexapod-MK3
-   git checkout claude/beautiful-maxwell-nth4tw     # entfällt, sobald der Stand in main ist
    ```
-   Ohne Git: auf GitHub den Branch auswählen → *Code* → *Download ZIP* und entpacken.
+   Ohne Git: auf GitHub *Code* → *Download ZIP* und entpacken.
 3. In VS Code **Datei → Ordner öffnen → `Hexapod-MK3/firmware`** wählen (der Ordner mit der
    `platformio.ini`, nicht das Repo-Hauptverzeichnis).
 4. *Optional:* `include/secrets.example.h` nach `include/secrets.h` kopieren und die Daten des
