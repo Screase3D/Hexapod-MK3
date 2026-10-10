@@ -9,6 +9,8 @@
 //   POST /api/camera            Kameraeinstellungen ändern (persistent)
 //   GET  /api/wifi              WLAN-Status
 //   POST /api/wifi              {"ssid","pass"} speichern | {"clear":true}
+//   GET  /api/battery           Akkuwerte + Schalter
+//   POST /api/battery           {"enabled","deep_sleep"} Überwachung/Tiefschlaf schalten
 //   POST /api/estop             Not-Aus (Fallback, falls WebSocket hängt)
 //   POST /api/reboot            Neustart
 //

@@ -119,7 +119,8 @@ void setup() {
   Serial.printf("[IMU]   MPU6050 (0x%02X): %s\n", MPU6050_ADDR, imu_ok ? "OK" : "FEHLT");
 
   battery.begin();
-  Serial.printf("[Akku]  %.2f V\n", battery.voltage());
+  Serial.printf("[Akku]  %.2f V (Überwachung %s, Tiefschlaf %s)\n", battery.voltage(),
+                battery.enabled() ? "an" : "aus", battery.deepSleepEnabled() ? "an" : "aus");
 
   bool cam_ok = camera::begin();
   Serial.printf("[Kamera] %s\n", cam_ok ? "OK" : "FEHLT");

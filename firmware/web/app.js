@@ -204,7 +204,10 @@ function renderTelemetry() {
 
   // Akku
   const bat = $('pill-bat');
-  if (t.bat.state === 'usb') {
+  if (t.bat.state === 'off') {
+    bat.textContent = 'Akku: aus';
+    bat.className = 'pill';
+  } else if (t.bat.state === 'usb') {
     bat.textContent = 'USB';
     bat.className = 'pill';
   } else {
@@ -589,17 +592,37 @@ async function loadStatus() {
       li.firstChild.textContent = label;
       dev.appendChild(li);
     }
-    const stateText = { usb: 'kein Akku (USB)', ok: 'OK', warn: 'schwach', critical: 'leer!' };
-    fillKv($('sys-bat'), [
-      ['Spannung', `${s.bat.v.toFixed(2)} V`],
-      ['Ladestand', `${s.bat.pct} %`],
-      ['Zustand', stateText[s.bat.state] || s.bat.state],
-    ]);
+    renderBatterySettings(s.bat);
     $('wifi-current').textContent = w.mode === 'ap'
       ? 'Aktuell im Access-Point-Modus.'
       : `Verbunden mit „${w.ssid}“.`;
   } catch (e) {
     toast(`Status: ${e.message}`, true);
+  }
+}
+
+function renderBatterySettings(b) {
+  $('bat-enabled').checked = b.enabled;
+  $('bat-sleep').checked = b.deep_sleep;
+  $('bat-sleep').disabled = !b.enabled;
+  const stateText = {
+    off: 'Überwachung aus', usb: 'kein Akku (USB)', ok: 'OK', warn: 'schwach', critical: 'leer!',
+  };
+  fillKv($('sys-bat'), [
+    [b.enabled ? 'Spannung' : 'Messwert (ungeprüft)', `${b.v.toFixed(2)} V`],
+    ['Ladestand', b.enabled ? `${b.pct} %` : '–'],
+    ['Zustand', stateText[b.state] || b.state],
+  ]);
+}
+
+async function setBattery(patch) {
+  try {
+    const b = await api('/api/battery', patch);
+    renderBatterySettings(b);
+    toast(b.msg);
+  } catch (err) {
+    toast(err.message, true);
+    loadStatus();
   }
 }
 
@@ -639,6 +662,14 @@ function bindSystem() {
       toast(err.message, true);
     }
   };
+  $('bat-enabled').onchange = (e) => {
+    if (e.target.checked && !confirm('Akkuüberwachung einschalten?\n\nNur sinnvoll mit bestücktem Spannungsteiler an GPIO 1 – sonst können Zufallswerte die Servos sperren.')) {
+      e.target.checked = false;
+      return;
+    }
+    setBattery({ enabled: e.target.checked });
+  };
+  $('bat-sleep').onchange = (e) => setBattery({ deep_sleep: e.target.checked });
   $('sys-reboot').onclick = () => {
     if (confirm('ESP32 jetzt neu starten? Die Servos werden dabei stromlos.')) reboot();
   };

@@ -54,10 +54,17 @@ Weicht die Verkabelung ab, nur die Tabelle `SERVO_MAP` in
 
 ## Hinweise zur Schaltung
 
-- **Akku ohne BMS:** Die Firmware schützt die Zellen in drei Stufen:
+- **Akku ohne BMS:** Die Firmware kann die Zellen in drei Stufen schützen:
   Warnung unter 6,8 V, Servos aus unter 6,4 V (nach 5 s), Tiefschlaf des ESP32 unter 6,0 V
   (nach 10 s). UBECs und Buck ziehen auch dann noch Ruhestrom – einen leeren Akku also
   trotzdem zeitnah abstecken. Schwellen in `config.h` (`BAT_*`).
+- **Akkuüberwachung schalten:** Im Tab *System* gibt es zwei Schalter, gespeichert im NVS:
+  *Akkuüberwachung* (Warnung + Servo-Abschaltung) und *Tiefschlaf bei Tiefentladung*
+  (wirkt nur bei eingeschalteter Überwachung). **Ab Werk ist die Überwachung aus**, weil
+  GPIO 1 ohne bestückten Spannungsteiler offen ist und Zufallswerte liefert. Gemessen und
+  angezeigt wird trotzdem („Messwert (ungeprüft)“): Nach dem Einlöten des Teilers den Wert
+  mit einem Multimeter am Akku vergleichen und erst dann einschalten. Die Werkseinstellung
+  steht in `BAT_MONITOR_DEFAULT` / `BAT_DEEP_SLEEP_DEFAULT`.
 - **Kein OE-Pin verdrahtet:** Die PCA9685-Ausgänge werden per I²C abgeschaltet
   („Torque aus“, Not-Aus). Nach dem Einschalten sind alle Ausgänge aus, bis Torque in der
   Oberfläche aktiviert wird.

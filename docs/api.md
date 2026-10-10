@@ -23,6 +23,8 @@ die Verbindung schließt.
 | `POST /api/camera` | `{"framesize","quality","vflip","hmirror","max_fps"}` (Teilmenge) | neue Einstellungen (persistent) |
 | `GET /api/wifi` | – | WLAN-Status, `saved_ssid` |
 | `POST /api/wifi` | `{"ssid","pass"}` oder `{"clear":true}` | wirksam nach Neustart |
+| `GET /api/battery` | – | Akkuwerte und Schalter |
+| `POST /api/battery` | `{"enabled","deep_sleep"}` (Teilmenge) | Akkuüberwachung / Tiefschlaf schalten (persistent) |
 | `POST /api/estop` | `{}` | Not-Aus (Fallback ohne WebSocket) |
 | `POST /api/reboot` | `{}` | Neustart nach ~0,5 s |
 
@@ -66,7 +68,7 @@ Beispiel:
 {
   "type": "telemetry",
   "uptime": 123,
-  "bat":   {"v": 7.62, "pct": 63, "state": "ok"},
+  "bat":   {"v": 7.62, "pct": 63, "state": "ok", "enabled": true, "deep_sleep": true},
   "servo": {"torque": true, "active": 18, "estop": false, "inhibit": "", "slew": 240,
             "cal_dirty": false, "us": [1500, …18…], "deg": [0.0, …18…], "boards": [true, true]},
   "imu":   {"ok": true, "pitch": 1.2, "roll": -0.4},
@@ -76,5 +78,6 @@ Beispiel:
 }
 ```
 
-`bat.state`: `usb` (kein Akku), `ok`, `warn`, `critical`. `servo.inhibit` enthält den Grund einer
+`bat.state`: `off` (Überwachung ausgeschaltet – `v` ist dann nur ein ungeprüfter Messwert),
+`usb` (kein Akku), `ok`, `warn`, `critical`. `servo.inhibit` enthält den Grund einer
 Sperre (z. B. „Akku leer“).

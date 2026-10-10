@@ -1,6 +1,6 @@
 #include "battery.h"
 
-#include "config.h"
+#include <Preferences.h>
 
 BatteryMonitor battery;
 
@@ -8,6 +8,7 @@ namespace {
 constexpr int SAMPLES = 8;
 constexpr float FILTER_ALPHA = 0.05f;  // bei 10 Hz ca. 2 s Zeitkonstante
 constexpr float HYSTERESIS_V = 0.15f;
+constexpr const char* NVS_NAMESPACE = "battery";
 
 // Leerlaufkennlinie einer Li-Ion-Zelle (grob), Spannung -> Prozent
 struct CurvePoint {
@@ -21,10 +22,26 @@ constexpr CurvePoint CELL_CURVE[] = {
 }  // namespace
 
 void BatteryMonitor::begin() {
+  Preferences p;
+  if (p.begin(NVS_NAMESPACE, true)) {
+    enabled_ = p.getBool("enabled", BAT_MONITOR_DEFAULT);
+    deep_sleep_ = p.getBool("sleep", BAT_DEEP_SLEEP_DEFAULT);
+    p.end();
+  }
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_BATTERY_ADC, ADC_11db);
   voltage_ = readVoltage();
   initialized_ = true;
+}
+
+void BatteryMonitor::configure(bool enabled, bool deep_sleep) {
+  enabled_ = enabled;
+  deep_sleep_ = deep_sleep;
+  Preferences p;
+  if (!p.begin(NVS_NAMESPACE, false)) return;
+  p.putBool("enabled", enabled);
+  p.putBool("sleep", deep_sleep);
+  p.end();
 }
 
 float BatteryMonitor::readVoltage() {
@@ -41,6 +58,14 @@ bool BatteryMonitor::update() {
   } else {
     voltage_ += FILTER_ALPHA * (v - voltage_);
   }
+
+  if (!enabled_) {
+    state_ = State::Disabled;
+    below_critical_since_ = below_shutdown_since_ = 0;
+    shutdown_ = false;
+    return false;
+  }
+  if (state_ == State::Disabled) state_ = State::NoBattery;  // frisch eingeschaltet
 
   // Zustand mit Hysterese bestimmen
   if (voltage_ < BAT_PRESENT_V) {
@@ -71,7 +96,7 @@ bool BatteryMonitor::update() {
 }
 
 int BatteryMonitor::percent() const {
-  if (state_ == State::NoBattery) return 0;
+  if (voltage_ < BAT_PRESENT_V) return 0;
   float cell = voltage_ / BAT_CELLS;
   constexpr int n = sizeof(CELL_CURVE) / sizeof(CELL_CURVE[0]);
   if (cell <= CELL_CURVE[0].v) return 0;
@@ -88,6 +113,7 @@ int BatteryMonitor::percent() const {
 
 const char* BatteryMonitor::stateName(State s) {
   switch (s) {
+    case State::Disabled:  return "off";
     case State::NoBattery: return "usb";
     case State::Ok:        return "ok";
     case State::Warn:      return "warn";
@@ -100,4 +126,6 @@ void BatteryMonitor::toJson(JsonObject obj) const {
   obj["v"] = roundf(voltage_ * 100.0f) / 100.0f;
   obj["pct"] = percent();
   obj["state"] = stateName(state_);
+  obj["enabled"] = (bool)enabled_;
+  obj["deep_sleep"] = (bool)deep_sleep_;
 }

@@ -154,6 +154,7 @@ input[type="checkbox"] { width: auto; min-height: 0; accent-color: var(--accent)
 .switch input:checked + .slider { background: var(--accent); border-color: var(--accent); }
 .switch input:checked + .slider::after { transform: translateX(20px); background: #fff; }
 .switch-label { font-weight: 600; }
+.switch:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
 
 .badge { font-size: 0.78rem; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
 .badge-warn { background: var(--warn); color: #241600; }

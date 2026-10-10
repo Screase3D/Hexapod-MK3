@@ -8,6 +8,7 @@
 #include "net/camera.h"
 #include "net/commands.h"
 #include "net/wifi_manager.h"
+#include "sensors/battery.h"
 #include "servo/servo_controller.h"
 
 namespace web {
@@ -152,6 +153,28 @@ esp_err_t wifiPostHandler(httpd_req_t* req) {
   return sendResult(req, true, "Gespeichert - wird nach Neustart verwendet");
 }
 
+esp_err_t batteryGetHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  battery.toJson(doc.to<JsonObject>());
+  return sendJson(req, doc);
+}
+
+esp_err_t batteryPostHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  String err;
+  if (!readJsonBody(req, doc, err)) return sendResult(req, false, err);
+  bool enabled = doc["enabled"] | battery.enabled();
+  bool deep_sleep = doc["deep_sleep"] | battery.deepSleepEnabled();
+  battery.configure(enabled, deep_sleep);
+  JsonDocument out;
+  battery.toJson(out.to<JsonObject>());
+  out["ok"] = true;
+  out["msg"] = enabled ? (deep_sleep ? "Akkuüberwachung an, Tiefschlaf an"
+                                     : "Akkuüberwachung an, Tiefschlaf aus")
+                       : "Akkuüberwachung aus";
+  return sendJson(req, out);
+}
+
 // Not-Aus auch ohne WebSocket erreichbar
 esp_err_t estopHandler(httpd_req_t* req) {
   servos.emergencyStop();
@@ -270,6 +293,8 @@ bool begin() {
   registerUri("/api/camera", HTTP_POST, cameraPostHandler);
   registerUri("/api/wifi", HTTP_GET, wifiGetHandler);
   registerUri("/api/wifi", HTTP_POST, wifiPostHandler);
+  registerUri("/api/battery", HTTP_GET, batteryGetHandler);
+  registerUri("/api/battery", HTTP_POST, batteryPostHandler);
   registerUri("/api/estop", HTTP_POST, estopHandler);
   registerUri("/api/reboot", HTTP_POST, rebootHandler);
   registerUri("/ws", HTTP_GET, wsHandler, true);

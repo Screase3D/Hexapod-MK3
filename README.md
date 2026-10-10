@@ -38,28 +38,80 @@ firmware/                            PlatformIO-Projekt
   tools/mock_server.py               Oberfläche am PC ohne Roboter testen
 ```
 
-## Schnellstart
+## Kompilieren und Flashen
 
-1. **VS Code** mit der Erweiterung **PlatformIO IDE** installieren
-   (alternativ die Fork-Erweiterung *pioarduino IDE*).
-2. Den Ordner **`firmware/`** in VS Code öffnen. Beim ersten Build lädt PlatformIO die
-   Plattform [pioarduino](https://github.com/pioarduino/platform-espressif32)
-   (Arduino-Core 3.3 auf ESP-IDF 5.5) – das dauert einige Minuten.
-3. *Optional:* `include/secrets.example.h` nach `include/secrets.h` kopieren und WLAN-Daten
-   eintragen. Ohne diese Datei startet der Hexapod einen eigenen Access Point.
-4. Board über die USB-C-Buchse **„TTL“** (CH340) anschließen – unter Windows ggf. den
-   CH343-Treiber aus der Board-Doku installieren. Hauptschalter SW1 dabei aus
-   (siehe [Hinweise](docs/hardware.md#hinweise-zur-schaltung)).
-5. **Upload** (PlatformIO: „Upload“ bzw. `pio run -t upload`), danach **Monitor**
-   (115200 Baud). Der serielle Monitor zeigt erkannte Komponenten und die IP-Adresse.
-6. Browser öffnen:
-   - im Heimnetz: `http://hexapod.local` oder die angezeigte IP,
-   - im Access-Point-Modus: mit WLAN **„Hexapod-MK3“** (Passwort `hexapod123`) verbinden,
+### Einmalig einrichten
+
+1. **[VS Code](https://code.visualstudio.com/)** installieren, darin die Erweiterung
+   **PlatformIO IDE** (Erweiterungen-Ansicht, nach „PlatformIO“ suchen). Nach der Installation
+   VS Code neu starten.
+2. **Code holen** – am besten in einen kurzen Pfad ohne Leerzeichen, z. B. `C:\dev\` (Windows
+   hat Probleme mit sehr langen Pfaden):
+   ```
+   git clone https://github.com/Screase3D/Hexapod-MK3.git
+   cd Hexapod-MK3
+   git checkout claude/beautiful-maxwell-nth4tw     # entfällt, sobald der Stand in main ist
+   ```
+   Ohne Git: auf GitHub den Branch auswählen → *Code* → *Download ZIP* und entpacken.
+3. In VS Code **Datei → Ordner öffnen → `Hexapod-MK3/firmware`** wählen (der Ordner mit der
+   `platformio.ini`, nicht das Repo-Hauptverzeichnis).
+4. *Optional:* `include/secrets.example.h` nach `include/secrets.h` kopieren und die Daten des
+   Heim-WLANs eintragen. Ohne diese Datei startet der Hexapod einen eigenen Access Point, in
+   dem man das WLAN später über die Oberfläche einträgt.
+
+### Kompilieren
+
+- In der blauen Statusleiste unten auf **✓ (Build)** klicken – oder im Terminal `pio run`.
+- Beim **ersten** Build lädt PlatformIO die Plattform
+  [pioarduino](https://github.com/pioarduino/platform-espressif32) (Arduino-Core 3.3 auf
+  ESP-IDF 5.5) samt Compiler. Das dauert je nach Internet 5–20 Minuten und belegt rund
+  **4 GB** Platz. Danach dauert ein Build unter einer Minute.
+- Erfolgreich, wenn am Ende `[SUCCESS]` steht.
+
+### Flashen
+
+1. **Hauptschalter SW1 aus** (der ESP darf nicht gleichzeitig über USB und den Buck-Wandler
+   versorgt werden, siehe Schaltplan).
+2. Board über die USB-C-Buchse **„TTL“** anschließen (nicht „OTG“). Erscheint unter Windows
+   kein COM-Port im Geräte-Manager, den CH340/CH343-Treiber installieren
+   (siehe Board-Doku, Seite „instructions“).
+3. In der Statusleiste auf **→ (Upload)** klicken – oder `pio run -t upload`. PlatformIO
+   findet den Port normalerweise selbst; sonst in `platformio.ini` z. B.
+   `upload_port = COM7` ergänzen.
+4. Falls „Failed to connect to ESP32-S3“ erscheint: **BOOT** gedrückt halten, kurz **RST**
+   drücken, BOOT loslassen und den Upload wiederholen.
+5. **Serieller Monitor:** Stecker-Symbol in der Statusleiste (oder `pio device monitor`),
+   115200 Baud. Nach einem Druck auf **RST** erscheint z. B.:
+   ```
+   [Servo] PCA9685 #1 (0x40): OK, #2 (0x41): OK
+   [IMU]   MPU6050 (0x68): OK
+   [Akku]  0.42 V (Überwachung aus, Tiefschlaf an)
+   [Kamera] OK
+   [WiFi] Access Point "Hexapod-MK3" aktiv, IP 192.168.4.1
+   [Web]   http://192.168.4.1/  bzw.  http://hexapod.local/
+   ```
+   Ohne Servo-Versorgung (SW1 aus) werden die PCA9685 trotzdem erkannt – deren Logik hängt
+   an den 3,3 V des ESP.
+
+Gespeicherte Einstellungen (Kalibrierung, WLAN, Kamera, Akku-Schalter) bleiben bei einem
+erneuten Upload erhalten.
+
+### Erster Start
+
+1. Browser öffnen:
+   - im Heimnetz: `http://hexapod.local` oder die im Monitor angezeigte IP,
+   - im Access-Point-Modus: mit dem WLAN **„Hexapod-MK3“** (Passwort `hexapod123`) verbinden,
      dann `http://192.168.4.1`. Im Tab *System* lassen sich die Heimnetz-Daten eintragen.
-7. Servos kalibrieren: Anleitung in [docs/kalibrierung.md](docs/kalibrierung.md).
+2. Zum Bewegen der Servos braucht es den Akku: USB abziehen, SW1 ein, dann über WLAN
+   weiterarbeiten.
+3. Servos kalibrieren: Anleitung in [docs/kalibrierung.md](docs/kalibrierung.md).
 
 Nach dem Start sind alle Servos **stromlos**, bis in der Oberfläche *Torque* eingeschaltet wird.
 Not-Aus jederzeit über **STOP** (oder Taste **Esc**).
+
+Die **Akkuüberwachung** (Warnung, Servo-Abschaltung, Tiefschlaf) ist ab Werk **aus**. Erst
+nach dem Bestücken des Spannungsteilers an GPIO 1 im Tab *System* einschalten, siehe
+[Hinweise zur Schaltung](docs/hardware.md#hinweise-zur-schaltung).
 
 ## Architektur
 
@@ -68,7 +120,7 @@ Not-Aus jederzeit über **STOP** (oder Taste **Esc**).
  ┌─────────────────────────────┐      ┌───────────────────────────────────┐
  │ WLAN, mDNS                  │      │ Regel-Task, 50 Hz                 │
  │ HTTP :80  UI, REST, /ws ────┼─────►│  MPU6050 lesen                    │
- │           (setzt Sollwerte) │      │  Akku (10 Hz) → Schutzabschaltung │
+ │           (setzt Sollwerte) │      │  Akku (10 Hz) → Schutz (optional) │
  │ HTTP :81  MJPEG-Stream      │      │  (Phase 2: Gangart + IK)          │
  │ Kamera-Treiber              │      │  Rampen → PCA9685 (einziger I²C-  │
  └─────────────────────────────┘      │  Nutzer, nur bei Änderungen)      │

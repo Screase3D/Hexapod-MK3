@@ -28,7 +28,15 @@ state = {
     "camera": {"ok": True, "framesize": 10, "quality": 12, "vflip": False, "hmirror": False,
                "max_fps": 15, "clients": 0, "port": 81, "sensor": "OV2640 (Mock)"},
     "start": time.time(),
+    "bat_enabled": False,
+    "bat_sleep": True,
 }
+
+
+def battery():
+    if not state["bat_enabled"]:
+        return {"v": 1.37, "pct": 0, "state": "off", "enabled": False, "deep_sleep": state["bat_sleep"]}
+    return {"v": 7.62, "pct": 63, "state": "ok", "enabled": True, "deep_sleep": state["bat_sleep"]}
 
 
 def default_cal(i):
@@ -50,7 +58,7 @@ def telemetry():
     t = time.time()
     return {
         "type": "telemetry", "uptime": int(t - state["start"]),
-        "bat": {"v": 7.62, "pct": 63, "state": "ok"},
+        "bat": battery(),
         "servo": {"torque": state["torque"], "active": 18 if state["torque"] else 0,
                   "estop": state["estop"], "inhibit": "", "slew": state["slew"],
                   "cal_dirty": state["dirty"], "us": [round(u) for u in state["us"]],
@@ -158,7 +166,7 @@ async def status(_):
         "wifi": {"mode": "sta", "ip": "127.0.0.1", "host": "hexapod.local", "ssid": "MockNet",
                  "rssi": -58, "connected": True},
         "camera": state["camera"], "devices": {"pca1": True, "pca2": True, "imu": True, "camera": True},
-        "bat": {"v": 7.62, "pct": 63, "state": "ok"},
+        "bat": battery(),
     })
 
 
@@ -196,6 +204,17 @@ async def wifi_get(_):
     return web.json_response({"mode": "sta", "ip": "127.0.0.1", "ssid": "MockNet", "saved_ssid": "MockNet"})
 
 
+async def battery_get(_):
+    return web.json_response(battery())
+
+
+async def battery_post(request):
+    data = await request.json()
+    state["bat_enabled"] = data.get("enabled", state["bat_enabled"])
+    state["bat_sleep"] = data.get("deep_sleep", state["bat_sleep"])
+    return web.json_response({**battery(), "ok": True, "msg": "Akkuüberwachung " + ("an" if state["bat_enabled"] else "aus")})
+
+
 async def estop(_):
     handle({"cmd": "estop"})
     return web.json_response({"ok": True, "msg": "Not-Aus ausgelöst"})
@@ -217,6 +236,7 @@ def main():
         web.get("/api/camera", camera_get), web.post("/api/camera", camera_post),
         web.get("/api/calibration", calibration_get), web.post("/api/calibration", calibration_post),
         web.get("/api/wifi", wifi_get), web.post("/api/wifi", ok),
+        web.get("/api/battery", battery_get), web.post("/api/battery", battery_post),
         web.post("/api/estop", estop), web.post("/api/reboot", ok),
         web.get("/", static), web.get("/{name}", static),
     ])

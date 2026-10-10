@@ -58,10 +58,14 @@ constexpr int CAM_XCLK_HZ   = 20000000;
 // ---------------------------------------------------------------------------
 // Akku (2S Li-Ion, OHNE BMS -> Software muss Tiefentladung verhindern!)
 // ---------------------------------------------------------------------------
+// Überwachung und Tiefschlaf lassen sich in der Weboberfläche (Tab "System")
+// schalten; die Einstellung liegt im NVS. Dies sind nur die Werkseinstellungen.
+// Ab Werk AUS: Ohne bestückten Spannungsteiler liefert GPIO 1 Zufallswerte,
+// die sonst die Servos sperren oder den ESP schlafen legen könnten.
+constexpr bool  BAT_MONITOR_DEFAULT    = false;
+constexpr bool  BAT_DEEP_SLEEP_DEFAULT = true;   // wirkt nur bei aktiver Überwachung
 constexpr float BAT_DIVIDER_RATIO = (100.0f + 47.0f) / 47.0f;  // ~3.128
 constexpr float BAT_CELLS         = 2.0f;
-constexpr float BAT_FULL_V        = 8.40f;   // 4.20 V/Zelle
-constexpr float BAT_EMPTY_V       = 6.40f;   // 3.20 V/Zelle (0 % in der Anzeige)
 constexpr float BAT_WARN_V        = 6.80f;   // 3.40 V/Zelle -> Warnung
 constexpr float BAT_CRITICAL_V    = 6.40f;   // 3.20 V/Zelle -> Servos aus
 constexpr float BAT_PRESENT_V     = 4.50f;   // darunter: kein Akku (USB-Betrieb)

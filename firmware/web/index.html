@@ -220,6 +220,23 @@
           <h2>Komponenten</h2>
           <ul class="devices" id="sys-devices"></ul>
           <h2>Akku</h2>
+          <div class="row">
+            <label class="switch">
+              <input id="bat-enabled" type="checkbox">
+              <span class="slider"></span>
+              <span class="switch-label">Akkuüberwachung</span>
+            </label>
+          </div>
+          <div class="row">
+            <label class="switch">
+              <input id="bat-sleep" type="checkbox">
+              <span class="slider"></span>
+              <span class="switch-label">Tiefschlaf bei Tiefentladung</span>
+            </label>
+          </div>
+          <p class="muted small">Erst einschalten, wenn der Spannungsteiler an GPIO 1 bestückt ist und der
+            Messwert unten mit einem Multimeter übereinstimmt – ohne Teiler liefert der Pin Zufallswerte.
+            Überwachung: Warnung &lt; 6,8 V, Servos aus &lt; 6,4 V. Tiefschlaf &lt; 6,0 V (Aufwecken nur per Reset).</p>
           <dl class="kv" id="sys-bat"></dl>
         </div>
         <div class="card">
