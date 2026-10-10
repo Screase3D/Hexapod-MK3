@@ -85,8 +85,28 @@
               <input id="ctl-slew" type="range" min="30" max="600" step="10">
               <span id="ctl-slew-val" class="mono"></span>
             </label>
-            <p class="muted small">Laufen (Joystick, Gangarten, Körperhaltung) folgt in Phase 2 –
+            <p class="muted small">Laufen (Joystick, Gangarten) folgt in Phase 3 –
               zuerst die Servos im Tab <b>Kalibrierung</b> einrichten.</p>
+          </div>
+
+          <div class="card">
+            <div class="row space-between">
+              <h2>Körperhaltung (IK)</h2>
+              <label class="switch">
+                <input id="pose-mode" type="checkbox">
+                <span class="slider"></span>
+                <span class="switch-label">aktiv</span>
+              </label>
+            </div>
+            <p id="pose-placeholder" class="warn-text small" hidden>Beinmaße sind noch Platzhalter
+              (<span class="mono">include/robot_geometry.h</span>) – erst nach dem Messen verwenden.</p>
+            <div id="pose-sliders"></div>
+            <p id="pose-warn" class="warn-text small" hidden></p>
+            <div class="row wrap">
+              <button id="pose-reset" class="btn">Zurücksetzen</button>
+            </div>
+            <p class="muted small">Die Füße bleiben auf ihren Standardpunkten, der Körper bewegt sich
+              darüber. Einzelne Servo-Befehle (Kalibrierung, manuelle Schieber) beenden den IK-Modus.</p>
           </div>
 
           <div class="card">

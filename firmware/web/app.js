@@ -256,6 +256,7 @@ function renderTelemetry() {
   renderLegValues();
   renderEditorLive();
   renderManualValues();
+  renderPose(t.motion);
   renderBanner();
 }
 
@@ -296,6 +297,82 @@ function renderLegValues() {
     val.textContent = `${fmtDeg(S.tel.servo.deg[id])}°`;
     val.title = `${S.tel.servo.us[id]} µs`;
   }
+}
+
+// ------------------------------------------------------ Körperhaltung -------
+
+const POSE_FIELDS = [
+  // key, Beschriftung, Einheit, Grenzen aus /api/kinematics
+  ['z', 'Höhe', 'mm', (l) => [l.height_min, l.height_max]],
+  ['stance', 'Fußabstand', 'mm', (l) => [l.stance_min, l.stance_max]],
+  ['x', 'Vor / zurück', 'mm', (l) => [-l.shift_max, l.shift_max]],
+  ['y', 'Links / rechts', 'mm', (l) => [-l.shift_max, l.shift_max]],
+  ['roll', 'Rollen', '°', (l) => [-l.tilt_max, l.tilt_max]],
+  ['pitch', 'Nicken', '°', (l) => [-l.tilt_max, l.tilt_max]],
+  ['yaw', 'Gieren', '°', (l) => [-l.yaw_max, l.yaw_max]],
+];
+const poseTouched = {};
+const poseSend = throttle((patch) => { send('pose', patch); posePending = {}; }, 60);
+let posePending = {};
+
+function buildPose(kinem) {
+  const box = $('pose-sliders');
+  box.innerHTML = '';
+  $('pose-placeholder').hidden = !kinem.placeholder;
+  for (const [key, label, unit, range] of POSE_FIELDS) {
+    const [lo, hi] = range(kinem.limits);
+    const row = document.createElement('label');
+    row.className = 'slider-row';
+    row.innerHTML = `<span>${label}</span><input type="range" id="pose-${key}" step="1">` +
+      `<span class="mono" id="pose-${key}-val"></span>`;
+    const input = row.querySelector('input');
+    input.min = Math.floor(lo);
+    input.max = Math.ceil(hi);
+    input.oninput = () => {
+      poseTouched[key] = Date.now();
+      $(`pose-${key}-val`).textContent = `${input.value} ${unit}`;
+      posePending[key] = +input.value;
+      poseSend(posePending);
+    };
+    box.appendChild(row);
+  }
+}
+
+function renderPose(m) {
+  if (!m) return;
+  $('pose-mode').checked = m.mode === 'pose';
+  for (const [key, , unit] of POSE_FIELDS) {
+    const input = $(`pose-${key}`);
+    if (!input || Date.now() - (poseTouched[key] || 0) < LOCAL_PRIORITY_MS) continue;
+    if (document.activeElement === input) continue;
+    input.value = Math.round(m.pose[key]);
+    $(`pose-${key}-val`).textContent = `${Math.round(m.pose[key])} ${unit}`;
+  }
+  const warn = [];
+  if (m.unreachable && m.unreachable.length) warn.push(`nicht erreichbar: Bein ${m.unreachable.map((l) => l + 1).join(', ')}`);
+  if (m.clamped && m.clamped.length) warn.push(`an Gelenkgrenze: Bein ${m.clamped.map((l) => l + 1).join(', ')}`);
+  $('pose-warn').hidden = !warn.length;
+  $('pose-warn').textContent = warn.join(' · ');
+}
+
+async function loadKinematics() {
+  try {
+    buildPose(await api('/api/kinematics'));
+    if (S.tel) renderPose(S.tel.motion);
+  } catch (e) { /* Firmware ohne IK */ }
+}
+
+function bindPose() {
+  $('pose-mode').onchange = (e) => {
+    const on = e.target.checked;
+    if (!send('mode', { mode: on ? 'pose' : 'manual' })) e.target.checked = !on;
+    else if (on) torqueHint();
+  };
+  $('pose-reset').onclick = () => {
+    for (const k of Object.keys(poseTouched)) delete poseTouched[k];
+    posePending = {};
+    send('pose_reset');
+  };
 }
 
 // ------------------------------------------------- Manuelle Steuerung -------
@@ -807,6 +884,7 @@ function init() {
   document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
   buildLegs();
   buildManual();
+  bindPose();
   bindGlobal();
   bindEditor();
   bindCamera();
@@ -814,6 +892,7 @@ function init() {
   selectServo(0);
   renderConnection();
   loadCamera();
+  loadKinematics();
   loadWifi();
   connect();
 }

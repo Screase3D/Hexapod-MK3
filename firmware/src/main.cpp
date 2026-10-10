@@ -11,6 +11,7 @@
 #include <esp_sleep.h>
 
 #include "config.h"
+#include "motion/motion.h"
 #include "net/camera.h"
 #include "net/commands.h"
 #include "net/web_server.h"
@@ -41,7 +42,7 @@ void controlTask(void*) {
     i2cscan::process(Wire);  // nur wenn über die Weboberfläche angefordert
     imu.update(dt);
     if (++cycle % BATTERY_EVERY_N_CYCLES == 0) g_battery_cutoff = battery.update();
-    // Hier kommt in Phase 2 die Gangart / inverse Kinematik dazu.
+    motion::update(dt);  // im Pose-Modus: Körperhaltung -> IK -> Servo-Sollwerte
     servos.update(dt);
   }
 }
@@ -114,6 +115,7 @@ void setup() {
   Wire.setTimeOut(20);
 
   servos.begin(Wire);
+  motion::begin();
   Serial.printf("[Servo] PCA9685 #1 (0x%02X): %s, #2 (0x%02X): %s\n", PCA1_ADDR,
                 servos.boardOk(0) ? "OK" : "FEHLT", PCA2_ADDR, servos.boardOk(1) ? "OK" : "FEHLT");
 

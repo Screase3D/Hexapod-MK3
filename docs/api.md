@@ -28,6 +28,7 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 | `POST /api/wifi` | `{"ssid","pass"}` oder `{"clear":true}` | wirksam nach Neustart |
 | `GET /api/battery` | – | Akkuwerte und Schalter |
 | `POST /api/battery` | `{"enabled","deep_sleep"}` (Teilmenge) | Akkuüberwachung / Tiefschlaf schalten (persistent) |
+| `GET /api/kinematics` | – | Beinmaße, Montagepunkte, Grenzen der Körperhaltung, `placeholder` |
 | `GET /api/i2c` | – | letzter I²C-Scan: `devices` (gefunden), `missing` (erwartet, fehlt) |
 | `POST /api/i2c/scan` | `{}` | I²C-Bus neu scannen (0x08–0x77), Antwort wie GET |
 | `POST /api/estop` | `{}` | Not-Aus (Fallback ohne WebSocket) |
@@ -39,7 +40,8 @@ Fehler: HTTP 4xx/5xx mit `{"ok":false,"msg":"…"}`.
 
 ### Befehle (Client → ESP32)
 
-Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantwortet.
+Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantwortet. Die Befehle
+`servo_us`, `servo_deg`, `all_us` und `all_deg` schalten den Pose-Modus ab.
 
 | `cmd` | Parameter | Wirkung |
 |---|---|---|
@@ -47,6 +49,9 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `torque` | `on` (bool) | Servos ein (gestaffelt) / aus |
 | `estop` | – | Not-Aus: alle Ausgänge sofort aus, Torque gesperrt |
 | `estop_clear` | – | Not-Aus freigeben (Servos bleiben aus) |
+| `mode` | `mode`: `"pose"` / `"manual"` | Körperhaltung per IK an/aus |
+| `pose` | `x`, `y`, `z`, `roll`, `pitch`, `yaw`, `stance` (Teilmenge) | Zielhaltung (mm/Grad, wird begrenzt), siehe [kinematik.md](kinematik.md) |
+| `pose_reset` | – | Standardhaltung |
 | `servo_us` | `id`, `us` | Rohmodus: Pulsbreite 500–2500 µs |
 | `servo_deg` | `id`, `deg` | kalibrierter Gelenkwinkel (auf Grenzen begrenzt) |
 | `all_us` | `us` | alle Servos auf eine Pulsbreite (Montage: 1500) |
@@ -77,6 +82,8 @@ Beispiel:
   "servo": {"torque": true, "active": 18, "estop": false, "inhibit": "", "slew": 240,
             "cal_dirty": false, "us": [1500, …18…], "deg": [0.0, …18…], "boards": [true, true]},
   "imu":   {"ok": true, "pitch": 1.2, "roll": -0.4},
+  "motion": {"mode": "pose", "pose": {"x": 0, "y": 0, "z": 72, "roll": 0, "pitch": 0, "yaw": 0,
+             "stance": 90}, "unreachable": [], "clamped": []},
   "wifi":  {"mode": "sta", "rssi": -58},
   "heap": 182000,
   "ws": 1
@@ -85,4 +92,5 @@ Beispiel:
 
 `bat.state`: `off` (Überwachung ausgeschaltet – `v` ist dann nur ein ungeprüfter Messwert),
 `usb` (kein Akku), `ok`, `warn`, `critical`. `servo.inhibit` enthält den Grund einer
-Sperre (z. B. „Akku leer“).
+Sperre (z. B. „Akku leer“). `motion.unreachable` / `motion.clamped` listen Beine (0–5), die ihren
+Fußpunkt nicht erreichen bzw. an eine Gelenkgrenze stoßen.

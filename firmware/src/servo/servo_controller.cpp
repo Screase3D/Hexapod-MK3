@@ -208,6 +208,18 @@ float ServoController::setAngleDeg(int id, float deg) {
   return clamped;
 }
 
+uint32_t ServoController::setAnglesDeg(const float* deg) {
+  uint32_t clamped = 0;
+  lock();
+  for (int i = 0; i < NUM_SERVOS; ++i) {
+    float d = cal_.clampDeg(i, deg[i]);
+    if (d != deg[i]) clamped |= 1u << i;
+    ch_[i].target_us = clampUs(cal_.degToUs(i, d));
+  }
+  unlock();
+  return clamped;
+}
+
 void ServoController::setAllPulseUs(float us) {
   lock();
   for (auto& c : ch_) c.target_us = clampUs(us);

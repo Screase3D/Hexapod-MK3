@@ -37,6 +37,13 @@ jobs:
       - name: Weboberfläche prüfen (JS-Syntax)
         run: node --check firmware/web/app.js
 
+      - name: Kinematik-Tests (PC)
+        working-directory: firmware/test_host
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include \
+            kinematics_test.cpp ../src/kinematics/kinematics.cpp -o kin_test
+          ./kin_test
+
       - name: Firmware bauen
         run: pio run -d firmware
 

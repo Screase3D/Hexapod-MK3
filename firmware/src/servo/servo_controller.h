@@ -36,6 +36,9 @@ class ServoController {
   // --- Sollwerte -------------------------------------------------------------
   void setPulseUs(int id, float us);       // Rohmodus, nur absolut begrenzt
   float setAngleDeg(int id, float deg);    // kalibriert, liefert begrenzten Winkel
+  // Alle 18 Gelenkwinkel auf einmal (ein Lock). Liefert eine Bitmaske der
+  // Gelenke, deren Wert auf die Kalibriergrenzen begrenzt werden musste.
+  uint32_t setAnglesDeg(const float* deg);
   void setAllPulseUs(float us);
   void setAllAngleDeg(float deg);
   void setSlewDegPerS(float v);

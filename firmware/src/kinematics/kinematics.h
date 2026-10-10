@@ -1,0 +1,67 @@
+#pragma once
+// Kinematik des Hexapods – reine Mathematik ohne Arduino-Abhängigkeiten,
+// damit sie auch auf dem PC getestet werden kann (test_host/).
+//
+// Koordinatensysteme (Einheiten: mm, Winkel in der Schnittstelle: Grad)
+//   Welt:  Ursprung auf dem Boden unter der Körpermitte (Nullpose),
+//          x vorne, y links, z oben
+//   Körper: Ursprung in der Körpermitte auf Höhe der Coxa-Achsen
+//   Bein:  Ursprung in der Coxa-Achse, x zeigt in Montagerichtung (Coxa 0°),
+//          y 90° gegen den Uhrzeigersinn dazu, z oben
+//
+// Gelenkwinkel folgen der Konvention aus docs/kalibrierung.md:
+//   Coxa  0° = entlang der Montagerichtung, + = Fuß nach vorne (beide Seiten)
+//   Femur 0° = waagerecht, + = nach oben
+//   Tibia 0° = 90° zum Femur, + = Fuß nach außen (Knie öffnet sich)
+
+namespace kin {
+
+struct Vec3 {
+  float x, y, z;
+};
+
+struct LegGeometry {
+  float coxa;   // Coxa-Achse -> Femur-Achse (waagerecht)
+  float femur;  // Femur-Achse -> Knie-Achse
+  float tibia;  // Knie-Achse -> Fußspitze
+};
+
+struct LegMount {
+  float x, y;       // Coxa-Achse relativ zur Körpermitte
+  float angle_deg;  // Richtung der Coxa bei 0°, gegen den Uhrzeigersinn ab +x
+};
+
+struct JointAngles {
+  float coxa, femur, tibia;  // Grad
+};
+
+struct BodyPose {
+  float x, y, z;     // Lage der Körpermitte über dem Welt-Ursprung (z = Höhe)
+  float roll_deg;    // + = rechte Seite runter (linke Seite hoch)
+  float pitch_deg;   // + = Nase hoch
+  float yaw_deg;     // + = nach links drehen (von oben gegen den Uhrzeigersinn)
+};
+
+// +1, wenn eine mathematisch positive Coxa-Drehung (gegen den Uhrzeigersinn)
+// den Fuß nach vorne bewegt (rechte Seite), sonst -1 (linke Seite).
+float coxaSign(const LegMount& m);
+
+// Inverse Kinematik: Fußpunkt im Bein-System -> Gelenkwinkel.
+// false = Punkt nicht erreichbar (out bleibt dann unverändert).
+bool legIk(const LegGeometry& g, const LegMount& m, const Vec3& foot_leg, JointAngles& out);
+
+// Vorwärtskinematik: Gelenkwinkel -> Fußpunkt im Bein-System.
+Vec3 legFk(const LegGeometry& g, const LegMount& m, const JointAngles& a);
+
+// Umrechnung zwischen Körper- und Bein-System
+Vec3 bodyToLeg(const LegMount& m, const Vec3& p_body);
+Vec3 legToBody(const LegMount& m, const Vec3& p_leg);
+
+// Weltpunkt (z. B. Fuß auf dem Boden) -> Körper-System bei gegebener Körperlage
+Vec3 worldToBody(const BodyPose& pose, const Vec3& p_world);
+
+// Standard-Fußpunkt eines Beins in Weltkoordinaten: in Montagerichtung im
+// Abstand `stance` von der Coxa-Achse, auf dem Boden (z = 0).
+Vec3 stanceFoot(const LegMount& m, float stance);
+
+}  // namespace kin

@@ -4,6 +4,7 @@
 #include <WiFi.h>
 
 #include "config.h"
+#include "motion/motion.h"
 #include "net/camera.h"
 #include "net/web_server.h"
 #include "net/wifi_manager.h"
@@ -66,20 +67,43 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     servos.clearEmergencyStop();
     result(out, true, "Not-Aus freigegeben (Servos bleiben aus)");
 
-  // --- Sollwerte ---
+  // --- Bewegungsmodus / Körperhaltung ---
+  } else if (strcmp(cmd, "mode") == 0) {
+    const char* m = in["mode"] | "";
+    if (strcmp(m, "pose") == 0) {
+      motion::setMode(motion::Mode::Pose);
+      result(out, true, "Körperhaltung (IK) aktiv");
+    } else if (strcmp(m, "manual") == 0) {
+      motion::setMode(motion::Mode::Manual);
+      result(out, true, "Manueller Modus");
+    } else {
+      result(out, false, "mode muss 'pose' oder 'manual' sein");
+    }
+  } else if (strcmp(cmd, "pose") == 0) {
+    motion::applyPoseJson(in);
+    result(out, true);
+  } else if (strcmp(cmd, "pose_reset") == 0) {
+    motion::resetPose();
+    result(out, true, "Haltung zurückgesetzt");
+
+  // --- Sollwerte (schalten in den manuellen Modus) ---
   } else if (strcmp(cmd, "servo_us") == 0) {
+    motion::setMode(motion::Mode::Manual);
     if (!validId(in, id, out)) return;
     servos.setPulseUs(id, in["us"] | 1500.0f);
     result(out, true);
   } else if (strcmp(cmd, "servo_deg") == 0) {
     if (!validId(in, id, out)) return;
+    motion::setMode(motion::Mode::Manual);
     float deg = servos.setAngleDeg(id, in["deg"] | 0.0f);
     out["deg"] = deg;
     result(out, true);
   } else if (strcmp(cmd, "all_us") == 0) {
+    motion::setMode(motion::Mode::Manual);
     servos.setAllPulseUs(in["us"] | 1500.0f);
     result(out, true);
   } else if (strcmp(cmd, "all_deg") == 0) {
+    motion::setMode(motion::Mode::Manual);
     servos.setAllAngleDeg(in["deg"] | 0.0f);
     result(out, true);
   } else if (strcmp(cmd, "slew") == 0) {
@@ -141,6 +165,7 @@ void buildTelemetry(JsonDocument& doc) {
   battery.toJson(doc["bat"].to<JsonObject>());
   servos.stateToJson(doc["servo"].to<JsonObject>());
   imu.toJson(doc["imu"].to<JsonObject>());
+  motion::toJson(doc["motion"].to<JsonObject>());
   JsonObject w = doc["wifi"].to<JsonObject>();
   w["mode"] = wifi::isAccessPoint() ? "ap" : "sta";
   if (!wifi::isAccessPoint()) w["rssi"] = WiFi.RSSI();

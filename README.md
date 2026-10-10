@@ -11,8 +11,8 @@ später erweitert um KI-Funktionen mit der Kamera.
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| 1 | Grundgerüst: WLAN, Webserver, Kamerastream, Servotreiber, **Servo-Kalibrierung**, Akku-/Sicherheitsfunktionen | ✅ kompiliert, UI im Browser gegen Mock getestet – **noch nicht auf echter Hardware getestet** |
-| 2 | Kinematik: Beingeometrie, inverse Kinematik je Bein, Körperhaltung (Höhe, Neigen, Drehen), Aufstehen/Hinsetzen | geplant |
+| 1 | Grundgerüst: WLAN, Webserver, Kamerastream (mit Drehung), Servotreiber, **Servo-Kalibrierung**, manuelle Servosteuerung, I²C-Scan, Akku-/Sicherheitsfunktionen, CI-Build | ✅ kompiliert, UI im Browser gegen Mock getestet – **noch nicht auf echter Hardware getestet** |
+| 2 | Kinematik: inverse Kinematik je Bein, Körperhaltung (Höhe, Fußabstand, Verschieben, Rollen/Nicken/Gieren) | 🟡 implementiert und auf dem PC getestet – **Beinmaße sind noch Platzhalter** ([docs/kinematik.md](docs/kinematik.md)); Aufstehen/Hinsetzen fehlt noch |
 | 3 | Gangarten (Tripod, Wave, Ripple) mit weichen Fußtrajektorien, Touch-Joysticks in der UI, Verbindungs-Watchdog | geplant |
 | 4 | IMU-Stabilisierung (Körper waagerecht halten), Geländeanpassung | geplant |
 | 5 | Kamera/KI: Objekterkennung (auf dem ESP32-S3 oder am PC über den Stream), Folgen, OTA-Updates | Ideen |
@@ -25,17 +25,23 @@ docs/
   ESP32_S3_Camera_Instructions.pdf   Board-Doku (Pinout S. 4)
   hardware.md                        Pinbelegung, Servo-Zuordnung, Hinweise zur Schaltung
   kalibrierung.md                    Gelenk-Konvention und Kalibrierablauf
+  kinematik.md                       Beinmaße messen, Koordinatensysteme, Körperhaltung
   api.md                             REST-, WebSocket- und Stream-Schnittstellen
 firmware/                            PlatformIO-Projekt
   platformio.ini
   include/config.h                   alle Pins, Adressen, Grenzwerte
+  include/robot_geometry.h           Beinmaße und Montagepunkte (für die IK)
   src/main.cpp                       Start, Regel-Task, Sicherheitslogik
   src/servo/                         PCA9685-Treiber, Servo-Mapping, Kalibrierung, ServoController
-  src/sensors/                       Akku, MPU6050
+  src/kinematics/                    inverse/Vorwärts-Kinematik (reine Mathematik)
+  src/motion/                        Körperhaltung → IK → Servos (Pose-Modus)
+  src/sensors/                       Akku, MPU6050, I²C-Scan
   src/net/                           WLAN, HTTP/WebSocket, Kamera, Befehle
   src/ui/                            Status-LEDs (Augen)
   web/                               Weboberfläche (HTML/CSS/JS, wird in die Firmware eingebettet)
   tools/mock_server.py               Oberfläche am PC ohne Roboter testen
+  test_host/                         Tests, die auf dem PC laufen (Kinematik)
+.github/workflows/firmware.yml       CI: Tests + Firmware-Build bei jedem Push
 ```
 
 ## Kompilieren und Flashen
@@ -109,6 +115,21 @@ firmware/                            PlatformIO-Projekt
 Gespeicherte Einstellungen (Kalibrierung, WLAN, Kamera, Akku-Schalter) bleiben bei einem
 erneuten Upload erhalten.
 
+### Alternative: fertige Firmware im Browser flashen
+
+Jeder Push baut die Firmware automatisch auf GitHub (Workflow *Firmware*). Ohne lokale
+Toolchain:
+
+1. Auf GitHub **Actions → Firmware →** den neuesten grünen Lauf öffnen und unter *Artifacts*
+   **hexapod-firmware** herunterladen (GitHub-Login nötig), ZIP entpacken.
+2. In **Chrome oder Edge** <https://espressif.github.io/esptool-js/> öffnen, Board an „TTL“
+   anschließen (SW1 aus) und **Connect** wählen, dann den COM-Port auswählen.
+3. Unter *Flash Address* `0x0` eintragen, die Datei **`firmware.factory.bin`** auswählen und
+   **Program** klicken. *Erase Flash* nicht nötig – sonst gehen gespeicherte Einstellungen
+   (Kalibrierung, WLAN) verloren.
+4. Danach **RST** drücken. Die serielle Ausgabe zeigt z. B. das Terminal derselben Seite
+   (115200 Baud).
+
 ### Erster Start
 
 1. Browser öffnen:
@@ -134,7 +155,7 @@ nach dem Bestücken des Spannungsteilers an GPIO 1 im Tab *System* einschalten, 
  │ WLAN, mDNS                  │      │ Regel-Task, 50 Hz                 │
  │ HTTP :80  UI, REST, /ws ────┼─────►│  MPU6050 lesen                    │
  │           (setzt Sollwerte) │      │  Akku (10 Hz) → Schutz (optional) │
- │ HTTP :81  MJPEG-Stream      │      │  (Phase 2: Gangart + IK)          │
+ │ HTTP :81  MJPEG-Stream      │      │  Pose-Modus: Haltung → IK         │
  │ Kamera-Treiber              │      │  Rampen → PCA9685 (einziger I²C-  │
  └─────────────────────────────┘      │  Nutzer, nur bei Änderungen)      │
                                       └───────────────────────────────────┘

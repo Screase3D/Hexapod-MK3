@@ -220,6 +220,8 @@ details summary { cursor: pointer; font-weight: 600; margin: 4px 0; }
 .joint .dot.done { background: var(--ok); }
 .joint .val { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
 
+#pose-sliders .slider-row { grid-template-columns: 112px minmax(0, 1fr) 64px; margin: 6px 0; }
+
 /* ---------- Manuelle Steuerung ---------- */
 .manual-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
 .manual-leg { background: var(--surface-2); border-radius: 10px; padding: 10px; min-width: 0; }

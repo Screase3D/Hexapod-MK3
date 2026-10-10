@@ -28,6 +28,8 @@ state = {
     "camera": {"ok": True, "framesize": 10, "quality": 12, "vflip": False, "hmirror": False,
                "max_fps": 15, "rotation": 0, "clients": 0, "port": 81, "sensor": "OV2640 (Mock)"},
     "start": time.time(),
+    "mode": "manual",
+    "pose": {"x": 0, "y": 0, "z": 72, "roll": 0, "pitch": 0, "yaw": 0, "stance": 90},
     "bat_enabled": False,
     "bat_sleep": True,
 }
@@ -71,6 +73,7 @@ def telemetry():
                   "cal_dirty": state["dirty"], "us": [round(u) for u in state["us"]],
                   "deg": [deg_of(i) for i in range(18)], "boards": [True, True]},
         "imu": {"ok": True, "pitch": round(3 * math.sin(t / 3), 1), "roll": round(5 * math.sin(t / 2), 1)},
+        "motion": {"mode": state["mode"], "pose": state["pose"], "unreachable": [], "clamped": []},
         "wifi": {"mode": "sta", "rssi": -58}, "heap": 182000, "ws": 1,
     }
 
@@ -91,6 +94,16 @@ def handle(cmd):
     elif c == "estop_clear":
         state["estop"] = False
         out["msg"] = "Not-Aus freigegeben (Servos bleiben aus)"
+    elif c == "mode":
+        state["mode"] = cmd.get("mode", "manual")
+        out["msg"] = "Körperhaltung (IK) aktiv" if state["mode"] == "pose" else "Manueller Modus"
+    elif c == "pose":
+        for k in ("x", "y", "z", "roll", "pitch", "yaw", "stance"):
+            if k in cmd:
+                state["pose"][k] = cmd[k]
+    elif c == "pose_reset":
+        state["pose"] = {"x": 0, "y": 0, "z": 72, "roll": 0, "pitch": 0, "yaw": 0, "stance": 90}
+        out["msg"] = "Haltung zurückgesetzt"
     elif c == "servo_us":
         state["us"][i] = max(500, min(2500, cmd["us"]))
     elif c == "servo_deg":
@@ -222,6 +235,14 @@ async def battery_post(request):
     return web.json_response({**battery(), "ok": True, "msg": "Akkuüberwachung " + ("an" if state["bat_enabled"] else "aus")})
 
 
+async def kinematics(_):
+    return web.json_response({
+        "placeholder": True, "leg": {"coxa": 30, "femur": 60, "tibia": 90},
+        "mounts": [], "limits": {"height_min": 20, "height_max": 120, "height_default": 72,
+                                 "stance_min": 54, "stance_max": 144, "stance_default": 90,
+                                 "shift_max": 40, "tilt_max": 20, "yaw_max": 25}})
+
+
 async def i2c_get(_):
     return web.json_response(i2c())
 
@@ -253,6 +274,7 @@ def main():
         web.get("/api/calibration", calibration_get), web.post("/api/calibration", calibration_post),
         web.get("/api/wifi", wifi_get), web.post("/api/wifi", ok),
         web.get("/api/battery", battery_get), web.post("/api/battery", battery_post),
+        web.get("/api/kinematics", kinematics),
         web.get("/api/i2c", i2c_get), web.post("/api/i2c/scan", i2c_scan),
         web.post("/api/estop", estop), web.post("/api/reboot", ok),
         web.get("/", static), web.get("/{name}", static),

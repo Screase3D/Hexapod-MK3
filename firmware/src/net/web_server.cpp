@@ -7,6 +7,7 @@
 #include "generated/web_assets.h"
 #include "net/camera.h"
 #include "net/commands.h"
+#include "motion/motion.h"
 #include "net/wifi_manager.h"
 #include "sensors/battery.h"
 #include "sensors/i2c_scan.h"
@@ -176,6 +177,12 @@ esp_err_t batteryPostHandler(httpd_req_t* req) {
   return sendJson(req, out);
 }
 
+esp_err_t kinematicsHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  motion::geometryToJson(doc.to<JsonObject>());
+  return sendJson(req, doc);
+}
+
 esp_err_t i2cGetHandler(httpd_req_t* req) {
   JsonDocument doc;
   i2cscan::toJson(doc.to<JsonObject>());
@@ -317,6 +324,7 @@ bool begin() {
   registerUri("/api/wifi", HTTP_POST, wifiPostHandler);
   registerUri("/api/battery", HTTP_GET, batteryGetHandler);
   registerUri("/api/battery", HTTP_POST, batteryPostHandler);
+  registerUri("/api/kinematics", HTTP_GET, kinematicsHandler);
   registerUri("/api/i2c", HTTP_GET, i2cGetHandler);
   registerUri("/api/i2c/scan", HTTP_POST, i2cScanHandler);
   registerUri("/api/estop", HTTP_POST, estopHandler);
