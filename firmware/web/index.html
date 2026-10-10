@@ -56,6 +56,13 @@
               <input id="cam-q" type="range" min="4" max="40" step="1">
               <label for="cam-fps">Max. Bildrate <span id="cam-fps-val" class="muted"></span></label>
               <input id="cam-fps" type="range" min="1" max="30" step="1">
+              <label for="cam-rot">Drehung</label>
+              <select id="cam-rot">
+                <option value="0">0°</option>
+                <option value="90">90° im Uhrzeigersinn</option>
+                <option value="180">180°</option>
+                <option value="270">270° im Uhrzeigersinn</option>
+              </select>
               <label class="check"><input id="cam-vflip" type="checkbox"> Vertikal spiegeln</label>
               <label class="check"><input id="cam-hmirror" type="checkbox"> Horizontal spiegeln</label>
             </div>
@@ -93,6 +100,19 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="card">
+        <details id="manual">
+          <summary>Manuelle Servosteuerung</summary>
+          <p class="muted small">Gelenkwinkel aller 18 Servos (kalibriert, begrenzt auf Min/Max der
+            Kalibrierung). Positiv: Coxa nach vorne, Femur nach oben, Tibia nach außen.
+            Bewegt sich nur bei eingeschaltetem Torque.</p>
+          <div class="manual-grid" id="manual-grid"></div>
+          <div class="row wrap">
+            <button id="manual-zero" class="btn">Alle auf 0°</button>
+          </div>
+        </details>
       </div>
     </section>
 
@@ -219,6 +239,12 @@
         <div class="card">
           <h2>Komponenten</h2>
           <ul class="devices" id="sys-devices"></ul>
+          <div class="row space-between">
+            <h2>I²C-Bus</h2>
+            <button id="i2c-scan" class="btn btn-small">Neu scannen</button>
+          </div>
+          <p class="muted small" id="i2c-info"></p>
+          <ul class="devices" id="i2c-list"></ul>
           <h2>Akku</h2>
           <div class="row">
             <label class="switch">

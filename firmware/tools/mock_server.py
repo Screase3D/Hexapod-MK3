@@ -26,7 +26,7 @@ state = {
     "us": [1500.0] * 18,
     "cal": [],
     "camera": {"ok": True, "framesize": 10, "quality": 12, "vflip": False, "hmirror": False,
-               "max_fps": 15, "clients": 0, "port": 81, "sensor": "OV2640 (Mock)"},
+               "max_fps": 15, "rotation": 0, "clients": 0, "port": 81, "sensor": "OV2640 (Mock)"},
     "start": time.time(),
     "bat_enabled": False,
     "bat_sleep": True,
@@ -52,6 +52,13 @@ saved_cal = json.loads(json.dumps(state["cal"]))
 def deg_of(i):
     c = state["cal"][i]
     return round((state["us"][i] - c["center_us"]) / c["us_per_deg"], 1)
+
+
+def i2c():
+    return {"sda": 47, "scl": 21, "freq_khz": 400, "scanned": True, "age_s": 3, "duration_ms": 18,
+            "devices": [{"addr": 0x40, "name": "PCA9685 #1 (Beine links)", "expected": True},
+                        {"addr": 0x68, "name": "MPU6050", "expected": True}],
+            "missing": [{"addr": 0x41, "name": "PCA9685 #2 (Beine rechts)"}]}
 
 
 def telemetry():
@@ -166,7 +173,7 @@ async def status(_):
         "wifi": {"mode": "sta", "ip": "127.0.0.1", "host": "hexapod.local", "ssid": "MockNet",
                  "rssi": -58, "connected": True},
         "camera": state["camera"], "devices": {"pca1": True, "pca2": True, "imu": True, "camera": True},
-        "bat": battery(),
+        "bat": battery(), "i2c": i2c(),
     })
 
 
@@ -215,6 +222,15 @@ async def battery_post(request):
     return web.json_response({**battery(), "ok": True, "msg": "Akkuüberwachung " + ("an" if state["bat_enabled"] else "aus")})
 
 
+async def i2c_get(_):
+    return web.json_response(i2c())
+
+
+async def i2c_scan(_):
+    await asyncio.sleep(0.05)
+    return web.json_response({**i2c(), "ok": True})
+
+
 async def estop(_):
     handle({"cmd": "estop"})
     return web.json_response({"ok": True, "msg": "Not-Aus ausgelöst"})
@@ -237,6 +253,7 @@ def main():
         web.get("/api/calibration", calibration_get), web.post("/api/calibration", calibration_post),
         web.get("/api/wifi", wifi_get), web.post("/api/wifi", ok),
         web.get("/api/battery", battery_get), web.post("/api/battery", battery_post),
+        web.get("/api/i2c", i2c_get), web.post("/api/i2c/scan", i2c_scan),
         web.post("/api/estop", estop), web.post("/api/reboot", ok),
         web.get("/", static), web.get("/{name}", static),
     ])

@@ -11,6 +11,8 @@
 //   POST /api/wifi              {"ssid","pass"} speichern | {"clear":true}
 //   GET  /api/battery           Akkuwerte + Schalter
 //   POST /api/battery           {"enabled","deep_sleep"} Überwachung/Tiefschlaf schalten
+//   GET  /api/i2c               Ergebnis des letzten I²C-Scans
+//   POST /api/i2c/scan          I²C-Bus neu scannen
 //   POST /api/estop             Not-Aus (Fallback, falls WebSocket hängt)
 //   POST /api/reboot            Neustart
 //

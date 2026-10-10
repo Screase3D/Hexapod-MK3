@@ -9,6 +9,7 @@
 #include "net/commands.h"
 #include "net/wifi_manager.h"
 #include "sensors/battery.h"
+#include "sensors/i2c_scan.h"
 #include "servo/servo_controller.h"
 
 namespace web {
@@ -175,6 +176,27 @@ esp_err_t batteryPostHandler(httpd_req_t* req) {
   return sendJson(req, out);
 }
 
+esp_err_t i2cGetHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  i2cscan::toJson(doc.to<JsonObject>());
+  return sendJson(req, doc);
+}
+
+// Scan anfordern und auf das Ergebnis des Regel-Tasks warten (wenige ms)
+esp_err_t i2cScanHandler(httpd_req_t* req) {
+  uint32_t id = i2cscan::request();
+  uint32_t start = millis();
+  while ((int32_t)(i2cscan::completed() - id) < 0 && millis() - start < 1000) {
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+  JsonDocument doc;
+  i2cscan::toJson(doc.to<JsonObject>());
+  bool done = (int32_t)(i2cscan::completed() - id) >= 0;
+  doc["ok"] = done;
+  if (!done) doc["msg"] = "Scan nicht abgeschlossen (Regel-Task läuft nicht?)";
+  return sendJson(req, doc, done ? nullptr : "503 Service Unavailable");
+}
+
 // Not-Aus auch ohne WebSocket erreichbar
 esp_err_t estopHandler(httpd_req_t* req) {
   servos.emergencyStop();
@@ -274,7 +296,7 @@ void registerUri(const char* uri, httpd_method_t method, esp_err_t (*handler)(ht
 bool begin() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = HTTP_PORT;
-  config.max_uri_handlers = 16;
+  config.max_uri_handlers = 20;
   config.max_open_sockets = 7;
   config.lru_purge_enable = true;
   config.stack_size = 8192;
@@ -295,6 +317,8 @@ bool begin() {
   registerUri("/api/wifi", HTTP_POST, wifiPostHandler);
   registerUri("/api/battery", HTTP_GET, batteryGetHandler);
   registerUri("/api/battery", HTTP_POST, batteryPostHandler);
+  registerUri("/api/i2c", HTTP_GET, i2cGetHandler);
+  registerUri("/api/i2c/scan", HTTP_POST, i2cScanHandler);
   registerUri("/api/estop", HTTP_POST, estopHandler);
   registerUri("/api/reboot", HTTP_POST, rebootHandler);
   registerUri("/ws", HTTP_GET, wsHandler, true);

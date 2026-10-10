@@ -4,6 +4,11 @@
 //
 //   http://<ip>:81/stream   MJPEG (multipart/x-mixed-replace)
 //   http://<ip>:81/capture  Einzelbild (JPEG)
+//
+// Drehung: 180° erledigt der Sensor selbst (Spiegeln in beide Richtungen).
+// 90°/270° kann der Sensor nicht; dafür liefert er 0°/180° und die
+// Oberfläche dreht das Bild zusätzlich um 90° (CSS). Stream und /capture
+// enthalten bei 90°/270° also das um 90° "vorgedrehte" Bild.
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -16,6 +21,7 @@ struct Settings {
   bool vflip;
   bool hmirror;
   int max_fps;    // Bildratenbegrenzung des Streams
+  int rotation;   // 0/90/180/270 Grad im Uhrzeigersinn (Einbaulage der Kamera)
 };
 
 bool begin();

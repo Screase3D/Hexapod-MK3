@@ -21,7 +21,7 @@ constexpr const char* NVS_NAMESPACE = "camera";
 bool g_ok = false;
 httpd_handle_t g_httpd = nullptr;
 std::atomic<int> g_stream_clients{0};
-Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15};
+Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0};
 
 struct FramesizeInfo {
   framesize_t id;
@@ -50,6 +50,8 @@ void loadSettings() {
   g_settings.vflip = p.getBool("vflip", g_settings.vflip);
   g_settings.hmirror = p.getBool("hmirror", g_settings.hmirror);
   g_settings.max_fps = constrain(p.getInt("fps", g_settings.max_fps), 1, 30);
+  int rot = p.getInt("rot", 0);
+  g_settings.rotation = (rot == 90 || rot == 180 || rot == 270) ? rot : 0;
   p.end();
 }
 
@@ -61,6 +63,7 @@ void saveSettings() {
   p.putBool("vflip", g_settings.vflip);
   p.putBool("hmirror", g_settings.hmirror);
   p.putInt("fps", g_settings.max_fps);
+  p.putInt("rot", g_settings.rotation);
   p.end();
 }
 
@@ -69,8 +72,10 @@ void applyToSensor() {
   if (!s) return;
   s->set_framesize(s, (framesize_t)g_settings.framesize);
   s->set_quality(s, g_settings.quality);
-  s->set_vflip(s, g_settings.vflip ? 1 : 0);
-  s->set_hmirror(s, g_settings.hmirror ? 1 : 0);
+  // 180° = in beide Richtungen spiegeln; 270° = 180° hier + 90° in der UI
+  bool flip180 = g_settings.rotation == 180 || g_settings.rotation == 270;
+  s->set_vflip(s, (g_settings.vflip != flip180) ? 1 : 0);
+  s->set_hmirror(s, (g_settings.hmirror != flip180) ? 1 : 0);
 }
 
 esp_err_t sendUnavailable(httpd_req_t* req) {
@@ -237,6 +242,14 @@ bool applyJson(JsonVariantConst obj, String& err) {
   if (obj["vflip"].is<bool>()) next.vflip = obj["vflip"];
   if (obj["hmirror"].is<bool>()) next.hmirror = obj["hmirror"];
   if (obj["max_fps"].is<int>()) next.max_fps = constrain(obj["max_fps"].as<int>(), 1, 30);
+  if (obj["rotation"].is<int>()) {
+    int rot = obj["rotation"];
+    if (rot != 0 && rot != 90 && rot != 180 && rot != 270) {
+      err = "Drehung muss 0, 90, 180 oder 270 sein";
+      return false;
+    }
+    next.rotation = rot;
+  }
   g_settings = next;
   if (g_ok) applyToSensor();
   saveSettings();
@@ -250,6 +263,7 @@ void toJson(JsonObject obj) {
   obj["vflip"] = g_settings.vflip;
   obj["hmirror"] = g_settings.hmirror;
   obj["max_fps"] = g_settings.max_fps;
+  obj["rotation"] = g_settings.rotation;
   obj["clients"] = g_stream_clients.load();
   obj["port"] = STREAM_PORT;
   JsonArray sizes = obj["framesizes"].to<JsonArray>();

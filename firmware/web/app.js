@@ -142,10 +142,12 @@ function onMessage(m) {
     for (const c of m.calibration.servos) S.cal[c.id] = c;
     renderLegs();
     renderEditorCal();
+    renderManualLimits();
   }
   if (m.cal) {
     S.cal[m.cal.id] = m.cal;
     renderLegs();
+    renderManualLimits();
     if (m.cal.id === S.sel) renderEditorCal();
   }
   if (m.ok === false) toast(m.msg || 'Fehler', true);
@@ -253,6 +255,7 @@ function renderTelemetry() {
 
   renderLegValues();
   renderEditorLive();
+  renderManualValues();
   renderBanner();
 }
 
@@ -292,6 +295,60 @@ function renderLegValues() {
     const val = $(`joint-${id}`).querySelector('.val');
     val.textContent = `${fmtDeg(S.tel.servo.deg[id])}°`;
     val.title = `${S.tel.servo.us[id]} µs`;
+  }
+}
+
+// ------------------------------------------------- Manuelle Steuerung -------
+
+const manualTouched = new Array(NUM_SERVOS).fill(0);  // Zeit der letzten Eingabe
+const manualSend = Array.from({ length: NUM_SERVOS },
+  (_, id) => throttle((deg) => send('servo_deg', { id, deg }), 50));
+
+function buildManual() {
+  const grid = $('manual-grid');
+  for (let leg = 0; leg < 6; ++leg) {
+    const box = document.createElement('div');
+    box.className = 'manual-leg';
+    box.innerHTML = `<div class="leg-title">Bein ${leg + 1} <small>${LEGS[leg]}</small></div>`;
+    for (let j = 0; j < 3; ++j) {
+      const id = leg * 3 + j;
+      const row = document.createElement('label');
+      row.className = 'manual-row';
+      row.innerHTML = `<span>${JOINTS[j]}</span>` +
+        `<input type="range" id="man-${id}" min="-90" max="90" step="1" value="0">` +
+        `<span class="mono" id="man-val-${id}">–</span>`;
+      const input = row.querySelector('input');
+      input.oninput = () => {
+        manualTouched[id] = Date.now();
+        $(`man-val-${id}`).textContent = `${fmtDeg(+input.value)}°`;
+        manualSend[id](+input.value);
+        torqueHint();
+      };
+      box.appendChild(row);
+    }
+    grid.appendChild(box);
+  }
+  $('manual-zero').onclick = () => send('all_deg', { deg: 0 });
+}
+
+function renderManualLimits() {
+  for (let id = 0; id < NUM_SERVOS; ++id) {
+    const c = S.cal[id];
+    if (!c) continue;
+    const input = $(`man-${id}`);
+    input.min = Math.ceil(c.min_deg);
+    input.max = Math.floor(c.max_deg);
+  }
+}
+
+function renderManualValues() {
+  if (!S.tel || !$('manual').open) return;
+  for (let id = 0; id < NUM_SERVOS; ++id) {
+    if (Date.now() - manualTouched[id] < LOCAL_PRIORITY_MS) continue;
+    const deg = S.tel.servo.deg[id];
+    const input = $(`man-${id}`);
+    if (document.activeElement !== input) input.value = Math.round(deg);
+    $(`man-val-${id}`).textContent = `${fmtDeg(deg)}°`;
   }
 }
 
@@ -497,6 +554,9 @@ function renderCamera() {
   $('cam-q-val').textContent = c.quality;
   $('cam-fps').value = c.max_fps;
   $('cam-fps-val').textContent = `${c.max_fps} fps`;
+  $('cam-rot').value = c.rotation || 0;
+  // 90°/270°: Sensor liefert 0°/180°, die Oberfläche dreht um weitere 90°
+  $('cam-img').parentElement.classList.toggle('rot90', c.rotation === 90 || c.rotation === 270);
   $('cam-vflip').checked = c.vflip;
   $('cam-hmirror').checked = c.hmirror;
   $('cam-info').textContent = c.ok ? (c.sensor || '') : 'Keine Kamera erkannt';
@@ -539,6 +599,7 @@ function bindCamera() {
   $('cam-q').onchange = (e) => setCamera({ quality: +e.target.value });
   $('cam-fps').oninput = (e) => { $('cam-fps-val').textContent = `${e.target.value} fps`; };
   $('cam-fps').onchange = (e) => setCamera({ max_fps: +e.target.value });
+  $('cam-rot').onchange = (e) => setCamera({ rotation: +e.target.value });
   $('cam-vflip').onchange = (e) => setCamera({ vflip: e.target.checked });
   $('cam-hmirror').onchange = (e) => setCamera({ hmirror: e.target.checked });
   document.addEventListener('visibilitychange', updateStream);
@@ -592,12 +653,49 @@ async function loadStatus() {
       li.firstChild.textContent = label;
       dev.appendChild(li);
     }
+    renderI2c(s.i2c);
     renderBatterySettings(s.bat);
     $('wifi-current').textContent = w.mode === 'ap'
       ? 'Aktuell im Access-Point-Modus.'
       : `Verbunden mit „${w.ssid}“.`;
   } catch (e) {
     toast(`Status: ${e.message}`, true);
+  }
+}
+
+const hex = (a) => '0x' + a.toString(16).toUpperCase().padStart(2, '0');
+
+function renderI2c(i2c) {
+  if (!i2c) return;
+  $('i2c-info').textContent = `SDA GPIO ${i2c.sda} · SCL GPIO ${i2c.scl} · ${i2c.freq_khz} kHz` +
+    (i2c.scanned ? ` · Scan vor ${i2c.age_s} s (${i2c.duration_ms} ms)` : ' · noch nicht gescannt');
+  const list = $('i2c-list');
+  list.innerHTML = '';
+  const add = (addr, name, cls, status) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span><span class="mono"></span> <span></span></span><span></span>';
+    li.querySelector('.mono').textContent = hex(addr);
+    li.firstChild.lastChild.textContent = name;
+    li.lastChild.className = cls;
+    li.lastChild.textContent = status;
+    list.appendChild(li);
+  };
+  for (const d of i2c.devices) add(d.addr, d.name, d.expected ? 'ok' : 'warn', d.expected ? 'OK' : 'unerwartet');
+  for (const d of i2c.missing) add(d.addr, d.name, 'bad', 'FEHLT');
+  if (i2c.scanned && !i2c.devices.length && !i2c.missing.length) add(0, 'keine Geräte gefunden', 'bad', '–');
+}
+
+async function scanI2c() {
+  const btn = $('i2c-scan');
+  btn.disabled = true;
+  try {
+    const r = await api('/api/i2c/scan', {});
+    renderI2c(r);
+    toast(`I²C-Scan: ${r.devices.length} Gerät(e) gefunden` + (r.missing.length ? `, ${r.missing.length} fehlen` : ''));
+  } catch (err) {
+    toast(`I²C-Scan: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -670,6 +768,7 @@ function bindSystem() {
     setBattery({ enabled: e.target.checked });
   };
   $('bat-sleep').onchange = (e) => setBattery({ deep_sleep: e.target.checked });
+  $('i2c-scan').onclick = scanI2c;
   $('sys-reboot').onclick = () => {
     if (confirm('ESP32 jetzt neu starten? Die Servos werden dabei stromlos.')) reboot();
   };
@@ -707,6 +806,7 @@ function bindSystem() {
 function init() {
   document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
   buildLegs();
+  buildManual();
   bindGlobal();
   bindEditor();
   bindCamera();

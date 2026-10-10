@@ -172,6 +172,13 @@ details summary { cursor: pointer; font-weight: 600; margin: 4px 0; }
 .cam-view.live img { display: block; }
 .cam-view.live .cam-placeholder { display: none; }
 .cam-placeholder { color: #8b9aab; }
+/* 90°/270°: Hochformat, Bild um 90° gedreht (cqw/cqh = Maße des Rahmens) */
+.cam-view { container-type: size; }
+.cam-view.rot90 { aspect-ratio: 3 / 4; width: min(100%, 52vh); margin: 0 auto; }
+.cam-view.rot90 img {
+  position: absolute; top: 50%; left: 50%; width: 100cqh; height: 100cqw;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
 
 /* ---------- Lage ---------- */
 .attitude { display: flex; align-items: center; gap: 18px; }
@@ -213,6 +220,14 @@ details summary { cursor: pointer; font-weight: 600; margin: 4px 0; }
 .joint .dot.done { background: var(--ok); }
 .joint .val { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
 
+/* ---------- Manuelle Steuerung ---------- */
+.manual-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+.manual-leg { background: var(--surface-2); border-radius: 10px; padding: 10px; min-width: 0; }
+.manual-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) 58px; gap: 8px; align-items: center; font-size: 0.9rem; }
+.manual-row .mono { text-align: right; font-size: 0.85rem; }
+@media (max-width: 1000px) { .manual-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .manual-grid { grid-template-columns: minmax(0, 1fr); } }
+
 /* ---------- Editor ---------- */
 .editor { position: sticky; top: 78px; }
 .editor-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; text-align: center; }
@@ -239,6 +254,7 @@ details summary { cursor: pointer; font-weight: 600; margin: 4px 0; }
 .devices li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .devices li:last-child { border-bottom: 0; }
 .ok { color: var(--ok); font-weight: 600; }
+.warn { color: var(--warn); font-weight: 600; }
 .bad { color: var(--danger); font-weight: 600; }
 
 /* ---------- Toast ---------- */

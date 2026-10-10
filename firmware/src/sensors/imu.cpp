@@ -56,6 +56,11 @@ bool Imu::begin(TwoWire& wire, uint8_t addr) {
   ok_ = false;
   last_retry_ms_ = millis();
 
+  // Erst prüfen, ob überhaupt etwas antwortet (erzeugt keine Fehlermeldungen
+  // im Log, anders als ein fehlgeschlagener Registerzugriff)
+  wire_->beginTransmission(addr_);
+  if (wire_->endTransmission() != 0) return false;
+
   // WHO_AM_I: MPU6050 = 0x68; Klone (MPU6500 etc.) melden andere Werte,
   // sind registerkompatibel genug -> nur protokollieren.
   if (!readReg(REG_WHO_AM_I, who_am_i_)) return false;

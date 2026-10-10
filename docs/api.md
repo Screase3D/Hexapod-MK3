@@ -12,6 +12,9 @@ später KI-Module am PC) können sie genauso verwenden. Alle Daten sind JSON.
 Der Stream-Server bedient einen Stream gleichzeitig; ein weiterer Client wartet, bis der erste
 die Verbindung schließt.
 
+Kamera-Drehung: 180° macht der Sensor selbst. Bei 90°/270° liefert der Sensor 0°/180°, und die
+Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90°/270° ebenfalls tun.
+
 ## REST
 
 | Methode & Pfad | Body | Antwort |
@@ -20,11 +23,13 @@ die Verbindung schließt.
 | `GET /api/calibration` | – | `{"version":1,"servos":[…18…],"dirty":bool}` |
 | `POST /api/calibration` | wie GET (ohne `dirty`) | übernimmt alle 18 Servos und **speichert sofort** |
 | `GET /api/camera` | – | Einstellungen + verfügbare Auflösungen |
-| `POST /api/camera` | `{"framesize","quality","vflip","hmirror","max_fps"}` (Teilmenge) | neue Einstellungen (persistent) |
+| `POST /api/camera` | `{"framesize","quality","vflip","hmirror","max_fps","rotation"}` (Teilmenge) | neue Einstellungen (persistent); `rotation` 0/90/180/270 |
 | `GET /api/wifi` | – | WLAN-Status, `saved_ssid` |
 | `POST /api/wifi` | `{"ssid","pass"}` oder `{"clear":true}` | wirksam nach Neustart |
 | `GET /api/battery` | – | Akkuwerte und Schalter |
 | `POST /api/battery` | `{"enabled","deep_sleep"}` (Teilmenge) | Akkuüberwachung / Tiefschlaf schalten (persistent) |
+| `GET /api/i2c` | – | letzter I²C-Scan: `devices` (gefunden), `missing` (erwartet, fehlt) |
+| `POST /api/i2c/scan` | `{}` | I²C-Bus neu scannen (0x08–0x77), Antwort wie GET |
 | `POST /api/estop` | `{}` | Not-Aus (Fallback ohne WebSocket) |
 | `POST /api/reboot` | `{}` | Neustart nach ~0,5 s |
 

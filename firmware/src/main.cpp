@@ -16,6 +16,7 @@
 #include "net/web_server.h"
 #include "net/wifi_manager.h"
 #include "sensors/battery.h"
+#include "sensors/i2c_scan.h"
 #include "sensors/imu.h"
 #include "servo/servo_controller.h"
 #include "ui/status_leds.h"
@@ -37,6 +38,7 @@ void controlTask(void*) {
     float dt = (now_us - last_us) / 1e6f;
     last_us = now_us;
 
+    i2cscan::process(Wire);  // nur wenn über die Weboberfläche angefordert
     imu.update(dt);
     if (++cycle % BATTERY_EVERY_N_CYCLES == 0) g_battery_cutoff = battery.update();
     // Hier kommt in Phase 2 die Gangart / inverse Kinematik dazu.
@@ -117,6 +119,7 @@ void setup() {
 
   bool imu_ok = imu.begin(Wire, MPU6050_ADDR);
   Serial.printf("[IMU]   MPU6050 (0x%02X): %s\n", MPU6050_ADDR, imu_ok ? "OK" : "FEHLT");
+  i2cscan::scanNow(Wire);
 
   battery.begin();
   Serial.printf("[Akku]  %.2f V (Überwachung %s, Tiefschlaf %s)\n", battery.voltage(),

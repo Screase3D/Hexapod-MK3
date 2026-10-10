@@ -8,6 +8,7 @@
 #include "net/web_server.h"
 #include "net/wifi_manager.h"
 #include "sensors/battery.h"
+#include "sensors/i2c_scan.h"
 #include "sensors/imu.h"
 #include "servo/servo_controller.h"
 
@@ -169,6 +170,7 @@ void buildStatus(JsonDocument& doc) {
   dev["pca2"] = servos.boardOk(1);
   dev["imu"] = imu.ok();
   dev["camera"] = camera::ok();
+  i2cscan::toJson(doc["i2c"].to<JsonObject>());
   battery.toJson(doc["bat"].to<JsonObject>());
 }
 
