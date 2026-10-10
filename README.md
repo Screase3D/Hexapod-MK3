@@ -46,18 +46,26 @@ firmware/                            PlatformIO-Projekt
    auch dann, wenn der Code als ZIP geladen wird (sonst: „Git not found in PATH“). Im
    Installer die Standardoption „Git from the command line and also from 3rd-party software“
    beibehalten. Alternativ in PowerShell: `winget install --id Git.Git -e`.
-2. **[VS Code](https://code.visualstudio.com/)** installieren, darin die Erweiterung
+2. **Lange Dateipfade erlauben** (nur Windows). Die ESP32-Bibliotheken enthalten Dateien mit
+   sehr tiefen Pfaden; ohne diese Einstellung bricht der erste Build beim Entpacken mit
+   `FileNotFoundError … esp32-arduino-libs …` ab. PowerShell **als Administrator** öffnen und
+   ausführen, danach Windows neu starten:
+   ```
+   New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+   git config --global core.longpaths true
+   ```
+3. **[VS Code](https://code.visualstudio.com/)** installieren, darin die Erweiterung
    **PlatformIO IDE** (Erweiterungen-Ansicht, nach „PlatformIO“ suchen). Danach VS Code
    komplett schließen und neu starten, damit Git im PATH gefunden wird.
-3. **Code holen** – am besten in einen kurzen Pfad ohne Leerzeichen, z. B. `C:\dev\` (Windows
+4. **Code holen** – am besten in einen kurzen Pfad ohne Leerzeichen, z. B. `C:\dev\` (Windows
    hat Probleme mit sehr langen Pfaden):
    ```
    git clone https://github.com/Screase3D/Hexapod-MK3.git
    ```
    Ohne Git: auf GitHub *Code* → *Download ZIP* und entpacken.
-4. In VS Code **Datei → Ordner öffnen → `Hexapod-MK3/firmware`** wählen (der Ordner mit der
+5. In VS Code **Datei → Ordner öffnen → `Hexapod-MK3/firmware`** wählen (der Ordner mit der
    `platformio.ini`, nicht das Repo-Hauptverzeichnis).
-5. *Optional:* `include/secrets.example.h` nach `include/secrets.h` kopieren und die Daten des
+6. *Optional:* `include/secrets.example.h` nach `include/secrets.h` kopieren und die Daten des
    Heim-WLANs eintragen. Ohne diese Datei startet der Hexapod einen eigenen Access Point, in
    dem man das WLAN später über die Oberfläche einträgt.
 
@@ -68,6 +76,9 @@ firmware/                            PlatformIO-Projekt
   [pioarduino](https://github.com/pioarduino/platform-espressif32) (Arduino-Core 3.3 auf
   ESP-IDF 5.5) samt Compiler. Das dauert je nach Internet 5–20 Minuten und belegt rund
   **4 GB** Platz. Danach dauert ein Build unter einer Minute.
+- Bricht der erste Build beim Entpacken ab, vor dem nächsten Versuch den Ordner
+  `%USERPROFILE%\.platformio\.cache\tmp` leeren und – falls vorhanden – den halb entpackten
+  Ordner `%USERPROFILE%\.platformio\packages\framework-arduinoespressif32-libs` löschen.
 - Erfolgreich, wenn am Ende `[SUCCESS]` steht.
 
 ### Flashen
