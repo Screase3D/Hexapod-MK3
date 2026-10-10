@@ -1,8 +1,16 @@
 #pragma once
-// WLAN: verbindet sich mit dem gespeicherten Netz (Station). Gelingt das
-// nicht, startet ein eigener Access Point "Hexapod-MK3" (192.168.4.1).
-// In beiden Fällen ist die Oberfläche zusätzlich über http://hexapod.local
-// erreichbar (mDNS; im AP-Modus nicht auf allen Geräten).
+// WLAN-Verwaltung.
+//
+// Start: Mit gespeicherten Zugangsdaten verbindet sich der Hexapod mit dem
+// Heimnetz (Station). Ohne Zugangsdaten oder wenn das fehlschlägt, startet der
+// Access Point "Hexapod-MK3" (192.168.4.1) mit Captive Portal, sodass sich die
+// Oberfläche beim Verbinden automatisch öffnet.
+//
+// Einrichtung über die Oberfläche: Netze suchen, eins auswählen, Passwort
+// eingeben -> der ESP verbindet sich sofort, während der Access Point noch
+// läuft, und meldet seine neue IP. Danach schaltet sich der Access Point ab.
+//
+// Alle WLAN-Aktionen laufen in loop(); die Web-Handler stellen nur Anfragen.
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -10,15 +18,20 @@
 namespace wifi {
 
 void begin();
-void loop();
+void loop();  // regelmäßig aus Arduino-loop() aufrufen
 
-bool isAccessPoint();
-bool connected();
-String ip();
+bool isAccessPoint();  // Access Point aktiv
+bool staConnected();   // mit dem Heimnetz verbunden
+String ip();           // Heimnetz-IP, sonst Access-Point-IP
 void toJson(JsonObject obj);
 
-// Speichert Zugangsdaten im NVS; wirksam nach Neustart.
-bool saveCredentials(const String& ssid, const String& pass);
+// Netzsuche anfordern bzw. Ergebnis abfragen
+void requestScan();
+void scanToJson(JsonObject obj);
+
+// Zugangsdaten prüfen und speichern. connect_now: im Access-Point-Modus sofort
+// verbinden; im Heimnetz-Betrieb gelten neue Daten erst nach einem Neustart.
+bool configure(const String& ssid, const String& pass, bool connect_now, String& msg);
 void clearCredentials();
 String savedSsid();
 

@@ -8,7 +8,9 @@
 //   GET  /api/camera            Kameraeinstellungen
 //   POST /api/camera            Kameraeinstellungen ändern (persistent)
 //   GET  /api/wifi              WLAN-Status
-//   POST /api/wifi              {"ssid","pass"} speichern | {"clear":true}
+//   POST /api/wifi              {"ssid","pass","connect"} speichern (+ verbinden) | {"clear":true}
+//   GET  /api/wifi/scan         Ergebnis der Netzsuche
+//   POST /api/wifi/scan         Netzsuche starten
 //   GET  /api/battery           Akkuwerte + Schalter
 //   POST /api/battery           {"enabled","deep_sleep"} Überwachung/Tiefschlaf schalten
 //   GET  /api/kinematics        Beinmaße, Montagepunkte, Grenzen der Körperhaltung

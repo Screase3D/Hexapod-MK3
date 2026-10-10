@@ -30,6 +30,13 @@ state = {
     "start": time.time(),
     "mode": "manual",
     "pose": {"x": 0, "y": 0, "z": 72, "roll": 0, "pitch": 0, "yaw": 0, "stance": 90},
+    # WLAN: startet im Access-Point-Modus (MOCK_WIFI=sta für Heimnetz-Betrieb)
+    "wifi_ap": os.environ.get("MOCK_WIFI", "ap") == "ap",
+    "wifi_sta": "idle" if os.environ.get("MOCK_WIFI", "ap") == "ap" else "connected",
+    "wifi_ssid": "" if os.environ.get("MOCK_WIFI", "ap") == "ap" else "MockNet",
+    "wifi_reason": "",
+    "wifi_connect_at": 0.0,
+    "wifi_pass": "",
     "bat_enabled": False,
     "bat_sleep": True,
 }
@@ -63,6 +70,41 @@ def i2c():
             "missing": [{"addr": 0x41, "name": "PCA9685 #2 (Beine rechts)"}]}
 
 
+NETWORKS = [
+    {"ssid": "FRITZ!Box 7590 XY", "rssi": -48, "channel": 6, "secure": True},
+    {"ssid": "Nachbar-WLAN", "rssi": -71, "channel": 1, "secure": True},
+    {"ssid": "Gastnetz", "rssi": -80, "channel": 11, "secure": False},
+]
+
+
+def wifi_update():
+    # Verbindungsversuch nach 3 s auflösen: Passwort "falsch" -> Fehler
+    if state["wifi_sta"] == "connecting" and time.time() >= state["wifi_connect_at"]:
+        if state["wifi_pass"] == "falsch":
+            state["wifi_sta"], state["wifi_reason"] = "failed", "Anmeldung abgelehnt – Passwort falsch?"
+        else:
+            state["wifi_sta"] = "connected"
+            state["wifi_ap_off_at"] = time.time() + 120
+
+
+def wifi_json():
+    wifi_update()
+    connected = state["wifi_sta"] == "connected"
+    ap = {"active": state["wifi_ap"], "ssid": "Hexapod-MK3"}
+    if state["wifi_ap"]:
+        ap.update(ip="192.168.4.1", clients=1)
+        if connected and state.get("wifi_ap_off_at"):
+            ap["off_in_s"] = int(state["wifi_ap_off_at"] - time.time())
+    sta = {"state": state["wifi_sta"], "ssid": state["wifi_ssid"]}
+    if connected:
+        sta.update(ip="192.168.178.57", rssi=-52)
+    if state["wifi_sta"] == "failed":
+        sta["reason"] = state["wifi_reason"]
+    return {"mode": ("ap+sta" if connected else "ap") if state["wifi_ap"] else "sta",
+            "ip": "192.168.178.57" if connected else "192.168.4.1", "host": "hexapod.local",
+            "saved_ssid": state["wifi_ssid"], "ap": ap, "sta": sta}
+
+
 def telemetry():
     t = time.time()
     return {
@@ -74,7 +116,7 @@ def telemetry():
                   "deg": [deg_of(i) for i in range(18)], "boards": [True, True]},
         "imu": {"ok": True, "pitch": round(3 * math.sin(t / 3), 1), "roll": round(5 * math.sin(t / 2), 1)},
         "motion": {"mode": state["mode"], "pose": state["pose"], "unreachable": [], "clamped": []},
-        "wifi": {"mode": "sta", "rssi": -58}, "heap": 182000, "ws": 1,
+        "wifi": {"mode": wifi_json()["mode"]}, "heap": 182000, "ws": 1,
     }
 
 
@@ -183,8 +225,7 @@ async def status(_):
         "fw": "0.1.0-mock", "build": "mock", "uptime": int(time.time() - state["start"]),
         "chip": {"model": "ESP32-S3", "rev": 2, "cores": 2, "mhz": 240, "flash": 16777216},
         "mem": {"heap_free": 182000, "heap_min": 150000, "psram": 8388608, "psram_free": 6000000},
-        "wifi": {"mode": "sta", "ip": "127.0.0.1", "host": "hexapod.local", "ssid": "MockNet",
-                 "rssi": -58, "connected": True},
+        "wifi": wifi_json(),
         "camera": state["camera"], "devices": {"pca1": True, "pca2": True, "imu": True, "camera": True},
         "bat": battery(), "i2c": i2c(),
     })
@@ -221,7 +262,32 @@ async def ok(_):
 
 
 async def wifi_get(_):
-    return web.json_response({"mode": "sta", "ip": "127.0.0.1", "ssid": "MockNet", "saved_ssid": "MockNet"})
+    return web.json_response(wifi_json())
+
+
+async def wifi_post(request):
+    data = await request.json()
+    if data.get("clear"):
+        state["wifi_ssid"] = ""
+        return web.json_response({"ok": True, "msg": "WLAN-Daten gelöscht"})
+    ssid, pw = data.get("ssid", ""), data.get("pass", "")
+    if not ssid or (pw and len(pw) < 8 and pw != "falsch"):
+        return web.json_response({"ok": False, "msg": "Passwort muss leer oder 8–64 Zeichen lang sein"}, status=400)
+    state["wifi_ssid"], state["wifi_pass"] = ssid, pw
+    if data.get("connect") and state["wifi_ap"]:
+        state["wifi_sta"], state["wifi_connect_at"] = "connecting", time.time() + 3
+        return web.json_response({"ok": True, "msg": f"Gespeichert – verbinde mit „{ssid}“ …"})
+    return web.json_response({"ok": True, "msg": "Gespeichert – wird nach einem Neustart verwendet"})
+
+
+async def wifi_scan_post(_):
+    state["wifi_scan_until"] = time.time() + 2
+    return web.json_response({"ok": True, "msg": "Suche gestartet"})
+
+
+async def wifi_scan_get(_):
+    running = time.time() < state.get("wifi_scan_until", 0)
+    return web.json_response({"running": running, "age_s": 0, "networks": [] if running else NETWORKS})
 
 
 async def battery_get(_):
@@ -272,7 +338,8 @@ def main():
         web.get("/api/status", status),
         web.get("/api/camera", camera_get), web.post("/api/camera", camera_post),
         web.get("/api/calibration", calibration_get), web.post("/api/calibration", calibration_post),
-        web.get("/api/wifi", wifi_get), web.post("/api/wifi", ok),
+        web.get("/api/wifi", wifi_get), web.post("/api/wifi", wifi_post),
+        web.get("/api/wifi/scan", wifi_scan_get), web.post("/api/wifi/scan", wifi_scan_post),
         web.get("/api/battery", battery_get), web.post("/api/battery", battery_post),
         web.get("/api/kinematics", kinematics),
         web.get("/api/i2c", i2c_get), web.post("/api/i2c/scan", i2c_scan),

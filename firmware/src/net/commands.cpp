@@ -167,8 +167,9 @@ void buildTelemetry(JsonDocument& doc) {
   imu.toJson(doc["imu"].to<JsonObject>());
   motion::toJson(doc["motion"].to<JsonObject>());
   JsonObject w = doc["wifi"].to<JsonObject>();
-  w["mode"] = wifi::isAccessPoint() ? "ap" : "sta";
-  if (!wifi::isAccessPoint()) w["rssi"] = WiFi.RSSI();
+  bool sta = wifi::staConnected();
+  w["mode"] = wifi::isAccessPoint() ? (sta ? "ap+sta" : "ap") : "sta";
+  if (sta) w["rssi"] = WiFi.RSSI();
   doc["heap"] = ESP.getFreeHeap();
   doc["ws"] = web::wsClientCount();
 }

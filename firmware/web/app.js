@@ -20,6 +20,7 @@ const S = {
   localTime: 0,
   tab: 'control',
   camWanted: false,
+  wifi: null,
   camera: null,
   torqueHintShown: false,
   statusTimer: null,
@@ -188,6 +189,10 @@ function renderBanner() {
     cls = 'danger';
   } else if (t && t.bat.state === 'warn') {
     msg = `Akku schwach (${t.bat.v.toFixed(2)} V) – bald laden`;
+  } else if (t && t.wifi && t.wifi.mode === 'ap' && S.tab !== 'system') {
+    msg = 'Access-Point-Modus – noch nicht mit dem Heimnetz verbunden';
+    cls = 'info';
+    act = { label: 'WLAN einrichten', fn: () => showTab('system') };
   }
 
   banner.hidden = !msg;
@@ -595,6 +600,7 @@ function showTab(name) {
   document.querySelectorAll('.tab-page').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
   updateStream();
   clearInterval(S.statusTimer);
+  renderBanner();
   if (name === 'system') {
     loadStatus();
     S.statusTimer = setInterval(loadStatus, 5000);
@@ -717,7 +723,10 @@ async function loadStatus() {
       ['Laufzeit', fmtUptime(s.uptime)],
       ['Heap frei', `${fmtBytes(s.mem.heap_free)} (min. ${fmtBytes(s.mem.heap_min)})`],
       ['PSRAM frei', s.mem.psram ? `${fmtBytes(s.mem.psram_free)} von ${fmtBytes(s.mem.psram)}` : 'kein PSRAM'],
-      ['WLAN', w.mode === 'ap' ? `Access Point „${w.ssid}“ (${w.clients} Geräte)` : `${w.ssid} (${w.rssi} dBm)`],
+      ['WLAN', [
+        w.sta.state === 'connected' ? `${w.sta.ssid} (${w.sta.rssi} dBm)` : '',
+        w.ap.active ? `Access Point „${w.ap.ssid}“ (${w.ap.clients} Geräte)` : '',
+      ].filter(Boolean).join(' · ')],
       ['Adresse', `${w.ip} · ${w.host}`],
     ]);
     const dev = $('sys-devices');
@@ -732,9 +741,7 @@ async function loadStatus() {
     }
     renderI2c(s.i2c);
     renderBatterySettings(s.bat);
-    $('wifi-current').textContent = w.mode === 'ap'
-      ? 'Aktuell im Access-Point-Modus.'
-      : `Verbunden mit „${w.ssid}“.`;
+    renderWifi(w);
   } catch (e) {
     toast(`Status: ${e.message}`, true);
   }
@@ -801,11 +808,144 @@ async function setBattery(patch) {
   }
 }
 
+// ------------------------------------------------------------------ WLAN ----
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function renderWifi(w) {
+  if (!w || !w.sta) return;
+  S.wifi = w;
+  const sta = w.sta;
+  let cur;
+  if (sta.state === 'connected') {
+    cur = `Verbunden mit „${sta.ssid}“ (${sta.rssi} dBm), Adresse ${sta.ip}.`;
+    if (w.ap.active) {
+      cur += ' Access Point läuft noch' + (w.ap.off_in_s != null ? ` (aus in ${Math.max(0, w.ap.off_in_s)} s).` : '.');
+    }
+  } else if (sta.state === 'connecting') {
+    cur = `Verbinde mit „${sta.ssid}“ …`;
+  } else {
+    cur = `Access-Point-Modus („${w.ap.ssid}“, ${w.ap.ip}). `;
+    cur += w.saved_ssid
+      ? `Gespeichertes Netz: „${w.saved_ssid}“${sta.reason ? ` – ${sta.reason}` : ''}.`
+      : 'Noch kein Heimnetz eingerichtet.';
+  }
+  $('wifi-current').textContent = cur;
+  $('wifi-submit').textContent = w.ap.active ? 'Verbinden' : 'Speichern';
+  $('wifi-hint').textContent = w.ap.active
+    ? 'Der Hexapod verbindet sich sofort mit dem gewählten Netz und zeigt danach hier seine neue Adresse an. Der Access Point läuft so lange weiter.'
+    : 'Im Heimnetz-Betrieb gelten neue Daten nach einem Neustart. Klappt die Verbindung dann nicht, startet wieder der Access Point „Hexapod-MK3“ (Passwort hexapod123, Adresse 192.168.4.1).';
+  if (!$('wifi-ssid').value && w.saved_ssid) $('wifi-ssid').value = w.saved_ssid;
+}
+
 async function loadWifi() {
   try {
-    const w = await api('/api/wifi');
-    if (!$('wifi-ssid').value) $('wifi-ssid').value = w.saved_ssid || '';
+    renderWifi(await api('/api/wifi'));
   } catch (e) { /* ignorieren */ }
+}
+
+function signalBars(rssi) {
+  const n = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
+  return '▂▄▆█'.slice(0, n).padEnd(4, '·');
+}
+
+function renderNetworks(r) {
+  const list = $('wifi-networks');
+  list.innerHTML = '';
+  if (r.error) toast(r.error, true);
+  if (!r.networks.length) {
+    const li = document.createElement('li');
+    li.className = 'muted small';
+    li.textContent = 'Keine Netze gefunden.';
+    list.appendChild(li);
+    return;
+  }
+  for (const n of r.networks) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'net';
+    b.innerHTML = '<span class="name"></span><span class="sig"></span><span></span>';
+    b.querySelector('.name').textContent = n.ssid;
+    b.querySelector('.sig').textContent = signalBars(n.rssi);
+    b.querySelector('.sig').title = `${n.rssi} dBm, Kanal ${n.channel}`;
+    b.lastChild.textContent = n.secure ? '🔒' : 'offen';
+    b.onclick = () => {
+      list.querySelectorAll('.net').forEach((x) => x.classList.remove('selected'));
+      b.classList.add('selected');
+      $('wifi-ssid').value = n.ssid;
+      $('wifi-pass').value = '';
+      if (n.secure) $('wifi-pass').focus();
+    };
+    li.appendChild(b);
+    list.appendChild(li);
+  }
+}
+
+async function scanWifi() {
+  const btn = $('wifi-scan');
+  btn.disabled = true;
+  btn.textContent = 'Suche …';
+  try {
+    await api('/api/wifi/scan', {});
+    let r = null;
+    for (let i = 0; i < 25; ++i) {
+      await sleep(600);
+      try { r = await api('/api/wifi/scan'); } catch (e) { continue; }  // AP kann kurz stocken
+      if (!r.running) break;
+    }
+    if (r && !r.running) renderNetworks(r);
+    else toast('Netzsuche dauert zu lange – bitte noch einmal versuchen', true);
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Netze suchen';
+  }
+}
+
+function showWifiResult(cls, html) {
+  const box = $('wifi-result');
+  box.className = cls ? `notice notice-${cls}` : 'notice';
+  box.innerHTML = html;
+  box.hidden = false;
+}
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Verbindungsversuch verfolgen. Beim Verbinden wechselt der ESP evtl. den Funkkanal,
+// dann verliert dieses Gerät kurz den Access Point – Fehler beim Abfragen sind normal.
+async function followConnect(ssid) {
+  const name = escapeHtml(ssid);
+  showWifiResult('', `Verbinde mit „${name}“ … Dieses Gerät kann dabei kurz die Verbindung zum Access Point verlieren.`);
+  const start = Date.now();
+  let seenConnecting = false;
+  while (Date.now() - start < 60000) {
+    await sleep(1500);
+    let w;
+    try { w = await api('/api/wifi'); } catch (e) { continue; }
+    renderWifi(w);
+    const st = w.sta.state;
+    if (st === 'connecting') {
+      seenConnecting = true;
+    } else if (st === 'connected') {
+      const url = `http://${w.sta.ip}/`;
+      const off = w.ap.off_in_s != null ? ` in ca. ${Math.max(0, w.ap.off_in_s)} s` : '';
+      showWifiResult('ok',
+        `<b>Verbunden mit „${name}“!</b><br>Der Hexapod ist jetzt im Heimnetz erreichbar unter ` +
+        `<a href="${url}">${url}</a> (oder <span class="mono">http://${escapeHtml(w.host)}</span>).` +
+        `<ol><li>Dieses Gerät wieder mit „${name}“ verbinden.</li>` +
+        `<li>Die Adresse öffnen und am besten als Lesezeichen speichern.</li></ol>` +
+        `Der Access Point „${escapeHtml(w.ap.ssid)}“ schaltet sich${off} ab.`);
+      return;
+    } else if (st === 'failed' && (seenConnecting || Date.now() - start > 5000)) {
+      showWifiResult('error', `<b>Verbindung mit „${name}“ fehlgeschlagen.</b><br>` +
+        `${escapeHtml(w.sta.reason || '')}<br>Passwort prüfen und erneut versuchen.`);
+      return;
+    }
+  }
+  showWifiResult('error', 'Keine Rückmeldung vom Hexapod. Ist dieses Gerät noch mit „Hexapod-MK3“ verbunden? ' +
+    'Dann die Seite neu laden – der Status steht oben in dieser Karte.');
 }
 
 async function reboot() {
@@ -821,13 +961,26 @@ async function reboot() {
 function bindSystem() {
   $('wifi-form').onsubmit = async (e) => {
     e.preventDefault();
+    const ssid = $('wifi-ssid').value.trim();
+    const apMode = !S.wifi || S.wifi.ap.active;
     try {
-      const r = await api('/api/wifi', { ssid: $('wifi-ssid').value.trim(), pass: $('wifi-pass').value });
-      toast(r.msg);
-      if (confirm('WLAN-Daten gespeichert. Jetzt neu starten?')) reboot();
+      const r = await api('/api/wifi', { ssid, pass: $('wifi-pass').value, connect: apMode });
+      if (apMode) {
+        await followConnect(ssid);
+      } else {
+        toast(r.msg);
+        if (confirm('WLAN-Daten gespeichert. Jetzt neu starten?')) reboot();
+      }
     } catch (err) {
       toast(err.message, true);
     }
+  };
+  $('wifi-scan').onclick = scanWifi;
+  $('wifi-pass-toggle').onclick = () => {
+    const p = $('wifi-pass');
+    const show = p.type === 'password';
+    p.type = show ? 'text' : 'password';
+    $('wifi-pass-toggle').textContent = show ? 'Verbergen' : 'Anzeigen';
   };
   $('wifi-clear').onclick = async () => {
     if (!confirm('Gespeicherte WLAN-Daten löschen? Nach dem Neustart startet der Access Point.')) return;

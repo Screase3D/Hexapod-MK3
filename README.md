@@ -71,9 +71,9 @@ firmware/                            PlatformIO-Projekt
    Ohne Git: auf GitHub *Code* → *Download ZIP* und entpacken.
 5. In VS Code **Datei → Ordner öffnen → `Hexapod-MK3/firmware`** wählen (der Ordner mit der
    `platformio.ini`, nicht das Repo-Hauptverzeichnis).
-6. *Optional:* `include/secrets.example.h` nach `include/secrets.h` kopieren und die Daten des
-   Heim-WLANs eintragen. Ohne diese Datei startet der Hexapod einen eigenen Access Point, in
-   dem man das WLAN später über die Oberfläche einträgt.
+6. WLAN-Zugangsdaten müssen **nicht** in den Code: Das Heimnetz wird nach dem Flashen über die
+   Oberfläche eingerichtet (siehe [Erster Start](#erster-start)). Nur wer sie trotzdem fest
+   einkompilieren will, kopiert `include/secrets.example.h` nach `include/secrets.h`.
 
 ### Kompilieren
 
@@ -132,10 +132,20 @@ Toolchain:
 
 ### Erster Start
 
-1. Browser öffnen:
-   - im Heimnetz: `http://hexapod.local` oder die im Monitor angezeigte IP,
-   - im Access-Point-Modus: mit dem WLAN **„Hexapod-MK3“** (Passwort `hexapod123`) verbinden,
-     dann `http://192.168.4.1`. Im Tab *System* lassen sich die Heimnetz-Daten eintragen.
+1. **WLAN einrichten** (einmalig, ohne Dateien zu bearbeiten):
+   1. Handy oder PC mit dem WLAN **„Hexapod-MK3“** verbinden (Passwort `hexapod123`).
+      Die Oberfläche öffnet sich meist von selbst (Captive Portal), sonst `http://192.168.4.1`
+      im Browser aufrufen.
+   2. Auf **„WLAN einrichten“** tippen (Banner oben) bzw. Tab *System* → *WLAN*.
+   3. **„Netze suchen“**, das Heimnetz antippen, Passwort eingeben, **„Verbinden“**.
+      Nur 2,4-GHz-Netze werden unterstützt.
+   4. Nach wenigen Sekunden zeigt die Karte die **neue Adresse** im Heimnetz an
+      (z. B. `http://192.168.178.57`). Das Gerät wieder mit dem Heimnetz verbinden und diese
+      Adresse öffnen – am besten als Lesezeichen. Der Access Point schaltet sich danach ab.
+
+   Die Zugangsdaten bleiben gespeichert. Ist das Heimnetz beim Start nicht erreichbar, startet
+   wieder der Access Point; der Hexapod versucht das Heimnetz im Hintergrund weiter.
+   Alternativ zur IP funktioniert oft auch `http://hexapod.local`.
 2. Zum Bewegen der Servos braucht es den Akku: USB abziehen, SW1 ein, dann über WLAN
    weiterarbeiten.
 3. Servos kalibrieren: Anleitung in [docs/kalibrierung.md](docs/kalibrierung.md).

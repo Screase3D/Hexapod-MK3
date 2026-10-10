@@ -1,6 +1,7 @@
 #include "web_server.h"
 
 #include <ArduinoJson.h>
+#include <WiFi.h>
 #include <esp_http_server.h>
 
 #include "config.h"
@@ -86,6 +87,17 @@ esp_err_t assetHandler(httpd_req_t* req) {
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     return httpd_resp_send(req, (const char*)a.data, a.len);
   }
+  // Captive Portal: Im Access-Point-Modus landen die Verbindungstests der
+  // Betriebssysteme (generate_204, hotspot-detect.html, connecttest.txt …) hier.
+  // Die Weiterleitung lässt Handy/Laptop die Oberfläche automatisch öffnen.
+  if (wifi::isAccessPoint()) {
+    static char location[40];
+    snprintf(location, sizeof(location), "http://%s/", WiFi.softAPIP().toString().c_str());
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", location);
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, nullptr, 0);
+  }
   httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Nicht gefunden");
   return ESP_OK;
 }
@@ -135,24 +147,33 @@ esp_err_t cameraPostHandler(httpd_req_t* req) {
 esp_err_t wifiGetHandler(httpd_req_t* req) {
   JsonDocument doc;
   wifi::toJson(doc.to<JsonObject>());
-  doc["saved_ssid"] = wifi::savedSsid();
   return sendJson(req, doc);
 }
 
+// {"ssid","pass","connect":true} speichern (+ im AP-Modus sofort verbinden)
+// {"clear":true} gespeicherte Zugangsdaten löschen
 esp_err_t wifiPostHandler(httpd_req_t* req) {
   JsonDocument doc;
   String err;
   if (!readJsonBody(req, doc, err)) return sendResult(req, false, err);
   if (doc["clear"] | false) {
     wifi::clearCredentials();
-    return sendResult(req, true, "WLAN-Daten gelöscht - nach Neustart Access-Point-Modus");
+    return sendResult(req, true, "WLAN-Daten gelöscht – nach einem Neustart startet der Access Point");
   }
-  String ssid = doc["ssid"] | "";
-  String pass = doc["pass"] | "";
-  if (!wifi::saveCredentials(ssid, pass)) {
-    return sendResult(req, false, "SSID 1-32 Zeichen, Passwort leer oder 8-64 Zeichen");
-  }
-  return sendResult(req, true, "Gespeichert - wird nach Neustart verwendet");
+  String msg;
+  bool ok = wifi::configure(doc["ssid"] | "", doc["pass"] | "", doc["connect"] | false, msg);
+  return sendResult(req, ok, msg);
+}
+
+esp_err_t wifiScanGetHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  wifi::scanToJson(doc.to<JsonObject>());
+  return sendJson(req, doc);
+}
+
+esp_err_t wifiScanPostHandler(httpd_req_t* req) {
+  wifi::requestScan();
+  return sendResult(req, true, "Suche gestartet");
 }
 
 esp_err_t batteryGetHandler(httpd_req_t* req) {
@@ -303,7 +324,7 @@ void registerUri(const char* uri, httpd_method_t method, esp_err_t (*handler)(ht
 bool begin() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = HTTP_PORT;
-  config.max_uri_handlers = 20;
+  config.max_uri_handlers = 24;
   config.max_open_sockets = 7;
   config.lru_purge_enable = true;
   config.stack_size = 8192;
@@ -322,6 +343,8 @@ bool begin() {
   registerUri("/api/camera", HTTP_POST, cameraPostHandler);
   registerUri("/api/wifi", HTTP_GET, wifiGetHandler);
   registerUri("/api/wifi", HTTP_POST, wifiPostHandler);
+  registerUri("/api/wifi/scan", HTTP_GET, wifiScanGetHandler);
+  registerUri("/api/wifi/scan", HTTP_POST, wifiScanPostHandler);
   registerUri("/api/battery", HTTP_GET, batteryGetHandler);
   registerUri("/api/battery", HTTP_POST, batteryPostHandler);
   registerUri("/api/kinematics", HTTP_GET, kinematicsHandler);

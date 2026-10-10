@@ -24,8 +24,10 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 | `POST /api/calibration` | wie GET (ohne `dirty`) | übernimmt alle 18 Servos und **speichert sofort** |
 | `GET /api/camera` | – | Einstellungen + verfügbare Auflösungen |
 | `POST /api/camera` | `{"framesize","quality","vflip","hmirror","max_fps","rotation"}` (Teilmenge) | neue Einstellungen (persistent); `rotation` 0/90/180/270 |
-| `GET /api/wifi` | – | WLAN-Status, `saved_ssid` |
-| `POST /api/wifi` | `{"ssid","pass"}` oder `{"clear":true}` | wirksam nach Neustart |
+| `GET /api/wifi` | – | WLAN-Status: `mode` (`ap`/`ap+sta`/`sta`), `ap` {active, ip, clients, off_in_s}, `sta` {state, ssid, ip, rssi, reason}, `saved_ssid` |
+| `POST /api/wifi` | `{"ssid","pass","connect":true}` oder `{"clear":true}` | speichern; im AP-Modus mit `connect` sofort verbinden (Status über `GET /api/wifi` verfolgen), sonst nach Neustart |
+| `POST /api/wifi/scan` | `{}` | Netzsuche starten (asynchron) |
+| `GET /api/wifi/scan` | – | `running`, `networks` [{ssid, rssi, channel, secure}] |
 | `GET /api/battery` | – | Akkuwerte und Schalter |
 | `POST /api/battery` | `{"enabled","deep_sleep"}` (Teilmenge) | Akkuüberwachung / Tiefschlaf schalten (persistent) |
 | `GET /api/kinematics` | – | Beinmaße, Montagepunkte, Grenzen der Körperhaltung, `placeholder` |

@@ -287,19 +287,27 @@
         </div>
         <div class="card">
           <h2>WLAN</h2>
-          <p class="muted small" id="wifi-current"></p>
+          <p class="small" id="wifi-current"></p>
+          <div id="wifi-result" class="notice" hidden></div>
+          <div class="row space-between">
+            <span class="muted small">Netze in der Nähe (nur 2,4 GHz)</span>
+            <button id="wifi-scan" class="btn btn-small" type="button">Netze suchen</button>
+          </div>
+          <ul id="wifi-networks" class="networks"></ul>
           <form id="wifi-form" class="form-grid" autocomplete="off">
-            <label for="wifi-ssid">SSID</label>
-            <input id="wifi-ssid" maxlength="32" required>
+            <label for="wifi-ssid">Netzwerk</label>
+            <input id="wifi-ssid" maxlength="32" required autocapitalize="none" autocorrect="off" spellcheck="false">
             <label for="wifi-pass">Passwort</label>
-            <input id="wifi-pass" type="password" maxlength="64">
+            <div class="pass-row">
+              <input id="wifi-pass" type="password" maxlength="64" autocomplete="new-password">
+              <button type="button" id="wifi-pass-toggle" class="btn btn-small">Anzeigen</button>
+            </div>
             <div class="row wrap span-2">
-              <button class="btn btn-primary" type="submit">Speichern</button>
-              <button class="btn btn-danger-outline" type="button" id="wifi-clear">Löschen (AP-Modus)</button>
+              <button class="btn btn-primary" type="submit" id="wifi-submit">Verbinden</button>
+              <button class="btn btn-danger-outline" type="button" id="wifi-clear">Gespeichertes Netz löschen</button>
             </div>
           </form>
-          <p class="muted small">Ohne gespeichertes Netz startet der Hexapod den Access Point
-            „Hexapod-MK3“ (Passwort <span class="mono">hexapod123</span>, Adresse 192.168.4.1).</p>
+          <p class="muted small" id="wifi-hint"></p>
         </div>
         <div class="card">
           <h2>Kalibrierdaten</h2>
