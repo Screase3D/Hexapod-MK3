@@ -42,18 +42,22 @@ firmware/                            PlatformIO-Projekt
 
 ### Einmalig einrichten
 
-1. **[VS Code](https://code.visualstudio.com/)** installieren, darin die Erweiterung
-   **PlatformIO IDE** (Erweiterungen-Ansicht, nach „PlatformIO“ suchen). Nach der Installation
-   VS Code neu starten.
-2. **Code holen** – am besten in einen kurzen Pfad ohne Leerzeichen, z. B. `C:\dev\` (Windows
+1. **[Git](https://git-scm.com/download/win)** installieren – die ESP32-Plattform braucht es
+   auch dann, wenn der Code als ZIP geladen wird (sonst: „Git not found in PATH“). Im
+   Installer die Standardoption „Git from the command line and also from 3rd-party software“
+   beibehalten. Alternativ in PowerShell: `winget install --id Git.Git -e`.
+2. **[VS Code](https://code.visualstudio.com/)** installieren, darin die Erweiterung
+   **PlatformIO IDE** (Erweiterungen-Ansicht, nach „PlatformIO“ suchen). Danach VS Code
+   komplett schließen und neu starten, damit Git im PATH gefunden wird.
+3. **Code holen** – am besten in einen kurzen Pfad ohne Leerzeichen, z. B. `C:\dev\` (Windows
    hat Probleme mit sehr langen Pfaden):
    ```
    git clone https://github.com/Screase3D/Hexapod-MK3.git
    ```
    Ohne Git: auf GitHub *Code* → *Download ZIP* und entpacken.
-3. In VS Code **Datei → Ordner öffnen → `Hexapod-MK3/firmware`** wählen (der Ordner mit der
+4. In VS Code **Datei → Ordner öffnen → `Hexapod-MK3/firmware`** wählen (der Ordner mit der
    `platformio.ini`, nicht das Repo-Hauptverzeichnis).
-4. *Optional:* `include/secrets.example.h` nach `include/secrets.h` kopieren und die Daten des
+5. *Optional:* `include/secrets.example.h` nach `include/secrets.h` kopieren und die Daten des
    Heim-WLANs eintragen. Ohne diese Datei startet der Hexapod einen eigenen Access Point, in
    dem man das WLAN später über die Oberfläche einträgt.
 
