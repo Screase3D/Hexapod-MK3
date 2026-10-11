@@ -12,8 +12,8 @@ stammen aus dem CAD-Modell:
 | Coxa / Femur / Tibia | 41 / 43 / 94 mm (Achse zu Achse, Tibia bis Fußspitze) |
 | Coxa-Achsen vorne bzw. hinten | 77 mm auseinander, ±73,5 mm vor/hinter der Mitte, Bein 45° schräg |
 | Coxa-Achsen Mitte | 114 mm auseinander, Bein 90° zur Seite |
-| Montagestellung (alle Servos 90°) | Coxa 0°, Femur +49,3°, Tibia −23,5° (Grundstellung aus dem CAD) |
-| daraus Standardhaltung | Höhe 52 mm (Femur-Achse über der Fußspitze), Fußabstand 110 mm, Bodenfreiheit ca. 28 mm |
+| Montagestellung (alle Servos 90°) | Coxa 0°, Femur +55,4°, Tibia −33,8° (= Grundstellung) |
+| daraus Standardhaltung | Höhe 52 mm (Femur-Achse über der Fußspitze), Fußabstand 100 mm, Bodenfreiheit ca. 28 mm |
 
 Die Zeichnung wird von [`beingeometrie.py`](beingeometrie.py) erzeugt
 (`python3 docs/beingeometrie.py`); ändern sich Maße, dort und in `robot_geometry.h` anpassen.
@@ -21,15 +21,15 @@ Die Zeichnung wird von [`beingeometrie.py`](beingeometrie.py) erzeugt
 ### Montagestellung (Servo-Mitte) = Grundstellung
 
 Die Servohörner werden bei Servo-Mitte (90° / 1500 µs) in der **Grundstellung** aufgesteckt,
-in der der Roboter auch steht. Sie stammt aus dem CAD (Seitenansicht des Beins, Roboter
-aufgebockt):
+in der der Roboter auch steht. Die Höhe stammt aus dem CAD (Roboter aufgebockt), die Fußspitzen
+stehen aber 10 mm weiter innen als dort (100 statt 110 mm) – das entlastet den Femur um ca. 15 %:
 
 | | Wert |
 |---|---|
-| Femur | 49,3° über der Waagerechten |
-| Linie Knieachse → Fußspitze | 64,2° unter der Waagerechten, Fußspitze 41 mm außerhalb des Knies |
-| Gelenkwinkel (Firmware) | **Coxa 0°, Femur +49,3°, Tibia −23,5°** (`ASSEMBLY_POSE`) |
-| Höhe / Fußabstand | 52 mm (Femur-Achse über der Fußspitze) / 110 mm |
+| Femur | 55,4° über der Waagerechten |
+| Linie Knieachse → Fußspitze | 68,4° unter der Waagerechten, Fußspitze 34,6 mm außerhalb des Knies |
+| Gelenkwinkel (Firmware) | **Coxa 0°, Femur +55,4°, Tibia −33,8°** (`ASSEMBLY_POSE`) |
+| Höhe / Fußabstand | 52 mm (Femur-Achse über der Fußspitze) / 100 mm |
 | Bodenfreiheit Chassis | ca. 28 mm (Unterkante 26 mm unter der Femur-Achse, runder Fuß ca. 2 mm) |
 
 Das Tibia-Bauteil ist gebogen: Vom Knie geht es erst nach außen und knickt dann nach unten ab,
@@ -39,25 +39,32 @@ Knieachse zur Fußspitze (94 mm); die Form spielt nur für Anschläge eine Rolle
 Die Kalibrierung verwendet diese Stellung als Bezug, und die Standardhaltung der Oberfläche
 entspricht ihr genau. Eine Lehre zum Ausdrucken: [montagelehre.pdf](montagelehre.pdf).
 
-**Warum diese Stellung als Servo-Mitte?** Sie liegt mitten im Arbeitsbereich – alle Haltungen
-bleiben innerhalb von ±60° um sie (MG90S: etwa ±90°):
+**Warum diese Stellung als Servo-Mitte?** Sie liegt mitten im Arbeitsbereich – Laufen und Sitzen
+bleiben innerhalb von ±50° um sie, nur der ganz hoch gestellte Körper braucht −65° am Femur
+(Standardgrenzen der Kalibrierung ±70°, MG90S: etwa ±90°):
 
 | Haltung | Femur | Tibia | Knie innen |
 |---|---|---|---|
-| Grundstellung 52 / 110 mm | 49° (±0) | −24° (±0) | 67° |
-| Fuß 20 mm angehoben | 76° (+26) | −37° (−14) | 53° |
-| Liegen (Sitzhaltung 23 / 110 mm) | 87° (+38) | −42° (−18) | 48° |
-| Körper hoch 80 / 100 mm | 17° (−33) | −6° (+18) | 84° |
-| Körper sehr hoch 100 / 100 mm | −10° (−59) | +20° (+44) | 110° |
+| Grundstellung 52 / 100 mm | 55° (±0) | −34° (±0) | 56° |
+| Laufen (Standardwerte, alle Gangarten) | 40…89° | −63…−8° | 27…82° |
+| Fuß 20 mm angehoben | 87° (+32) | −50° (−16) | 40° |
+| Liegen (Sitzhaltung 23 / 100 mm) | 102° (+46) | −56° (−22) | 34° |
+| Körper hoch 80 / 100 mm | 17° (−39) | −6° (+28) | 84° |
+| Körper sehr hoch 100 / 100 mm | −10° (−65) | +20° (+54) | 110° |
 
-Außerdem ist sie gut einzustellen: 1 mm Fehler in der Höhe macht nur ca. 1,3° am Femur.
+„Knie innen“ ist der Winkel zwischen Femur-Linie und Linie Knie → Fußspitze (= 90° + Tibia).
+Außerdem ist die Stellung gut einzustellen: 1 mm Fehler in der Höhe macht ca. 1,5° am Femur.
+
+> **Am CAD prüfen:** Wie weit lässt sich das Knie zuklappen, bevor das Tibia-Bauteil am Femur
+> oder Servo anstößt (beim Laufen bis ca. 27°, mit 20 mm Fußhub 23°), und kommt der Femur im
+> Sitzen auf 102° (knapp über senkrecht) ohne anzustoßen?
 
 **Last:** Das Femur-Moment hängt vom waagerechten Abstand Femur-Achse → Fuß ab (in der
-Grundstellung 69 mm). Bei ca. 850 g und drei tragenden Beinen (Dreifuß-Gang) sind das etwa
-2 kg·cm – so viel, wie ein MG90S gerade noch hält. Im Stand auf sechs Beinen ist es die Hälfte.
-Wird der Femur beim Laufen zu schwach: Fußabstand verkleinern (95 mm → ca. 1,5 kg·cm,
-85 mm → ca. 1,25 kg·cm) oder Ripple-Gang (vier Beine tragen). Am besten den fertigen Roboter
-einmal wiegen.
+Grundstellung 59 mm). Bei ca. 850 g und drei tragenden Beinen (Dreifuß-Gang) sind das etwa
+1,7 kg·cm; mit 110 mm Fußabstand wären es 2 kg·cm, so viel, wie ein MG90S gerade noch hält.
+Im Stand auf sechs Beinen ist es die Hälfte. Noch weiter innen (95 mm → ca. 1,5 kg·cm) muss das
+Knie beim Fußheben noch weiter einknicken. Wird der Femur beim Laufen zu schwach: Ripple-Gang
+(vier Beine tragen). Am besten den fertigen Roboter einmal wiegen.
 
 Voraussetzung: Die Servos sind kalibriert ([kalibrierung.md](kalibrierung.md)), denn die IK
 verwendet dieselben Gelenkwinkel-Konventionen.
@@ -121,7 +128,7 @@ darüber:
 | Regler | Bedeutung |
 |---|---|
 | Höhe | Femur-Achsen über den Fußspitzen (35–100 mm, Standard 52) |
-| Fußabstand | Abstand Fuß ↔ Coxa-Achse (waagerecht, 75–135 mm, Standard 110) |
+| Fußabstand | Abstand Fuß ↔ Coxa-Achse (waagerecht, 75–135 mm, Standard 100) |
 | Vor/zurück, Links/rechts | Körper über den Füßen verschieben |
 | Rollen | + = rechte Seite runter |
 | Nicken | + = Nase hoch |
@@ -139,14 +146,16 @@ stimmt dessen Kalibrierung (Drehrichtung) oder Montagewinkel nicht.
 ## Aufstehen und Hinsetzen
 
 Beim Einschalten von Torque fahren die Beine in die **Sitzhaltung**: Körper liegt auf, Füße auf
-dem Boden im gleichen Abstand wie im Stand (110 mm, `SIT_STANCE`). So drücken die Beine einen auf
+dem Boden im gleichen Abstand wie im Stand (100 mm, `SIT_STANCE`). So drücken die Beine einen auf
 dem Bauch liegenden Roboter nicht ruckartig hoch.
 
 Karte **Laufen** → **Aufstehen** ([`posture.cpp`](../firmware/src/kinematics/posture.cpp)):
 
 1. Körper ruckfrei auf die eingestellte Höhe heben (1,5 s, Füße bleiben stehen),
 2. weicht der Fußabstand im Stand von dem im Sitzen ab, die Füße mit Schritten umsetzen – nicht
-   unter Last schieben. Mit den aktuellen Werten (beide 110 mm) entfällt das.
+   unter Last schieben. Mit den aktuellen Werten (beide 100 mm) entfällt das. Unterschiede bis
+   10 mm würde die Gangart nicht umsetzen, sondern schieben – `SIT_STANCE` also entweder gleich
+   oder mehr als 10 mm anders wählen.
 
 **Hinsetzen** geht umgekehrt: Körper gerade ausrichten, ggf. Füße umsetzen, dann absenken.
 Laufen ist nur im Stehen möglich. Torque aus oder Not-Aus gilt als „liegt“: Danach muss der
@@ -176,7 +185,11 @@ phasengesteuert:
   setzt wieder auf. Höhe und Vorschwung folgen Profilen, deren Geschwindigkeit am Anfang und Ende
   null ist (kein Ruck, kein Aufschlagen). Der Aufsetzpunkt liegt so, dass die folgende
   Standphase symmetrisch um die Neutralstellung verläuft.
-- **Anfahren/Anhalten:** Der Fahrbefehl wird über 0,5 s gerampt. Nach dem Loslassen machen die
+- **Anfahren/Anhalten:** Der Fahrbefehl wird über 0,5 s gerampt. Beim Anlaufen aus dem
+  Stillstand wandert das Bein mit dem spätesten Schwungfenster bis zu seinem ersten Schritt mit
+  dem Körper mit; damit es dabei nicht viel weiter nach innen kommt als im normalen Lauf (sonst
+  knickt das Knie zu weit ein), beschleunigt der Gang im ersten Zyklus langsamer: Dreifuß 0,5 s,
+  Ripple 1,5 s, Welle 2,5 s. Bremsen geht immer in 0,5 s. Nach dem Loslassen machen die
   Beine noch einen Schritt in die Neutralstellung, dann steht der Roboter; Beine, die schon dort
   stehen, heben nicht ab.
 - **Sicherheit:** Ohne neuen Fahrbefehl für 0,6 s (`WALK_TIMEOUT_MS`, z. B. WLAN weg, Handy
@@ -185,11 +198,11 @@ phasengesteuert:
 
 | Gangart | gleichzeitig in der Luft | Zyklus (bei 0,5 s Schrittdauer) | max. Tempo |
 |---|---|---|---|
-| Dreifuß (`tripod`) | 3 (vl, hl, mr ↔ ml, vr, hr) | 1,0 s | 80 mm/s |
-| Ripple (`ripple`) | 2 (je Seite eins) | 1,5 s | 40 mm/s |
-| Welle (`wave`) | 1 | 3,0 s | 16 mm/s |
+| Dreifuß (`tripod`) | 3 (vl, hl, mr ↔ ml, vr, hr) | 1,0 s | 70 mm/s |
+| Ripple (`ripple`) | 2 (je Seite eins) | 1,5 s | 35 mm/s |
+| Welle (`wave`) | 1 | 3,0 s | 14 mm/s |
 
-Das Tempo ergibt sich aus dem größten Fußweg je Standphase (40 mm, `GAIT_LIMITS.stride_max`) und
+Das Tempo ergibt sich aus dem größten Fußweg je Standphase (35 mm, `GAIT_LIMITS.stride_max`) und
 der Dauer der Standphase. Fahren und Drehen gleichzeitig wird so begrenzt, dass kein Fuß
 schneller als erlaubt wandert. Ein Wechsel der Gangart wirkt erst im Stillstand.
 
@@ -197,10 +210,12 @@ schneller als erlaubt wandert. Ein Wechsel der Gangart wirkt erst im Stillstand.
 |---|---|---|---|
 | Tempo | 10–100 % | 60 % | skaliert den Joystick (nur in der Oberfläche) |
 | Schrittdauer | 0,3–1,2 s | 0,5 s | Dauer eines Fußschwungs; kürzer = schneller, aber hektischer |
-| Fußhub | 5–25 mm | 15 mm | mehr als 25 mm erreicht das Bein nicht überall |
+| Fußhub | 5–20 mm | 15 mm | mehr: Knie knickt am inneren Ende des Schritts zu weit ein |
 
-Mit dem kurzen Femur muss das Bein zum Fußheben den Femur kräftig drehen. Bei den
-Standardwerten bleiben die Gelenke im Schwung unter ca. 280 °/s, beim Tragen unter ca. 70 °/s.
+Mit dem kurzen Femur muss das Bein zum Fußheben den Femur kräftig drehen und am inneren Ende des
+Schritts (Fuß nah an der Coxa) das Knie weit einknicken. Bei den Standardwerten bleiben die
+Gelenke im Schwung unter ca. 200 °/s, beim Tragen unter ca. 80 °/s, das Knie bleibt über ca. 27°
+(20 mm Fußhub: 23°). Schrittlänge 40 mm und 25 mm Hub würden das Knie bis 12° zuklappen.
 Damit die Servo-Rampe die glatten Schrittbahnen nicht ausbremst, gilt im IK-Betrieb
 mindestens `GAIT_SERVO_SLEW_DEG_PER_S` (450 °/s) – erst, nachdem der Übergang in die Haltung mit
 der normalen Rampe abgeschlossen ist.
@@ -218,7 +233,8 @@ Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet, auch in der
   Körperhaltung, Standardhaltung = Montagestellung
 - [`gait_test.cpp`](../firmware/test_host/gait_test.cpp): Standbeine rutschen nicht, höchstens 3/2/1
   Beine gleichzeitig in der Luft, keine Sprünge, alle Fußpunkte erreichbar und innerhalb der
-  Standardgrenzen (auch bei Extremwerten), Gelenkgeschwindigkeiten, Anhalten und Anfahren
+  Standardgrenzen (auch bei Extremwerten), Gelenkgeschwindigkeiten, Anhalten und Anfahren,
+  Auslenkung der Füße beim Anlaufen
 - [`posture_test.cpp`](../firmware/test_host/posture_test.cpp): Sitzhaltung erreichbar,
   Aufstehen und Hinsetzen komplett durchgerechnet (Füße bleiben beim Heben stehen, alle Stellungen
   erreichbar und innerhalb der Grenzen)

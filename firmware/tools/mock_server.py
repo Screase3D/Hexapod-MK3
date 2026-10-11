@@ -29,7 +29,7 @@ state = {
                "max_fps": 15, "rotation": 0, "xclk_mhz": 20, "xclk_active_mhz": 20, "clients": 0, "port": 81, "sensor": "OV5640 (Mock)", "awake": False, "idle_sleep_s": 10},
     "start": time.time(),
     "mode": "manual",
-    "pose": {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0, "stance": 110},
+    "pose": {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0, "stance": 100},
     "walk": [0, 0, 0],
     "posture": "sitting",
     "posture_t": 0,
@@ -53,7 +53,7 @@ def battery():
     return {"v": 7.62, "pct": 63, "state": "ok", "enabled": True, "deep_sleep": state["bat_sleep"]}
 
 
-ASSEMBLY = [0.0, 49.3, -23.5]  # Montagestellung je Gelenktyp (robot_geometry.h)
+ASSEMBLY = [0.0, 55.4, -33.8]  # Montagestellung je Gelenktyp (robot_geometry.h)
 
 
 def default_cal(i):
@@ -145,15 +145,15 @@ def gait_status():
     cmd = state["walk"] if fresh else [0, 0, 0]
     sigma = SWING_FRACTION[g["type"]]
     cycle = g["swing_s"] / sigma
-    max_speed = 40 / ((1 - sigma) * cycle)
+    max_speed = 35 / ((1 - sigma) * cycle)
     walking = any(abs(v) > 1e-3 for v in cmd)
     g.update(active=g["type"], walking=walking, max_speed=round(max_speed),
-             max_turn=round(max_speed / 140 * 57.3), vx=0, vy=0, wz=0, swing=0)
+             max_turn=round(max_speed / 181 * 57.3), vx=0, vy=0, wz=0, swing=0)
     if walking:
         phase = (time.time() / cycle) % 1
         g["swing"] = sum(1 << i for i, s in enumerate(SWING_START[g["type"]]) if (phase - s) % 1 < sigma)
         g.update(vx=round(cmd[0] * max_speed), vy=round(cmd[1] * max_speed),
-                 wz=round(cmd[2] * max_speed / 140 * 57.3))
+                 wz=round(cmd[2] * max_speed / 181 * 57.3))
     return g
 
 
@@ -232,7 +232,7 @@ def handle(cmd):
         if "step_height" in cmd:
             state["gait"]["step_height"] = max(5, min(25, float(cmd["step_height"])))
     elif c == "pose_reset":
-        state["pose"] = {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0, "stance": 110}
+        state["pose"] = {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0, "stance": 100}
         out["msg"] = "Haltung zurückgesetzt"
     elif c == "servo_us":
         state["us"][i] = max(500, min(2500, cmd["us"]))
@@ -401,10 +401,10 @@ async def kinematics(_):
                    {"x": -73.5, "y": 38.5, "angle": 135}, {"x": 73.5, "y": -38.5, "angle": -45},
                    {"x": 0, "y": -57, "angle": -90}, {"x": -73.5, "y": -38.5, "angle": -135}],
         "limits": {"height_min": 35, "height_max": 100, "height_default": 52,
-                   "stance_min": 75, "stance_max": 135, "stance_default": 110,
+                   "stance_min": 75, "stance_max": 135, "stance_default": 100,
                    "shift_max": 40, "tilt_max": 20, "yaw_max": 25},
         "gait_limits": {"swing_min": 0.3, "swing_max": 1.2, "swing_default": 0.5, "height_min": 5,
-                        "height_max": 25, "height_default": 15, "stride_max": 40}})
+                        "height_max": 20, "height_default": 15, "stride_max": 35}})
 
 
 async def i2c_get(_):

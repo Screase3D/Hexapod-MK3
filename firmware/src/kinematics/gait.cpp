@@ -88,6 +88,7 @@ void Gait::reset(const kin::Vec3 neutral[NUM_LEGS]) {
   vx_ = vy_ = wz_ = 0.0f;
   phase_ = 0.0f;
   idle_ = true;
+  starting_ = true;
   active_type_ = params_.type;
 }
 
@@ -116,9 +117,24 @@ uint8_t Gait::swingMask() const {
 }
 
 void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
-  // Befehl rampen -> weiches Anfahren und Anhalten
-  float step = dt / params_.ramp_s;
-  for (int k = 0; k < 3; ++k) cmd_ramped_[k] = approach(cmd_ramped_[k], cmd_[k], step);
+  // Befehl rampen -> weiches Anfahren und Anhalten.
+  // Beim Anlaufen stehen alle Füße in der Neutralstellung; das Bein mit dem
+  // spätesten Schwungfenster wandert bis zu seinem ersten Schritt mit dem Körper
+  // mit. Damit es dabei nicht weiter kommt als im eingeschwungenen Lauf (halbe
+  // Standphase), wird im ersten Zyklus langsamer beschleunigt:
+  // Rampe >= 2 * spätester Schwungbeginn - Standphase (Dreifuß 0,5 s, Welle 2,5 s).
+  const int t = static_cast<int>(active_type_);
+  float ramp_up = params_.ramp_s;
+  if (starting_) {
+    float last = 0.0f;
+    for (int i = 0; i < NUM_LEGS; ++i) last = std::fmax(last, SWING_START[t][i]);
+    ramp_up = std::fmax(ramp_up, (2.0f * last - (1.0f - SWING_FRACTION[t])) *
+                                     cycleTime(active_type_, params_.swing_s));
+  }
+  for (int k = 0; k < 3; ++k) {
+    bool accel = cmd_[k] * cmd_ramped_[k] >= 0.0f && std::fabs(cmd_[k]) > std::fabs(cmd_ramped_[k]);
+    cmd_ramped_[k] = approach(cmd_ramped_[k], cmd_[k], dt / (accel ? ramp_up : params_.ramp_s));
+  }
 
   // Höchstgeschwindigkeit: in einer Standphase darf ein Fuß höchstens
   // max_stride zurücklegen
@@ -186,7 +202,9 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   }
 
   const float cycle = cycleTime(active_type_, params_.swing_s);
-  phase_ = frac(phase_ + dt / cycle);
+  const float next_phase = phase_ + dt / cycle;
+  if (next_phase >= 1.0f) starting_ = false;  // jedes Bein hatte sein Schwungfenster
+  phase_ = frac(next_phase);
   const int t = static_cast<int>(active_type_);
   const float sigma = SWING_FRACTION[t];
   const float half_stance = 0.5f * (1.0f - sigma) * cycle;
@@ -231,6 +249,7 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
       if (legs_[i].swing || distXY(legs_[i].pos, neutral[i]) > SETTLE_TOL) return;
     }
     idle_ = true;
+    starting_ = true;
     phase_ = 0.0f;
     vx_ = vy_ = wz_ = 0.0f;
     for (int i = 0; i < NUM_LEGS; ++i) legs_[i].pos = {neutral[i].x, neutral[i].y, 0.0f};

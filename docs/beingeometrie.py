@@ -4,8 +4,9 @@
 Maße unten ändern und neu erzeugen:
     python3 docs/beingeometrie.py
 Die Werte müssen zu firmware/include/robot_geometry.h passen.
-PNG-Vorschau z. B. mit Chromium:
-    chromium --headless --screenshot=docs/beingeometrie.png --window-size=1600,1130 docs/beingeometrie.svg
+PNG-Vorschau z. B. mit Chromium (Fenster höher als die Zeichnung, dann auf 1600x1130
+zuschneiden, sonst fehlt unten ein Stück):
+    chromium --headless --hide-scrollbars --screenshot=bild.png --window-size=1600,1400 docs/beingeometrie.svg
 """
 
 import math
@@ -14,8 +15,8 @@ from pathlib import Path
 # --- Maße in mm (Achse zu Achse) -------------------------------------------
 COXA, FEMUR, TIBIA = 41.0, 43.0, 94.0
 # Montagestellung = Grundstellung aus dem CAD (ASSEMBLY_POSE in robot_geometry.h):
-FEMUR_ASSEMBLY_DEG = 49.3   # Femur über der Waagerechten
-TIBIA_ASSEMBLY_DEG = -23.5  # Tibia ggü. "rechtwinklig zum Femur" (Firmware-Konvention)
+FEMUR_ASSEMBLY_DEG = 55.4   # Femur über der Waagerechten
+TIBIA_ASSEMBLY_DEG = -33.8  # Tibia ggü. "rechtwinklig zum Femur" (Firmware-Konvention)
 BODY_BELOW_AXIS = 26.3      # Chassis-Unterkante unter der Femur-Achse (CAD)
 TIP_ABOVE_GROUND = 2.1      # Ende der 94 mm (Fußspitze) über dem Boden (runder Fuß)
 FRONT_SPAN, MID_SPAN, LENGTH = 77.0, 114.0, 147.0  # Abstände der Coxa-Achsen

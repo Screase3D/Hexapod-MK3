@@ -2,8 +2,11 @@
 """Erzeugt docs/montagelehre.svg: Lehre im Maßstab 1:1 (A4) zum Aufstecken der Servohörner.
 
     python3 docs/montagelehre.py
-PDF (zum Drucken mit 100 % / "Tatsächliche Größe"):
-    chromium --headless --no-pdf-header-footer --print-to-pdf=docs/montagelehre.pdf docs/montagelehre.svg
+PDF (zum Drucken mit 100 % / "Tatsächliche Größe"): das SVG in eine HTML-Seite einbetten
+    <style>@page{size:A4;margin:0} html,body{margin:0} img{display:block;width:210mm;height:297mm}</style>
+    <img src="montagelehre.svg">
+und diese drucken (sonst macht Chromium daraus ggf. zwei Seiten US-Letter):
+    chromium --headless --no-pdf-header-footer --allow-file-access-from-files --print-to-pdf=docs/montagelehre.pdf seite.html
 Die Werte müssen zu firmware/include/robot_geometry.h (LEG_GEOMETRY, ASSEMBLY_POSE) passen.
 """
 
@@ -11,8 +14,8 @@ import math
 from pathlib import Path
 
 COXA, FEMUR, TIBIA = 41.0, 43.0, 94.0
-FEMUR_DEG = 49.3   # Montagestellung (= Grundstellung, CAD): Femur über der Waagerechten
-TIBIA_DEG = -23.5  # Montagestellung: Tibia ggü. "rechtwinklig zum Femur"
+FEMUR_DEG = 55.4   # Montagestellung (= Grundstellung, CAD): Femur über der Waagerechten
+TIBIA_DEG = -33.8  # Montagestellung: Tibia ggü. "rechtwinklig zum Femur"
 
 # Umriss des gebogenen Tibia-Bauteils aus der CAD-Seitenansicht (wie beingeometrie.py)
 TIBIA_OUTLINE_CAD = [(300, 47), (125, 125), (102, 143), (50, 245), (42, 610), (30, 640), (55, 662),
@@ -107,7 +110,7 @@ def leg_template(ox, oy, mirror, title):
     text((kx + fx) / 2 - sx * 3, (ky + fy) / 2 + 6, f"Tibia {fmt(TIBIA)}", 2.6, a_end)
 
     # Tibia 0° (rechtwinklig zum Femur) als Bezug für den zweiten Kalibrierpunkt
-    ex, ey = kx + sx * math.sin(fa) * 34, ky + math.cos(fa) * 34
+    ex, ey = kx + sx * math.sin(fa) * 26, ky + math.cos(fa) * 26
     line(kx, ky, ex, ey, C_DIM, 0.25, 'stroke-dasharray="2 1"')
     text(ex + sx * 1.5, ey + 1, "Tibia 0° (⟂ Femur)", 2.3, a_start, C_DIM)
 
@@ -177,7 +180,7 @@ steps = [
     ("4.", "Femur-Horn auf den Zahn stecken, bei dem die Knie-Achse"),
     ("", "am nächsten am Kreuz „Knie-Achse“ liegt (1 Zahn ≈ 18°)."),
     ("5.", "Tibia-Horn so, dass die Fußspitze auf der Marke liegt – bei"),
-    ("", "richtiger Höhe also auf dem Tisch, 110 mm von der Coxa-Achse."),
+    ("", "richtiger Höhe also auf dem Tisch, 100 mm von der Coxa-Achse."),
     ("6.", "Coxa mit Lehre C: Bein in Montagerichtung (45° / 90°)."),
     ("7.", "Feinjustage je Servo im Rohmodus (±1 µs) bis alles"),
     ("", "deckungsgleich ist → „Aktuelle Stellung = Montagestellung“."),

@@ -269,6 +269,28 @@ static void testStartAndSwitch() {
   CHECK(g.activeType() == gait::Type::Wave);
 }
 
+// Anlaufen aus dem Stillstand: Das Bein mit dem spätesten Schwungfenster wandert
+// bis zu seinem ersten Schritt mit; die Anlauf-Rampe hält seine Auslenkung nahe an
+// der des eingeschwungenen Laufs (halbe Schrittlänge). Ohne sie wäre es beim
+// Wellengang fast das Doppelte -> Knie knickt weit ein.
+static void testStartExcursion() {
+  Vec3 n[6];
+  neutralFeet(n, POSE_LIMITS.stance_default);
+  for (gait::Type t : TYPES) {
+    gait::Gait g = makeGait(t, n);
+    g.setCommand(1, 0, 0);
+    float worst = 0;
+    const int steps = static_cast<int>(3 * gait::cycleTime(t, g.params().swing_s) / DT);
+    for (int k = 0; k < steps; ++k) {
+      g.update(DT, n);
+      for (int i = 0; i < 6; ++i) {
+        if (!g.swinging(i)) worst = std::fmax(worst, std::fabs(g.foot(i).x - n[i].x));
+      }
+    }
+    CHECK(worst < 1.3f * 0.5f * g.params().max_stride);
+  }
+}
+
 int main() {
   testProfiles();
   testIdle();
@@ -276,6 +298,7 @@ int main() {
   testWalking(true);
   testStop();
   testStartAndSwitch();
+  testStartExcursion();
   std::printf("%d Prüfungen, %d Fehler\n", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

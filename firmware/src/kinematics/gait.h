@@ -38,7 +38,7 @@ struct Params {
   float swing_s = 0.5f;       // Dauer eines Fußschwungs (Schritt); Zyklus = swing_s / (1 - duty)
   float step_height = 20.0f;  // Fußhub in mm
   float max_stride = 40.0f;   // größter Fußweg während einer Standphase in mm
-  float ramp_s = 0.5f;        // Zeit von 0 auf volle Geschwindigkeit
+  float ramp_s = 0.5f;        // Zeit von 0 auf volle Geschwindigkeit (beim Anlaufen ggf. länger)
 };
 
 // Anteil der Standphase am Zyklus (Rest = Schwungphase)
@@ -96,6 +96,7 @@ class Gait {
   float max_speed_ = 0, max_turn_ = 0;
   float phase_ = 0;
   bool idle_ = true;
+  bool starting_ = true;  // erster Zyklus nach dem Stillstand: langsamer beschleunigen
 };
 
 // Hilfsprofile (auch für Tests)
