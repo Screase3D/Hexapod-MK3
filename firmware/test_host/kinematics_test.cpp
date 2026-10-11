@@ -165,7 +165,14 @@ static void testDefaultPose() {
     CHECK(std::fabs(a.coxa) < 1.0f);  // Füße stehen in Montagerichtung
     CHECK(std::fabs(a.femur) < 80.0f);
     CHECK(std::fabs(a.tibia) < 80.0f);
+    // Standardhaltung = alle Servos in der Mitte
+    CHECK_NEAR(a.femur, SERVO_CENTER_POSE.femur, 0.2);
+    CHECK_NEAR(a.tibia, SERVO_CENTER_POSE.tibia, 0.2);
   }
+  // FK der Servomitte trifft die Standardhaltung (Fußabstand, Höhe)
+  Vec3 c = legFk(LEG_GEOMETRY, LEG_MOUNTS[1], SERVO_CENTER_POSE);
+  CHECK_NEAR(std::sqrt(c.x * c.x + c.y * c.y), POSE_LIMITS.stance_default, 0.1);
+  CHECK_NEAR(-c.z, POSE_LIMITS.height_default, 0.1);
   // Extremwerte der Oberfläche: nur informativ ausgeben
   int unreachable = 0, total = 0;
   const float zs[] = {POSE_LIMITS.height_min, POSE_LIMITS.height_max};

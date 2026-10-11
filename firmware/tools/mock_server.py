@@ -306,10 +306,13 @@ async def battery_post(request):
 
 async def kinematics(_):
     return web.json_response({
-        "placeholder": True, "leg": {"coxa": 30, "femur": 60, "tibia": 90},
-        "mounts": [], "limits": {"height_min": 20, "height_max": 120, "height_default": 72,
-                                 "stance_min": 54, "stance_max": 144, "stance_default": 90,
-                                 "shift_max": 40, "tilt_max": 20, "yaw_max": 25}})
+        "placeholder": False, "leg": {"coxa": 41, "femur": 43, "tibia": 94},
+        "mounts": [{"x": 73.5, "y": 38.5, "angle": 45}, {"x": 0, "y": 57, "angle": 90},
+                   {"x": -73.5, "y": 38.5, "angle": 135}, {"x": 73.5, "y": -38.5, "angle": -45},
+                   {"x": 0, "y": -57, "angle": -90}, {"x": -73.5, "y": -38.5, "angle": -135}],
+        "limits": {"height_min": 50, "height_max": 115, "height_default": 82.9,
+                   "stance_min": 60, "stance_max": 135, "stance_default": 82.5,
+                   "shift_max": 40, "tilt_max": 20, "yaw_max": 25}})
 
 
 async def i2c_get(_):

@@ -44,6 +44,11 @@ Seitenansicht eines Beins – Femur waagerecht, Tibia im rechten Winkel dazu (se
                         ▼ Fuß
 ```
 
+> **Hexapod MK3:** Bei Servo-Mitte (1500 µs) steht der Femur konstruktionsbedingt 15° nach oben
+> und die Tibia senkrecht – das ist **nicht** die 0°-Stellung oben, sondern Femur +15°,
+> Tibia −15° ([Zeichnung](beingeometrie.png)). Für die Kalibrierung den Femur auf waagerecht und
+> die Tibia auf rechtwinklig zum Femur fahren (siehe Ablauf, Schritt 2).
+
 ### Positive Drehrichtung
 
 | Gelenk | 0° | positiver Winkel |
@@ -62,11 +67,15 @@ also nicht die Außenkante des Bauteils.
 
 1. **Montagestellung.** Servohörner abnehmen. Im Tab *Kalibrierung* **Torque** einschalten und
    **„Alle auf 1500 µs (Montage)“** drücken. Jetzt die Hörner/Beinteile so aufstecken, dass jedes
-   Gelenk so nah wie möglich an der Neutralstellung steht (die Verzahnung erlaubt nur
-   Schritte von einigen Grad – den Rest erledigt Schritt 2).
-2. **Neutralstellung feinjustieren.** Ein Gelenk in der Beinübersicht anklicken, im Rohmodus
+   Gelenk so nah wie möglich an der konstruierten Montagestellung steht (MK3: Coxa in
+   Montagerichtung, Femur 15° nach oben, Tibia senkrecht). Die Verzahnung erlaubt nur
+   Schritte von einigen Grad – den Rest erledigt Schritt 2.
+2. **0° feinjustieren.** Ein Gelenk in der Beinübersicht anklicken, im Rohmodus
    mit ±1/±10 µs (oder Pfeiltasten ←/→, mit Umschalt ±10) exakt auf 0° fahren und
-   **„Aktuelle Stellung = 0°“** drücken.
+   **„Aktuelle Stellung = 0°“** drücken. Beim MK3 heißt das: Femur um 15° **absenken** bis
+   waagerecht (≈ 170 µs), Tibia so weit drehen, dass sie rechtwinklig zum Femur steht.
+   Je Bein **zuerst den Femur** kalibrieren – bei waagerechtem Femur steht die Tibia dann
+   einfach senkrecht.
    Tipp: Femur waagerecht und Tibia senkrecht lassen sich gut mit einer Wasserwaagen-App auf
    dem Handy oder einem Winkel prüfen.
 3. **Richtung und Maßstab.** Das Gelenk auf einen bekannten Winkel fahren (z. B. 45° mit einer

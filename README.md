@@ -12,7 +12,7 @@ später erweitert um KI-Funktionen mit der Kamera.
 | Phase | Inhalt | Status |
 |---|---|---|
 | 1 | Grundgerüst: WLAN, Webserver, Kamerastream (mit Drehung), Servotreiber, **Servo-Kalibrierung**, manuelle Servosteuerung, I²C-Scan, Akku-/Sicherheitsfunktionen, CI-Build | ✅ kompiliert, UI im Browser gegen Mock getestet – **noch nicht auf echter Hardware getestet** |
-| 2 | Kinematik: inverse Kinematik je Bein, Körperhaltung (Höhe, Fußabstand, Verschieben, Rollen/Nicken/Gieren) | 🟡 implementiert und auf dem PC getestet – **Beinmaße sind noch Platzhalter** ([docs/kinematik.md](docs/kinematik.md)); Aufstehen/Hinsetzen fehlt noch |
+| 2 | Kinematik: inverse Kinematik je Bein, Körperhaltung (Höhe, Fußabstand, Verschieben, Rollen/Nicken/Gieren) | 🟡 implementiert und auf dem PC getestet, Beinmaße aus dem CAD eingetragen ([Zeichnung](docs/beingeometrie.png), [docs/kinematik.md](docs/kinematik.md)); Aufstehen/Hinsetzen fehlt noch |
 | 3 | Gangarten (Tripod, Wave, Ripple) mit weichen Fußtrajektorien, Touch-Joysticks in der UI, Verbindungs-Watchdog | geplant |
 | 4 | IMU-Stabilisierung (Körper waagerecht halten), Geländeanpassung | geplant |
 | 5 | Kamera/KI: Objekterkennung (auf dem ESP32-S3 oder am PC über den Stream), Folgen, OTA-Updates | Ideen |
@@ -25,7 +25,8 @@ docs/
   ESP32_S3_Camera_Instructions.pdf   Board-Doku (Pinout S. 4)
   hardware.md                        Pinbelegung, Servo-Zuordnung, Hinweise zur Schaltung
   kalibrierung.md                    Gelenk-Konvention und Kalibrierablauf
-  kinematik.md                       Beinmaße messen, Koordinatensysteme, Körperhaltung
+  kinematik.md                       Beinmaße, Koordinatensysteme, Körperhaltung
+  beingeometrie.svg/.png             Maßzeichnung Bein + Körper (erzeugt von beingeometrie.py)
   api.md                             REST-, WebSocket- und Stream-Schnittstellen
 firmware/                            PlatformIO-Projekt
   platformio.ini
