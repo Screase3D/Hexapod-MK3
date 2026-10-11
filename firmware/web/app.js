@@ -278,6 +278,7 @@ function renderTelemetry() {
   renderEditorLive();
   renderManualValues();
   renderPose(t.motion);
+  renderWalk(t.motion);
   renderBanner();
 }
 
@@ -337,6 +338,7 @@ const poseSend = throttle((patch) => { send('pose', patch); posePending = {}; },
 let posePending = {};
 
 function buildPose(kinem) {
+  setGaitLimits(kinem.gait_limits);
   const box = $('pose-sliders');
   box.innerHTML = '';
   $('pose-placeholder').hidden = !kinem.placeholder;
@@ -394,6 +396,241 @@ function bindPose() {
     posePending = {};
     send('pose_reset');
   };
+}
+
+// ---------------------------------------------------------------- Laufen ----
+
+const WALK_SEND_MS = 100;  // Fahrbefehl alle 100 ms (Firmware hält nach 600 ms ohne Befehl an)
+const WALK_KEYS = {
+  KeyW: [1, 0, 0], KeyS: [-1, 0, 0], KeyA: [0, 1, 0], KeyD: [0, -1, 0], KeyQ: [0, 0, 1], KeyE: [0, 0, -1],
+};
+const W = {
+  joyMove: [0, 0],  // vx, vy aus dem Joystick (normiert)
+  joyTurn: 0,
+  keys: new Set(),
+  timer: null,
+  last: [0, 0, 0],
+  scale: 0.6,
+  touched: {},
+};
+
+function sendQuiet(cmd, params = {}) {
+  if (!S.wsOpen) return false;
+  S.ws.send(JSON.stringify({ cmd, ...params }));
+  return true;
+}
+
+function walkVector() {
+  let [vx, vy] = W.joyMove;
+  let turn = W.joyTurn;
+  for (const code of W.keys) {
+    const k = WALK_KEYS[code];
+    vx += k[0];
+    vy += k[1];
+    turn += k[2];
+  }
+  const s = W.scale;
+  return [clamp(vx, -1, 1) * s, clamp(vy, -1, 1) * s, clamp(turn, -1, 1) * s];
+}
+
+function walkTick() {
+  const v = walkVector();
+  const moving = v.some((x) => Math.abs(x) > 1e-3);
+  sendQuiet('walk', { vx: +v[0].toFixed(3), vy: +v[1].toFixed(3), turn: +v[2].toFixed(3) });
+  W.last = v;
+  if (!moving) {
+    clearInterval(W.timer);
+    W.timer = null;
+  }
+}
+
+// Bei jeder Änderung sofort senden, danach regelmäßig, solange gefahren wird
+function walkChanged() {
+  walkTick();
+  if (!W.timer && W.last.some((x) => Math.abs(x) > 1e-3)) {
+    W.timer = setInterval(walkTick, WALK_SEND_MS);
+    torqueHint();
+  }
+}
+
+function walkStopAll() {
+  W.joyMove = [0, 0];
+  W.joyTurn = 0;
+  W.keys.clear();
+  document.querySelectorAll('.joy').forEach((j) => {
+    j.classList.remove('active');
+    j.querySelector('.joy-knob').style.transform = '';
+  });
+  sendQuiet('stop');
+  walkChanged();
+}
+
+// Totzone und Kennlinie: kleine Ausschläge fein, voller Ausschlag = 1
+function joyShape(v) {
+  const a = Math.abs(v);
+  const dead = 0.1;
+  if (a < dead) return 0;
+  return Math.sign(v) * Math.pow(Math.min(1, (a - dead) / (1 - dead)), 1.5);
+}
+
+function makeJoystick(el, horizontal, onChange) {
+  const knob = el.querySelector('.joy-knob');
+  let pid = null;
+  const move = (e) => {
+    const r = el.getBoundingClientRect();
+    const k = knob.offsetWidth / 2;
+    const maxX = r.width / 2 - k - 4;
+    const maxY = horizontal ? 0 : r.height / 2 - k - 4;
+    let dx = e.clientX - (r.left + r.width / 2);
+    let dy = horizontal ? 0 : e.clientY - (r.top + r.height / 2);
+    if (horizontal) {
+      dx = clamp(dx, -maxX, maxX);
+    } else {
+      const d = Math.hypot(dx, dy);
+      if (d > maxX) {
+        dx *= maxX / d;
+        dy *= maxX / d;
+      }
+    }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    onChange(joyShape(dx / maxX), horizontal ? 0 : joyShape(dy / maxY));
+  };
+  const end = (e) => {
+    if (e.pointerId !== pid) return;
+    pid = null;
+    el.classList.remove('active');
+    knob.style.transform = '';
+    onChange(0, 0);
+  };
+  el.addEventListener('pointerdown', (e) => {
+    if (pid !== null) return;
+    pid = e.pointerId;
+    el.setPointerCapture(pid);
+    el.classList.add('active');
+    move(e);
+    e.preventDefault();
+  });
+  el.addEventListener('pointermove', (e) => { if (e.pointerId === pid) move(e); });
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('lostpointercapture', end);
+}
+
+function walkKey(e, down) {
+  if (S.tab !== 'control' || !(e.code in WALK_KEYS || e.code === 'Space')) return false;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return false;
+  if (e.code === 'Space') {
+    if (down) walkStopAll();
+  } else if (down) {
+    if (W.keys.has(e.code)) return true;  // Tastenwiederholung
+    W.keys.add(e.code);
+    walkChanged();
+  } else {
+    W.keys.delete(e.code);
+    walkChanged();
+  }
+  return true;
+}
+
+const GAIT_TOUCH_MS = 1500;
+const gaitSend = throttle((patch) => send('gait', patch), 150);
+
+function setGaitLimits(l) {
+  if (!l) return;
+  const sw = $('gait-swing');
+  sw.min = l.swing_min;
+  sw.max = l.swing_max;
+  const h = $('gait-height');
+  h.min = l.height_min;
+  h.max = l.height_max;
+}
+
+function renderGaitLabels() {
+  $('gait-swing-val').textContent = `${(+$('gait-swing').value).toFixed(2)} s`;
+  $('gait-height-val').textContent = `${$('gait-height').value} mm`;
+  $('walk-scale-val').textContent = `${Math.round(W.scale * 100)} %`;
+}
+
+function renderWalk(m) {
+  if (!m) return;
+  const g = m.gait || {};
+  const st = $('walk-state');
+  if (m.mode !== 'pose') {
+    st.textContent = 'IK aus';
+    st.className = 'badge badge-muted';
+  } else if (g.walking) {
+    st.textContent = 'läuft';
+    st.className = 'badge badge-on';
+  } else {
+    st.textContent = 'steht';
+    st.className = 'badge badge-muted';
+  }
+  const swing = g.swing || 0;
+  document.querySelectorAll('#walk-legs [data-leg]').forEach((d) => {
+    d.classList.toggle('up', !!(swing & (1 << +d.dataset.leg)));
+  });
+
+  const now = Date.now();
+  const sync = (id, key, val) => {
+    const el = $(id);
+    if (val === undefined || document.activeElement === el || now - (W.touched[key] || 0) < GAIT_TOUCH_MS) return;
+    el.value = val;
+  };
+  sync('gait-type', 'type', g.type);
+  sync('gait-swing', 'swing_s', g.swing_s);
+  sync('gait-height', 'step_height', g.step_height);
+  renderGaitLabels();
+
+  const info = [];
+  if (m.mode === 'pose' && g.max_speed !== undefined) {
+    if (g.walking) info.push(`${g.vx} / ${g.vy} mm/s · ${g.wz} °/s`);
+    info.push(`max. ${g.max_speed} mm/s · ${g.max_turn} °/s`);
+    if (g.active && g.active !== g.type) info.push('Gangart wechselt nach dem Anhalten');
+  }
+  $('walk-info').textContent = info.join(' · ');
+}
+
+function bindWalk() {
+  try {
+    const s = parseFloat(localStorage.getItem('walkScale'));
+    if (s >= 0.1 && s <= 1) W.scale = s;
+  } catch (e) { /* kein Speicher */ }
+  $('walk-scale').value = Math.round(W.scale * 100);
+
+  makeJoystick($('joy-move'), false, (x, y) => {
+    W.joyMove = [-y, -x];  // hoch = vor, links = +y
+    walkChanged();
+  });
+  makeJoystick($('joy-turn'), true, (x) => {
+    W.joyTurn = -x;  // links = Drehen gegen den Uhrzeigersinn
+    walkChanged();
+  });
+  $('walk-scale').oninput = (e) => {
+    W.scale = +e.target.value / 100;
+    renderGaitLabels();
+    try { localStorage.setItem('walkScale', W.scale); } catch (err) { /* egal */ }
+    if (W.timer) walkTick();
+  };
+  $('gait-type').onchange = (e) => {
+    W.touched.type = Date.now();
+    send('gait', { type: e.target.value });
+  };
+  $('gait-swing').oninput = (e) => {
+    W.touched.swing_s = Date.now();
+    renderGaitLabels();
+    gaitSend({ swing_s: +e.target.value });
+  };
+  $('gait-height').oninput = (e) => {
+    W.touched.step_height = Date.now();
+    renderGaitLabels();
+    gaitSend({ step_height: +e.target.value });
+  };
+  document.addEventListener('keyup', (e) => { if (walkKey(e, false)) e.preventDefault(); });
+  // Fenster verliert den Fokus / Tab im Hintergrund: sofort anhalten
+  window.addEventListener('blur', () => { if (W.timer || W.keys.size) walkStopAll(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && W.timer) walkStopAll(); });
+  renderGaitLabels();
 }
 
 // ------------------------------------------------- Manuelle Steuerung -------
@@ -567,6 +804,7 @@ function bindEditor() {
 
 function bindGlobal() {
   const estop = () => {
+    walkStopAll();
     if (!send('estop')) api('/api/estop', {}).catch(() => {});
   };
   $('btn-estop').onclick = estop;
@@ -595,7 +833,12 @@ function bindGlobal() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      walkStopAll();
       estop();
+      e.preventDefault();
+      return;
+    }
+    if (walkKey(e, true)) {
       e.preventDefault();
       return;
     }
@@ -616,6 +859,7 @@ function bindGlobal() {
 // ---------------------------------------------------------------- Tabs ------
 
 function showTab(name) {
+  if (name !== 'control' && (W.timer || W.keys.size)) walkStopAll();
   S.tab = name;
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-page').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
@@ -1106,6 +1350,7 @@ function init() {
   buildLegs();
   buildManual();
   bindPose();
+  bindWalk();
   bindGlobal();
   bindEditor();
   bindCamera();

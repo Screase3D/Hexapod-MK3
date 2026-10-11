@@ -95,6 +95,8 @@ constexpr float SERVO_SLEW_DEG_PER_S = 240.0f;
 
 // Regelschleife
 constexpr uint32_t CONTROL_PERIOD_MS = 20;  // 50 Hz = Servo-PWM-Rate
+// Laufen: ohne neuen Fahrbefehl so lange -> anhalten (Verbindung weg, Handy gesperrt)
+constexpr uint32_t WALK_TIMEOUT_MS = 600;
 constexpr int      CONTROL_TASK_CORE = 1;   // WLAN/HTTP laufen auf Core 0
 constexpr int      CONTROL_TASK_PRIO = 5;
 

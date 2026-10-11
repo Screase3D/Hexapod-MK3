@@ -51,6 +51,11 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     out["type"] = "pong";
     return;
   }
+  if (strcmp(cmd, "walk") == 0) {
+    // Joystick, ca. 10 Hz: ohne Antwort, um den Funk nicht zu fluten
+    motion::walk(in["vx"] | 0.0f, in["vy"] | 0.0f, in["turn"] | 0.0f);
+    return;
+  }
 
   out["type"] = "ack";
   out["cmd"] = cmd;
@@ -63,6 +68,7 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     result(out, servos.setTorque(on, &err), err);
   } else if (strcmp(cmd, "estop") == 0) {
     servos.emergencyStop();
+    motion::stopWalking();
     result(out, true, "Not-Aus ausgelöst");
   } else if (strcmp(cmd, "estop_clear") == 0) {
     servos.clearEmergencyStop();
@@ -86,6 +92,11 @@ void handle(JsonVariantConst in, JsonDocument& out) {
   } else if (strcmp(cmd, "pose_reset") == 0) {
     motion::resetPose();
     result(out, true, "Haltung zurückgesetzt");
+  } else if (strcmp(cmd, "stop") == 0) {
+    motion::stopWalking();
+    result(out, true);
+  } else if (strcmp(cmd, "gait") == 0) {
+    result(out, motion::applyGaitJson(in, err), err);
 
   // --- Sollwerte (schalten in den manuellen Modus) ---
   } else if (strcmp(cmd, "servo_us") == 0) {

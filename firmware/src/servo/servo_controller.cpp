@@ -80,10 +80,11 @@ void ServoController::update(float dt_s) {
     }
   }
 
+  const float slew = slew_deg_per_s_ > slew_floor_ ? slew_deg_per_s_ : slew_floor_;
   for (int i = 0; i < NUM_SERVOS; ++i) {
     Channel& c = ch_[i];
     if (!c.active) continue;
-    float max_step = slew_deg_per_s_ * fabsf(cal_[i].us_per_deg) * dt_s;
+    float max_step = slew * fabsf(cal_[i].us_per_deg) * dt_s;
     float diff = c.target_us - c.current_us;
     if (fabsf(diff) <= max_step) {
       c.current_us = c.target_us;
@@ -244,6 +245,25 @@ void ServoController::setSlewDegPerS(float v) {
   lock();
   slew_deg_per_s_ = constrain(v, 10.0f, 1000.0f);
   unlock();
+}
+
+void ServoController::setSlewFloor(float deg_per_s) {
+  lock();
+  slew_floor_ = constrain(deg_per_s, 0.0f, 1000.0f);
+  unlock();
+}
+
+bool ServoController::atTarget(float tol_us) {
+  lock();
+  bool ok = true;
+  for (const auto& c : ch_) {
+    if (c.active && fabsf(c.target_us - c.current_us) > tol_us) {
+      ok = false;
+      break;
+    }
+  }
+  unlock();
+  return ok;
 }
 
 float ServoController::slewDegPerS() {

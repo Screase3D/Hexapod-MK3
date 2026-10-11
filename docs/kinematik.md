@@ -105,8 +105,8 @@ darüber:
 
 | Regler | Bedeutung |
 |---|---|
-| Höhe | Abstand Coxa-Achsen ↔ Boden (50–115 mm, Standard 82,9) |
-| Fußabstand | Abstand Fuß ↔ Coxa-Achse (waagerecht, 60–135 mm, Standard 82,5) |
+| Höhe | Abstand Coxa-Achsen ↔ Boden (50–115 mm, Standard 72,5) |
+| Fußabstand | Abstand Fuß ↔ Coxa-Achse (waagerecht, 60–135 mm, Standard 78,2) |
 | Vor/zurück, Links/rechts | Körper über den Füßen verschieben |
 | Rollen | + = rechte Seite runter |
 | Nicken | + = Nase hoch |
@@ -121,14 +121,72 @@ eine Warnung; das Bein behält dann seine letzte gültige Stellung.
 ändern. Alle Füße sollten sich gleichmäßig senkrecht bewegen. Bewegt sich ein Bein falsch herum,
 stimmt dessen Kalibrierung (Drehrichtung) oder Montagewinkel nicht.
 
+## Laufen
+
+Tab *Steuerung* → Karte **Laufen**: linker Joystick *Fahren* (vor/zurück, seitlich), rechter
+*Drehen*; am PC auch **W/S** (vor/zurück), **A/D** (seitlich), **Q/E** (drehen), **Leertaste**
+(Stopp). Der Joystick schaltet den IK-Modus ein; die Körperhaltung (Höhe, Neigung, …) gilt
+beim Laufen weiter.
+
+### Wie der Gang funktioniert
+
+[`src/kinematics/gait.cpp`](../firmware/src/kinematics/gait.cpp) führt die sechs Füße
+phasengesteuert:
+
+- **Standphase:** Der Fuß steht auf dem Boden. Im mitlaufenden Koordinatensystem wandert er genau
+  entgegen der Körperbewegung (Fahren und Drehen) – er rutscht also nicht.
+- **Schwungphase:** Der Fuß hebt ab, schwingt zu einem Aufsetzpunkt vor der Neutralstellung und
+  setzt wieder auf. Höhe und Vorschwung folgen Profilen, deren Geschwindigkeit am Anfang und Ende
+  null ist (kein Ruck, kein Aufschlagen). Der Aufsetzpunkt liegt so, dass die folgende
+  Standphase symmetrisch um die Neutralstellung verläuft.
+- **Anfahren/Anhalten:** Der Fahrbefehl wird über 0,5 s gerampt. Nach dem Loslassen machen die
+  Beine noch einen Schritt in die Neutralstellung, dann steht der Roboter; Beine, die schon dort
+  stehen, heben nicht ab.
+- **Sicherheit:** Ohne neuen Fahrbefehl für 0,6 s (`WALK_TIMEOUT_MS`, z. B. WLAN weg, Handy
+  gesperrt), ohne Torque oder bei Not-Aus hält der Roboter an. Die Oberfläche hält auch an,
+  wenn das Fenster den Fokus verliert.
+
+| Gangart | gleichzeitig in der Luft | Zyklus (bei 0,5 s Schrittdauer) | max. Tempo |
+|---|---|---|---|
+| Dreifuß (`tripod`) | 3 (vl, hl, mr ↔ ml, vr, hr) | 1,0 s | 80 mm/s |
+| Ripple (`ripple`) | 2 (je Seite eins) | 1,5 s | 40 mm/s |
+| Welle (`wave`) | 1 | 3,0 s | 16 mm/s |
+
+Das Tempo ergibt sich aus dem größten Fußweg je Standphase (40 mm, `GAIT_LIMITS.stride_max`) und
+der Dauer der Standphase. Fahren und Drehen gleichzeitig wird so begrenzt, dass kein Fuß
+schneller als erlaubt wandert. Ein Wechsel der Gangart wirkt erst im Stillstand.
+
+| Einstellung | Bereich | Standard | Hinweis |
+|---|---|---|---|
+| Tempo | 10–100 % | 60 % | skaliert den Joystick (nur in der Oberfläche) |
+| Schrittdauer | 0,3–1,2 s | 0,5 s | Dauer eines Fußschwungs; kürzer = schneller, aber hektischer |
+| Fußhub | 5–25 mm | 15 mm | mehr als 25 mm erreicht das Bein nicht überall |
+
+Mit dem kurzen Femur muss das Bein zum Fußheben den Femur kräftig drehen. Bei den
+Standardwerten bleiben die Gelenke im Schwung unter ca. 280 °/s, beim Tragen unter ca. 70 °/s.
+Damit die Servo-Rampe die glatten Schrittbahnen nicht ausbremst, gilt im IK-Betrieb
+mindestens `GAIT_SERVO_SLEW_DEG_PER_S` (450 °/s) – erst, nachdem der Übergang in die Haltung mit
+der normalen Rampe abgeschlossen ist.
+
+**Erster Test:** Roboter aufbocken (Füße frei), Torque an, Tempo auf 20–30 %, Dreifuß, langsam
+nach vorne. Zu sehen sein sollte: abwechselnd drei Beine heben (vorne links, hinten links, Mitte
+rechts und umgekehrt), die Füße am Boden wandern gleichmäßig nach hinten. Danach auf dem Boden,
+zuerst langsam.
+
 ## Tests
 
-Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet
-([`firmware/test_host/kinematics_test.cpp`](../firmware/test_host/kinematics_test.cpp)), auch
-in der CI bei jedem Push:
+Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet, auch in der CI bei jedem Push:
+
+- [`kinematics_test.cpp`](../firmware/test_host/kinematics_test.cpp): IK/FK, Vorzeichen,
+  Körperhaltung, Standardhaltung = Montagestellung
+- [`gait_test.cpp`](../firmware/test_host/gait_test.cpp): Standbeine rutschen nicht, höchstens 3/2/1
+  Beine gleichzeitig in der Luft, keine Sprünge, alle Fußpunkte erreichbar und innerhalb der
+  Standardgrenzen (auch bei Extremwerten), Gelenkgeschwindigkeiten, Anhalten und Anfahren
 
 ```
 cd firmware/test_host
 g++ -std=c++17 -I../src -I../include kinematics_test.cpp ../src/kinematics/kinematics.cpp -o kin_test
 ./kin_test
+g++ -std=c++17 -I../src -I../include gait_test.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o gait_test
+./gait_test
 ```

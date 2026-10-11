@@ -288,3 +288,44 @@ details summary { cursor: pointer; font-weight: 600; margin: 4px 0; }
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.error { border-color: var(--danger); color: var(--danger); }
+
+/* ---------- Laufen (Joysticks) ---------- */
+.badge-muted { background: var(--surface-2); color: var(--muted); }
+.badge-on { background: var(--accent); color: var(--accent-text); }
+.joy-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 0 4px; }
+.joy {
+  position: relative; flex: 0 0 auto;
+  width: clamp(100px, 31vw, 150px); aspect-ratio: 1; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--border);
+  touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab;
+}
+.joy.joy-h { aspect-ratio: auto; height: 68px; border-radius: 34px; }
+.joy.active { border-color: var(--accent); cursor: grabbing; }
+.joy-cross::before, .joy-cross::after {
+  content: ""; position: absolute; background: var(--border);
+}
+.joy-cross::before { left: 50%; top: 14px; bottom: 14px; width: 1px; }
+.joy-cross::after { top: 50%; left: 14px; right: 14px; height: 1px; }
+.joy-knob {
+  position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px;
+  border-radius: 50%; background: var(--accent); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.joy.joy-h .joy-knob { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
+.joy-label {
+  position: absolute; left: 0; right: 0; bottom: -20px; text-align: center;
+  font-size: 0.75rem; color: var(--muted); pointer-events: none;
+}
+.walk-legs {
+  display: grid; grid-template-columns: 14px 22px 14px; grid-template-rows: repeat(3, 14px);
+  gap: 6px 4px; align-items: center; justify-items: center; flex: 0 0 auto;
+}
+.walk-legs span[data-leg] { width: 12px; height: 12px; border-radius: 50%; background: var(--border); }
+.walk-legs span.up { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.walk-legs .wl-body { grid-row: 1 / span 3; grid-column: 2; width: 18px; height: 54px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface-2); }
+.walk-legs span[data-leg="1"] { grid-column: 1; grid-row: 2; }
+.walk-legs span[data-leg="4"] { grid-column: 3; grid-row: 2; }
+.walk-legs span[data-leg="2"] { grid-column: 1; grid-row: 3; }
+.walk-legs span[data-leg="5"] { grid-column: 3; grid-row: 3; }
+.walk-info { margin: 22px 0 0; min-height: 1.2em; }

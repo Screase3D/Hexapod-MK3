@@ -30,6 +30,9 @@ state = {
     "start": time.time(),
     "mode": "manual",
     "pose": {"x": 0, "y": 0, "z": 72.5, "roll": 0, "pitch": 0, "yaw": 0, "stance": 78.2},
+    "walk": [0, 0, 0],
+    "walk_t": 0,
+    "gait": {"type": "tripod", "swing_s": 0.5, "step_height": 15},
     # WLAN: startet im Access-Point-Modus (MOCK_WIFI=sta für Heimnetz-Betrieb)
     "wifi_ap": os.environ.get("MOCK_WIFI", "ap") == "ap",
     "wifi_sta": "idle" if os.environ.get("MOCK_WIFI", "ap") == "ap" else "connected",
@@ -116,6 +119,32 @@ def wifi_json():
             "saved_ssid": state["wifi_ssid"], "ap": ap, "sta": sta}
 
 
+SWING_FRACTION = {"tripod": 0.5, "ripple": 1 / 3, "wave": 1 / 6}
+SWING_START = {  # wie gait.cpp: Beginn der Schwungphase je Bein
+    "tripod": [0, 0.5, 0, 0.5, 0, 0.5],
+    "ripple": [2 / 3, 1 / 3, 0, 1 / 6, 5 / 6, 0.5],
+    "wave": [2 / 6, 1 / 6, 0, 5 / 6, 4 / 6, 3 / 6],
+}
+
+
+def gait_status():
+    g = dict(state["gait"])
+    fresh = time.time() - state["walk_t"] < 0.6 and state["torque"] and state["mode"] == "pose"
+    cmd = state["walk"] if fresh else [0, 0, 0]
+    sigma = SWING_FRACTION[g["type"]]
+    cycle = g["swing_s"] / sigma
+    max_speed = 40 / ((1 - sigma) * cycle)
+    walking = any(abs(v) > 1e-3 for v in cmd)
+    g.update(active=g["type"], walking=walking, max_speed=round(max_speed),
+             max_turn=round(max_speed / 140 * 57.3), vx=0, vy=0, wz=0, swing=0)
+    if walking:
+        phase = (time.time() / cycle) % 1
+        g["swing"] = sum(1 << i for i, s in enumerate(SWING_START[g["type"]]) if (phase - s) % 1 < sigma)
+        g.update(vx=round(cmd[0] * max_speed), vy=round(cmd[1] * max_speed),
+                 wz=round(cmd[2] * max_speed / 140 * 57.3))
+    return g
+
+
 def telemetry():
     t = time.time()
     return {
@@ -129,7 +158,8 @@ def telemetry():
                 "roll": round(5 * math.sin(t / 2), 1), "acc": [0.05, -0.09, 0.99], "hz": 50, "temp": 28.4},
         "ctl": {"hz": 50.0, "max_us": 1830},
         "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3},
-        "motion": {"mode": state["mode"], "pose": state["pose"], "unreachable": [], "clamped": []},
+        "motion": {"mode": state["mode"], "pose": state["pose"], "gait": gait_status(),
+                   "unreachable": [], "clamped": []},
         "wifi": {"mode": wifi_json()["mode"]}, "heap": 182000, "ws": 1,
     }
 
@@ -138,6 +168,11 @@ def handle(cmd):
     c = cmd.get("cmd", "")
     if c == "ping":
         return {"type": "pong"}
+    if c == "walk":  # wie die Firmware: ohne Antwort
+        state["mode"] = "pose"
+        state["walk"] = [float(cmd.get(k, 0)) for k in ("vx", "vy", "turn")]
+        state["walk_t"] = time.time()
+        return None
     out = {"type": "ack", "cmd": c, "ok": True}
     i = cmd.get("id")
     if c == "torque":
@@ -157,6 +192,17 @@ def handle(cmd):
         for k in ("x", "y", "z", "roll", "pitch", "yaw", "stance"):
             if k in cmd:
                 state["pose"][k] = cmd[k]
+    elif c == "stop":
+        state["walk"] = [0, 0, 0]
+    elif c == "gait":
+        if "type" in cmd:
+            if cmd["type"] not in SWING_FRACTION:
+                return {**out, "ok": False, "msg": "unbekannte Gangart (tripod, ripple, wave)"}
+            state["gait"]["type"] = cmd["type"]
+        if "swing_s" in cmd:
+            state["gait"]["swing_s"] = max(0.3, min(1.2, float(cmd["swing_s"])))
+        if "step_height" in cmd:
+            state["gait"]["step_height"] = max(5, min(25, float(cmd["step_height"])))
     elif c == "pose_reset":
         state["pose"] = {"x": 0, "y": 0, "z": 72.5, "roll": 0, "pitch": 0, "yaw": 0, "stance": 78.2}
         out["msg"] = "Haltung zurückgesetzt"
@@ -232,7 +278,9 @@ async def ws_handler(request):
     task = asyncio.create_task(push())
     async for msg in ws:
         if msg.type == WSMsgType.TEXT:
-            await ws.send_str(json.dumps(handle(json.loads(msg.data))))
+            reply = handle(json.loads(msg.data))
+            if reply is not None:
+                await ws.send_str(json.dumps(reply))
     task.cancel()
     return ws
 
@@ -326,7 +374,9 @@ async def kinematics(_):
                    {"x": 0, "y": -57, "angle": -90}, {"x": -73.5, "y": -38.5, "angle": -135}],
         "limits": {"height_min": 50, "height_max": 115, "height_default": 72.5,
                    "stance_min": 60, "stance_max": 135, "stance_default": 78.2,
-                   "shift_max": 40, "tilt_max": 20, "yaw_max": 25}})
+                   "shift_max": 40, "tilt_max": 20, "yaw_max": 25},
+        "gait_limits": {"swing_min": 0.3, "swing_max": 1.2, "swing_default": 0.5, "height_min": 5,
+                        "height_max": 25, "height_default": 15, "stride_max": 40}})
 
 
 async def i2c_get(_):

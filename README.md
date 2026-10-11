@@ -13,7 +13,7 @@ später erweitert um KI-Funktionen mit der Kamera.
 |---|---|---|
 | 1 | Grundgerüst: WLAN, Webserver, Kamerastream (mit Drehung), Servotreiber, **Servo-Kalibrierung**, manuelle Servosteuerung, I²C-Scan, Akku-/Sicherheitsfunktionen, CI-Build | ✅ kompiliert, UI im Browser gegen Mock getestet – **noch nicht auf echter Hardware getestet** |
 | 2 | Kinematik: inverse Kinematik je Bein, Körperhaltung (Höhe, Fußabstand, Verschieben, Rollen/Nicken/Gieren) | 🟡 implementiert und auf dem PC getestet, Beinmaße aus dem CAD eingetragen ([Zeichnung](docs/beingeometrie.png), [docs/kinematik.md](docs/kinematik.md)); Aufstehen/Hinsetzen fehlt noch |
-| 3 | Gangarten (Tripod, Wave, Ripple) mit weichen Fußtrajektorien, Touch-Joysticks in der UI, Verbindungs-Watchdog | geplant |
+| 3 | Gangarten (Dreifuß, Ripple, Welle) mit weichen Fußbahnen, Touch-Joysticks und Tastatur in der UI, Verbindungs-Watchdog | 🟡 implementiert und auf dem PC getestet ([docs/kinematik.md](docs/kinematik.md#laufen)) – noch nicht am Roboter |
 | 4 | IMU-Stabilisierung (Körper waagerecht halten), Geländeanpassung | geplant |
 | 5 | Kamera/KI: Objekterkennung (auf dem ESP32-S3 oder am PC über den Stream), Folgen, OTA-Updates | Ideen |
 
@@ -35,14 +35,14 @@ firmware/                            PlatformIO-Projekt
   include/robot_geometry.h           Beinmaße und Montagepunkte (für die IK)
   src/main.cpp                       Start, Regel-Task, Sicherheitslogik
   src/servo/                         PCA9685-Treiber, Servo-Mapping, Kalibrierung, ServoController
-  src/kinematics/                    inverse/Vorwärts-Kinematik (reine Mathematik)
-  src/motion/                        Körperhaltung → IK → Servos (Pose-Modus)
+  src/kinematics/                    inverse/Vorwärts-Kinematik, Gangarten (reine Mathematik)
+  src/motion/                        Körperhaltung + Gang → IK → Servos (IK-Modus)
   src/sensors/                       Akku, MPU6050, I²C-Scan
   src/net/                           WLAN, HTTP/WebSocket, Kamera, Befehle
   src/ui/                            Status-LEDs (Augen)
   web/                               Weboberfläche (HTML/CSS/JS, wird in die Firmware eingebettet)
   tools/mock_server.py               Oberfläche am PC ohne Roboter testen
-  test_host/                         Tests, die auf dem PC laufen (Kinematik)
+  test_host/                         Tests, die auf dem PC laufen (Kinematik, Gangarten)
 .github/workflows/firmware.yml       CI: Tests + Firmware-Build bei jedem Push
 ```
 

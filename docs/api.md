@@ -34,7 +34,7 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 | `GET /api/wifi/scan` | – | `running`, `networks` [{ssid, rssi, channel, secure}] |
 | `GET /api/battery` | – | Akkuwerte und Schalter |
 | `POST /api/battery` | `{"enabled","deep_sleep"}` (Teilmenge) | Akkuüberwachung / Tiefschlaf schalten (persistent) |
-| `GET /api/kinematics` | – | Beinmaße, Montagepunkte, Grenzen der Körperhaltung, `placeholder` |
+| `GET /api/kinematics` | – | Beinmaße, Montagepunkte, Grenzen der Körperhaltung (`limits`) und der Gangparameter (`gait_limits`), `placeholder` |
 | `GET /api/i2c` | – | letzter I²C-Scan: `devices` (gefunden), `missing` (erwartet, fehlt) |
 | `POST /api/i2c/scan` | `{}` | I²C-Bus neu scannen (0x08–0x77), Antwort wie GET |
 | `POST /api/estop` | `{}` | Not-Aus (Fallback ohne WebSocket) |
@@ -58,6 +58,9 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `mode` | `mode`: `"pose"` / `"manual"` | Körperhaltung per IK an/aus |
 | `pose` | `x`, `y`, `z`, `roll`, `pitch`, `yaw`, `stance` (Teilmenge) | Zielhaltung (mm/Grad, wird begrenzt), siehe [kinematik.md](kinematik.md) |
 | `pose_reset` | – | Standardhaltung |
+| `walk` | `vx`, `vy`, `turn` (je −1…1) | Fahrbefehl: vor/zurück, links/rechts, drehen (+ = links). Schaltet in den IK-Modus. **Ohne Antwort**; ohne neuen Befehl für 0,6 s hält der Roboter an – also während der Fahrt etwa alle 100 ms senden |
+| `stop` | – | Fahrbefehl auf 0 (Roboter läuft noch in die Neutralstellung) |
+| `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wirkt im Stillstand |
 | `servo_us` | `id`, `us` | Rohmodus: Pulsbreite 500–2500 µs |
 | `servo_deg` | `id`, `deg` | kalibrierter Gelenkwinkel (auf Grenzen begrenzt) |
 | `all_us` | `us` | alle Servos auf eine Pulsbreite (Montage: 1500) |
@@ -89,8 +92,12 @@ Beispiel:
   "servo": {"torque": true, "active": 18, "estop": false, "inhibit": "", "slew": 240,
             "cal_dirty": false, "us": [1500, …18…], "deg": [0.0, …18…], "boards": [true, true]},
   "imu":   {"ok": true, "pitch": 1.2, "roll": -0.4},
-  "motion": {"mode": "pose", "pose": {"x": 0, "y": 0, "z": 72, "roll": 0, "pitch": 0, "yaw": 0,
-             "stance": 90}, "unreachable": [], "clamped": []},
+  "motion": {"mode": "pose", "pose": {"x": 0, "y": 0, "z": 72.5, "roll": 0, "pitch": 0, "yaw": 0,
+             "stance": 78.2},
+             "gait": {"type": "tripod", "swing_s": 0.5, "step_height": 15, "active": "tripod",
+                      "walking": true, "swing": 21, "vx": 48, "vy": 0, "wz": 0,
+                      "max_speed": 80, "max_turn": 33},
+             "unreachable": [], "clamped": []},
   "wifi":  {"mode": "sta", "rssi": -58},
   "cam":   {"clients": 1, "awake": true, "fps": 12.4, "kb": 23, "kbps": 2300, "err": 0,
             "wake_ms": 640, "wakes": 3},
@@ -102,4 +109,6 @@ Beispiel:
 `bat.state`: `off` (Überwachung ausgeschaltet – `v` ist dann nur ein ungeprüfter Messwert),
 `usb` (kein Akku), `ok`, `warn`, `critical`. `servo.inhibit` enthält den Grund einer
 Sperre (z. B. „Akku leer“). `motion.unreachable` / `motion.clamped` listen Beine (0–5), die ihren
-Fußpunkt nicht erreichen bzw. an eine Gelenkgrenze stoßen.
+Fußpunkt nicht erreichen bzw. an eine Gelenkgrenze stoßen. `motion.gait`: `type` = gewählte,
+`active` = laufende Gangart, `swing` = Bitmaske der Beine in der Luft (Bit 0 = Bein 1),
+`vx`/`vy` in mm/s, `wz` in °/s, `max_*` = Höchstwerte bei den aktuellen Parametern.

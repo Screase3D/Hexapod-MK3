@@ -63,3 +63,19 @@ constexpr PoseLimits POSE_LIMITS = {
 // Geschwindigkeit, mit der die Körperhaltung den Vorgaben folgt
 constexpr float POSE_SPEED_MM_PER_S = 80.0f;
 constexpr float POSE_SPEED_DEG_PER_S = 45.0f;
+
+// Laufen: Grenzen der Gangparameter in der Oberfläche
+struct GaitLimits {
+  float swing_min, swing_max, swing_default;     // Dauer eines Fußschwungs (s)
+  float height_min, height_max, height_default;  // Fußhub (mm)
+  float stride_max;                              // größter Fußweg je Standphase (mm)
+};
+// Fußhub über 25 mm ist mit Femur 43 / Tibia 94 nicht überall erreichbar; je höher
+// der Hub und je kürzer der Schritt, desto schneller muss der Femur drehen
+// (15 mm / 0,5 s: max. ca. 280 °/s im Schwung, siehe test_host/gait_test.cpp).
+constexpr GaitLimits GAIT_LIMITS = {0.3f, 1.2f, 0.5f, 5.0f, 25.0f, 15.0f, 40.0f};
+
+// Servo-Rampe, solange die IK die Sollwerte vorgibt: Die Bahnen sind dort schon
+// glatt, eine langsamere Rampe würde die Füße nur hinterherhinken lassen.
+// (Beim Wechsel in den IK-Modus gilt zunächst die normale Rampe.)
+constexpr float GAIT_SERVO_SLEW_DEG_PER_S = 450.0f;

@@ -44,6 +44,10 @@ class ServoController {
   void setAllAssembly();  // alle Gelenke in die Montagestellung
   void setSlewDegPerS(float v);
   float slewDegPerS();
+  // Untergrenze der Rampe (0 = aus), z. B. solange die IK glatte Bahnen vorgibt
+  void setSlewFloor(float deg_per_s);
+  // true, wenn alle eingeschalteten Servos ihren Sollwert erreicht haben
+  bool atTarget(float tol_us);
 
   // --- Kalibrierung ----------------------------------------------------------
   ServoCal getCal(int id);
@@ -85,6 +89,7 @@ class ServoController {
   bool cal_dirty_ = false;
   String inhibit_;
   float slew_deg_per_s_ = SERVO_SLEW_DEG_PER_S;
+  float slew_floor_ = 0.0f;
 
   uint16_t last_ticks_[NUM_BOARDS][Pca9685::kChannels];
   bool force_write_ = true;

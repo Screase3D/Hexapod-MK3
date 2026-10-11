@@ -37,6 +37,7 @@
     <!-- ======================= STEUERUNG ======================= -->
     <section id="tab-control" class="tab-page active">
       <div class="grid-control">
+        <div class="stack">
         <div class="card cam-card">
           <div class="cam-view">
             <img id="cam-img" alt="Kamerabild">
@@ -77,6 +78,45 @@
           </details>
         </div>
 
+        <div class="card" id="walk-card">
+          <div class="row space-between">
+            <h2>Laufen</h2>
+            <span id="walk-state" class="badge badge-muted">steht</span>
+          </div>
+          <div class="joy-row">
+            <div class="joy" id="joy-move" role="application" aria-label="Fahren">
+              <div class="joy-cross"></div><div class="joy-knob"></div><span class="joy-label">Fahren</span>
+            </div>
+            <div class="walk-legs" id="walk-legs" aria-label="angehobene Beine">
+              <span data-leg="0"></span><span class="wl-body"></span><span data-leg="3"></span>
+              <span data-leg="1"></span><span data-leg="4"></span>
+              <span data-leg="2"></span><span data-leg="5"></span>
+            </div>
+            <div class="joy joy-h" id="joy-turn" role="application" aria-label="Drehen">
+              <div class="joy-knob"></div><span class="joy-label">↶ Drehen ↷</span>
+            </div>
+          </div>
+          <p id="walk-info" class="muted small mono walk-info"></p>
+          <div class="form-grid">
+            <label for="walk-scale">Tempo <span id="walk-scale-val" class="muted"></span></label>
+            <input id="walk-scale" type="range" min="10" max="100" step="5" value="60">
+            <label for="gait-type">Gangart</label>
+            <select id="gait-type">
+              <option value="tripod">Dreifuß – schnell</option>
+              <option value="ripple">Ripple – ruhiger</option>
+              <option value="wave">Welle – langsam, sehr stabil</option>
+            </select>
+            <label for="gait-swing">Schrittdauer <span id="gait-swing-val" class="muted"></span></label>
+            <input id="gait-swing" type="range" min="0.3" max="1.2" step="0.05">
+            <label for="gait-height">Fußhub <span id="gait-height-val" class="muted"></span></label>
+            <input id="gait-height" type="range" min="5" max="25" step="1">
+          </div>
+          <p class="muted small">Tastatur: <b>W</b>/<b>S</b> vor/zurück, <b>A</b>/<b>D</b> seitlich,
+            <b>Q</b>/<b>E</b> drehen, <b>Leertaste</b> Stopp. Ein Wechsel der Gangart wirkt nach dem
+            Anhalten. Ohne Verbindung bleibt der Roboter nach 0,6&nbsp;s stehen.</p>
+        </div>
+        </div>
+
         <div class="stack">
           <div class="card">
             <h2>Servos</h2>
@@ -93,8 +133,8 @@
               <input id="ctl-slew" type="range" min="30" max="600" step="10">
               <span id="ctl-slew-val" class="mono"></span>
             </label>
-            <p class="muted small">Laufen (Joystick, Gangarten) folgt in Phase 3 –
-              zuerst die Servos im Tab <b>Kalibrierung</b> einrichten.</p>
+            <p class="muted small">Vor dem ersten Laufen die Servos im Tab <b>Kalibrierung</b>
+              einrichten.</p>
           </div>
 
           <div class="card">
@@ -114,7 +154,8 @@
               <button id="pose-reset" class="btn">Zurücksetzen</button>
             </div>
             <p class="muted small">Die Füße bleiben auf ihren Standardpunkten, der Körper bewegt sich
-              darüber. Einzelne Servo-Befehle (Kalibrierung, manuelle Schieber) beenden den IK-Modus.</p>
+              darüber – auch beim Laufen. Der Joystick schaltet den IK-Modus automatisch ein; einzelne
+              Servo-Befehle (Kalibrierung, manuelle Schieber) beenden ihn.</p>
           </div>
 
           <div class="card">

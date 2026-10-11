@@ -1,11 +1,11 @@
 #pragma once
-// Bewegungssteuerung: verbindet Körperhaltung, inverse Kinematik und Servos.
+// Bewegungssteuerung: verbindet Körperhaltung, Gangart, inverse Kinematik und Servos.
 //
 // Modus "manual": Servos werden direkt gesetzt (Kalibrierung, Schieber).
-// Modus "pose":   Füße stehen auf ihren Standardpunkten, die Körperhaltung
-//                 (Höhe, Verschiebung, Rollen/Nicken/Gieren, Fußabstand) wird
-//                 per IK in Gelenkwinkel umgerechnet. Phase 3 ergänzt hier die
-//                 Gangarten.
+// Modus "pose":   IK-Betrieb. Die Gangart führt die Füße (im Stand auf ihren
+//                 Neutralpunkten, beim Laufen in Schritten), die Körperhaltung
+//                 (Höhe, Verschiebung, Rollen/Nicken/Gieren, Fußabstand) kommt
+//                 obendrauf; die IK rechnet daraus die Gelenkwinkel.
 //
 // update() läuft im Regel-Task; alle anderen Funktionen sind thread-sicher.
 
@@ -25,10 +25,18 @@ Mode mode();
 void applyPoseJson(JsonVariantConst obj);
 void resetPose();
 
-// Aus dem Regel-Task: Haltung nachführen, IK rechnen, Servos setzen
+// Fahrbefehl, normiert -1..1 (vx vor, vy links, turn + = links drehen).
+// Schaltet in den IK-Modus. Bleibt ein neuer Befehl länger als
+// WALK_TIMEOUT_MS aus (Verbindung weg), hält der Roboter an.
+void walk(float vx, float vy, float turn);
+void stopWalking();
+// Gangparameter: type ("tripod"/"ripple"/"wave"), swing_s, step_height
+bool applyGaitJson(JsonVariantConst obj, String& err);
+
+// Aus dem Regel-Task: Haltung nachführen, Gang rechnen, IK, Servos setzen
 void update(float dt_s);
 
-void toJson(JsonObject obj);        // Telemetrie
+void toJson(JsonObject obj);          // Telemetrie
 void geometryToJson(JsonObject obj);  // Maße und Grenzen für die Oberfläche
 
 }  // namespace motion
