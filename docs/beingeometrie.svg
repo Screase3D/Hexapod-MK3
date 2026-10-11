@@ -5,76 +5,76 @@
 <text x="40.0" y="58.0" font-size="28" text-anchor="start" fill="#222" font-weight="bold" >Hexapod MK3 – Beingeometrie</text>
 <text x="40.0" y="84.0" font-size="15" text-anchor="start" fill="#667780" font-weight="normal" >Maße aus dem CAD-Modell. Achsabstände (Drehpunkt zu Drehpunkt) in mm. Montagestellung = alle Servos auf 90° (1500 µs).</text>
 <text x="420.0" y="130.0" font-size="18" text-anchor="middle" fill="#222" font-weight="bold" >Bein – Seitenansicht (Montagestellung)</text>
-<rect x="60" y="641.5" width="680" height="14" fill="url(#hatch)"/>
-<line x1="60.0" y1="641.5" x2="740.0" y2="641.5" stroke="#333" stroke-width="2" />
+<rect x="60" y="600.0" width="680" height="14" fill="url(#hatch)"/>
+<line x1="60.0" y1="600.0" x2="740.0" y2="600.0" stroke="#333" stroke-width="2" />
 <rect x="130.0" y="265.0" width="120" height="105" rx="6" fill="#d3dbe0" stroke="#333" stroke-width="1.5"/>
 <text x="190.0" y="395.0" font-size="14" text-anchor="middle" fill="#667780" font-weight="normal" >Körper</text>
-<line x1="250.0" y1="215.0" x2="250.0" y2="659.5" stroke="#d0453f" stroke-width="1.2" stroke-dasharray="10 4 2 4"/>
+<line x1="250.0" y1="215.0" x2="250.0" y2="618.0" stroke="#d0453f" stroke-width="1.2" stroke-dasharray="10 4 2 4"/>
 <text x="256.0" y="210.0" font-size="13" text-anchor="start" fill="#d0453f" font-weight="normal" >Coxa-Achse (senkrecht)</text>
 <line x1="250.0" y1="310.0" x2="414.0" y2="310.0" stroke="#98a7b0" stroke-width="11" stroke-linecap="round"/>
-<line x1="414.0" y1="310.0" x2="580.1" y2="265.5" stroke="#45b0a1" stroke-width="11" stroke-linecap="round"/>
-<line x1="580.1" y1="265.5" x2="580.1" y2="641.5" stroke="#7a84d0" stroke-width="9" stroke-linecap="round"/>
+<line x1="414.0" y1="310.0" x2="563.0" y2="224.0" stroke="#45b0a1" stroke-width="11" stroke-linecap="round"/>
+<line x1="563.0" y1="224.0" x2="563.0" y2="600.0" stroke="#7a84d0" stroke-width="9" stroke-linecap="round"/>
 <circle cx="250.0" cy="310.0" r="7" fill="#fff" stroke="#333" stroke-width="2"/>
 <circle cx="414.0" cy="310.0" r="7" fill="#fff" stroke="#333" stroke-width="2"/>
-<circle cx="580.1" cy="265.5" r="7" fill="#fff" stroke="#333" stroke-width="2"/>
-<circle cx="580.1" cy="641.5" r="6" fill="#333"/>
+<circle cx="563.0" cy="224.0" r="7" fill="#fff" stroke="#333" stroke-width="2"/>
+<circle cx="563.0" cy="600.0" r="6" fill="#333"/>
 <text x="332.0" y="340.0" font-size="14" text-anchor="middle" fill="#222" font-weight="bold" >Coxa</text>
-<text x="455.1" y="267.7" font-size="14" text-anchor="middle" fill="#222" font-weight="bold" >Femur</text>
-<text x="594.1" y="513.5" font-size="14" text-anchor="start" fill="#222" font-weight="bold" >Tibia</text>
-<text x="596.1" y="589.5" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >Tibia = Linie Knieachse → Fußspitze</text>
-<text x="596.1" y="605.5" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >(das Bauteil selbst ist gebogen)</text>
+<text x="477.5" y="252.9" font-size="14" text-anchor="middle" fill="#222" font-weight="bold" transform="rotate(-30.0 477.5 247.9)">Femur</text>
+<text x="577.0" y="472.0" font-size="14" text-anchor="start" fill="#222" font-weight="bold" >Tibia</text>
+<text x="579.0" y="548.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >Tibia = Linie Knieachse → Fußspitze</text>
+<text x="579.0" y="564.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >(das Bauteil selbst ist gebogen)</text>
 <line x1="250.0" y1="304.0" x2="250.0" y2="256.0" stroke="#1f6fd1" stroke-width="1" />
 <line x1="414.0" y1="304.0" x2="414.0" y2="256.0" stroke="#1f6fd1" stroke-width="1" />
 <line x1="250.0" y1="262.0" x2="414.0" y2="262.0" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
 <g><rect x="317.8" y="250.5" width="28.4" height="23" fill="#fff" rx="3"/>
 <text x="332.0" y="268.1" font-size="17" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >41</text>
 </g>
-<line x1="412.4" y1="304.2" x2="399.0" y2="254.0" stroke="#1f6fd1" stroke-width="1" />
-<line x1="578.6" y1="259.7" x2="565.1" y2="209.5" stroke="#1f6fd1" stroke-width="1" />
-<line x1="400.5" y1="259.8" x2="566.7" y2="215.3" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
-<g transform="rotate(-15.0 483.6 237.5)"><rect x="469.4" y="226.0" width="28.4" height="23" fill="#fff" rx="3"/>
-<text x="483.6" y="243.6" font-size="17" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >43</text>
+<line x1="411.0" y1="304.8" x2="385.0" y2="259.8" stroke="#1f6fd1" stroke-width="1" />
+<line x1="560.0" y1="218.8" x2="534.0" y2="173.8" stroke="#1f6fd1" stroke-width="1" />
+<line x1="388.0" y1="265.0" x2="537.0" y2="179.0" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
+<g transform="rotate(-30.0 462.5 222.0)"><rect x="448.3" y="210.5" width="28.4" height="23" fill="#fff" rx="3"/>
+<text x="462.5" y="228.1" font-size="17" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >43</text>
 </g>
-<line x1="574.1" y1="265.5" x2="529.1" y2="265.5" stroke="#1f6fd1" stroke-width="1" />
-<line x1="574.1" y1="641.5" x2="529.1" y2="641.5" stroke="#1f6fd1" stroke-width="1" />
-<line x1="535.1" y1="265.5" x2="535.1" y2="641.5" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
-<g transform="rotate(90.0 535.1 453.5)"><rect x="520.9" y="442.0" width="28.4" height="23" fill="#fff" rx="3"/>
-<text x="535.1" y="459.6" font-size="17" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >94</text>
+<line x1="557.0" y1="224.0" x2="512.0" y2="224.0" stroke="#1f6fd1" stroke-width="1" />
+<line x1="557.0" y1="600.0" x2="512.0" y2="600.0" stroke="#1f6fd1" stroke-width="1" />
+<line x1="518.0" y1="224.0" x2="518.0" y2="600.0" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
+<g transform="rotate(90.0 518.0 412.0)"><rect x="503.8" y="400.5" width="28.4" height="23" fill="#fff" rx="3"/>
+<text x="518.0" y="418.1" font-size="17" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >94</text>
 </g>
 <line x1="414.0" y1="310.0" x2="524.0" y2="310.0" stroke="#1f6fd1" stroke-width="1" stroke-dasharray="6 4"/>
-<path d="M483.5,291.4 A72,72 0 0,1 486.0,310.0" fill="none" stroke="#1f6fd1" stroke-width="1.3" />
-<text x="492.0" y="306.0" font-size="15" text-anchor="start" fill="#1f6fd1" font-weight="bold" >15°</text>
-<line x1="580.1" y1="265.5" x2="611.2" y2="381.4" stroke="#1f6fd1" stroke-width="1" stroke-dasharray="6 4"/>
-<path d="M604.7,357.2 A95,95 0 0,1 580.1,360.5" fill="none" stroke="#1f6fd1" stroke-width="1.3" />
-<text x="622.1" y="361.5" font-size="15" text-anchor="start" fill="#1f6fd1" font-weight="bold" >−15°</text>
-<text x="622.1" y="379.5" font-size="12" text-anchor="start" fill="#1f6fd1" font-weight="normal" >Tibia ggü. rechtwinklig</text>
-<text x="622.1" y="394.5" font-size="12" text-anchor="start" fill="#1f6fd1" font-weight="normal" >zum Femur</text>
-<line x1="85.0" y1="310.0" x2="85.0" y2="641.5" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
-<g transform="rotate(90.0 85.0 475.7)"><rect x="60.6" y="464.2" width="48.8" height="23" fill="#fff" rx="3"/>
-<text x="85.0" y="481.9" font-size="17" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >82,9</text>
+<path d="M476.4,274.0 A72,72 0 0,1 486.0,310.0" fill="none" stroke="#1f6fd1" stroke-width="1.3" />
+<text x="492.0" y="306.0" font-size="15" text-anchor="start" fill="#1f6fd1" font-weight="bold" >30°</text>
+<line x1="563.0" y1="224.0" x2="623.0" y2="327.9" stroke="#1f6fd1" stroke-width="1" stroke-dasharray="6 4"/>
+<path d="M610.5,306.3 A95,95 0 0,1 563.0,319.0" fill="none" stroke="#1f6fd1" stroke-width="1.3" />
+<text x="613.0" y="320.0" font-size="15" text-anchor="start" fill="#1f6fd1" font-weight="bold" >−30°</text>
+<text x="605.0" y="338.0" font-size="12" text-anchor="start" fill="#1f6fd1" font-weight="normal" >Tibia ggü. rechtwinklig</text>
+<text x="605.0" y="353.0" font-size="12" text-anchor="start" fill="#1f6fd1" font-weight="normal" >zum Femur</text>
+<line x1="85.0" y1="310.0" x2="85.0" y2="600.0" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
+<g transform="rotate(90.0 85.0 455.0)"><rect x="60.6" y="443.5" width="48.8" height="23" fill="#fff" rx="3"/>
+<text x="85.0" y="461.1" font-size="17" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >72,5</text>
 </g>
 <line x1="75.0" y1="310.0" x2="125.0" y2="310.0" stroke="#1f6fd1" stroke-width="1" />
-<text x="85.0" y="679.5" font-size="12" text-anchor="middle" fill="#1f6fd1" font-weight="normal" >Höhe Coxa-Achse</text>
-<text x="85.0" y="694.5" font-size="12" text-anchor="middle" fill="#1f6fd1" font-weight="normal" >über Boden</text>
-<line x1="250.0" y1="659.5" x2="250.0" y2="711.5" stroke="#1f6fd1" stroke-width="1" />
-<line x1="414.0" y1="659.5" x2="414.0" y2="711.5" stroke="#1f6fd1" stroke-width="1" />
-<line x1="580.1" y1="659.5" x2="580.1" y2="711.5" stroke="#1f6fd1" stroke-width="1" />
-<line x1="250.0" y1="703.5" x2="580.1" y2="703.5" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
-<g><rect x="390.7" y="692.0" width="48.8" height="23" fill="#fff" rx="3"/>
-<text x="415.1" y="709.6" font-size="17" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >82,5</text>
+<text x="85.0" y="638.0" font-size="12" text-anchor="middle" fill="#1f6fd1" font-weight="normal" >Höhe Coxa-Achse</text>
+<text x="85.0" y="653.0" font-size="12" text-anchor="middle" fill="#1f6fd1" font-weight="normal" >über Boden</text>
+<line x1="250.0" y1="618.0" x2="250.0" y2="670.0" stroke="#1f6fd1" stroke-width="1" />
+<line x1="414.0" y1="618.0" x2="414.0" y2="670.0" stroke="#1f6fd1" stroke-width="1" />
+<line x1="563.0" y1="618.0" x2="563.0" y2="670.0" stroke="#1f6fd1" stroke-width="1" />
+<line x1="250.0" y1="662.0" x2="563.0" y2="662.0" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
+<g><rect x="382.1" y="650.5" width="48.8" height="23" fill="#fff" rx="3"/>
+<text x="406.5" y="668.1" font-size="17" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >78,2</text>
 </g>
-<line x1="250.0" y1="743.5" x2="414.0" y2="743.5" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
-<g><rect x="319.6" y="733.5" width="24.8" height="20" fill="#fff" rx="3"/>
-<text x="332.0" y="748.5" font-size="14" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >41</text>
+<line x1="250.0" y1="702.0" x2="414.0" y2="702.0" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
+<g><rect x="319.6" y="692.0" width="24.8" height="20" fill="#fff" rx="3"/>
+<text x="332.0" y="707.0" font-size="14" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >41</text>
 </g>
-<line x1="414.0" y1="743.5" x2="580.1" y2="743.5" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
-<g><rect x="476.3" y="733.5" width="41.6" height="20" fill="#fff" rx="3"/>
-<text x="497.1" y="748.5" font-size="14" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >41,5</text>
+<line x1="414.0" y1="702.0" x2="563.0" y2="702.0" stroke="#1f6fd1" stroke-width="1.3" marker-start="url(#arr)" marker-end="url(#arr)"/>
+<g><rect x="467.7" y="692.0" width="41.6" height="20" fill="#fff" rx="3"/>
+<text x="488.5" y="707.0" font-size="14" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >37,2</text>
 </g>
-<line x1="250.0" y1="711.5" x2="250.0" y2="751.5" stroke="#1f6fd1" stroke-width="1" />
-<line x1="414.0" y1="711.5" x2="414.0" y2="751.5" stroke="#1f6fd1" stroke-width="1" />
-<line x1="580.1" y1="711.5" x2="580.1" y2="751.5" stroke="#1f6fd1" stroke-width="1" />
-<text x="415.1" y="785.5" font-size="12" text-anchor="middle" fill="#1f6fd1" font-weight="normal" >Fußabstand Coxa-Achse → Fuß (waagerecht)</text>
+<line x1="250.0" y1="670.0" x2="250.0" y2="710.0" stroke="#1f6fd1" stroke-width="1" />
+<line x1="414.0" y1="670.0" x2="414.0" y2="710.0" stroke="#1f6fd1" stroke-width="1" />
+<line x1="563.0" y1="670.0" x2="563.0" y2="710.0" stroke="#1f6fd1" stroke-width="1" />
+<text x="406.5" y="744.0" font-size="12" text-anchor="middle" fill="#1f6fd1" font-weight="normal" >Fußabstand Coxa-Achse → Fuß (waagerecht)</text>
 <text x="1190.0" y="130.0" font-size="18" text-anchor="middle" fill="#222" font-weight="bold" >Körper – Draufsicht (vorne = oben)</text>
 <rect x="1100.8" y="310.4" width="178.3" height="295.2" rx="12" fill="#333" stroke="#333" stroke-width="3"/>
 <circle cx="1111.1" cy="307.3" r="20.5" fill="#333" stroke="#333" stroke-width="3"/>
@@ -102,59 +102,59 @@
 <line x1="1190.0" y1="259.1" x2="1190.0" y2="656.9" stroke="#d0453f" stroke-width="1" stroke-dasharray="10 4 2 4"/>
 <line x1="898.9" y1="458.0" x2="1481.1" y2="458.0" stroke="#d0453f" stroke-width="1" stroke-dasharray="10 4 2 4"/>
 <line x1="1111.1" y1="307.3" x2="1051.6" y2="247.9" stroke="#98a7b0" stroke-width="9" stroke-linecap="round"/>
-<line x1="1051.6" y1="247.9" x2="991.4" y2="187.7" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
+<line x1="1051.6" y1="247.9" x2="997.7" y2="193.9" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
 <circle cx="1111.1" cy="307.3" r="6" fill="#fff" stroke="#333" stroke-width="2"/>
 <circle cx="1051.6" cy="247.9" r="5" fill="#fff" stroke="#333" stroke-width="2"/>
-<circle cx="991.4" cy="187.7" r="6" fill="#333"/>
-<circle cx="959.5" cy="155.8" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
-<text x="959.5" y="160.8" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >1</text>
-<text x="939.5" y="153.8" font-size="12" text-anchor="end" fill="#667780" font-weight="normal" >vorne links</text>
-<text x="939.5" y="168.8" font-size="12" text-anchor="end" fill="#667780" font-weight="normal" >0x40 CH0–2</text>
+<circle cx="997.7" cy="193.9" r="6" fill="#333"/>
+<circle cx="965.8" cy="162.0" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
+<text x="965.8" y="167.0" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >1</text>
+<text x="945.8" y="160.0" font-size="12" text-anchor="end" fill="#667780" font-weight="normal" >vorne links</text>
+<text x="945.8" y="175.0" font-size="12" text-anchor="end" fill="#667780" font-weight="normal" >0x40 CH0–2</text>
 <line x1="1073.2" y1="458.0" x2="989.1" y2="458.0" stroke="#98a7b0" stroke-width="9" stroke-linecap="round"/>
-<line x1="989.1" y1="458.0" x2="904.0" y2="458.0" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
+<line x1="989.1" y1="458.0" x2="912.8" y2="458.0" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
 <circle cx="1073.2" cy="458.0" r="6" fill="#fff" stroke="#333" stroke-width="2"/>
 <circle cx="989.1" cy="458.0" r="5" fill="#fff" stroke="#333" stroke-width="2"/>
-<circle cx="904.0" cy="458.0" r="6" fill="#333"/>
-<circle cx="858.9" cy="458.0" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
-<text x="858.9" y="463.0" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >2</text>
-<text x="858.9" y="492.0" font-size="12" text-anchor="middle" fill="#667780" font-weight="normal" >Mitte links</text>
-<text x="858.9" y="507.0" font-size="12" text-anchor="middle" fill="#667780" font-weight="normal" >0x40 CH3–5</text>
+<circle cx="912.8" cy="458.0" r="6" fill="#333"/>
+<circle cx="867.7" cy="458.0" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
+<text x="867.7" y="463.0" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >2</text>
+<text x="867.7" y="492.0" font-size="12" text-anchor="middle" fill="#667780" font-weight="normal" >Mitte links</text>
+<text x="867.7" y="507.0" font-size="12" text-anchor="middle" fill="#667780" font-weight="normal" >0x40 CH3–5</text>
 <line x1="1111.1" y1="608.7" x2="1051.6" y2="668.1" stroke="#98a7b0" stroke-width="9" stroke-linecap="round"/>
-<line x1="1051.6" y1="668.1" x2="991.4" y2="728.3" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
+<line x1="1051.6" y1="668.1" x2="997.7" y2="722.1" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
 <circle cx="1111.1" cy="608.7" r="6" fill="#fff" stroke="#333" stroke-width="2"/>
 <circle cx="1051.6" cy="668.1" r="5" fill="#fff" stroke="#333" stroke-width="2"/>
-<circle cx="991.4" cy="728.3" r="6" fill="#333"/>
-<circle cx="959.5" cy="760.2" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
-<text x="959.5" y="765.2" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >3</text>
-<text x="939.5" y="764.2" font-size="12" text-anchor="end" fill="#667780" font-weight="normal" >hinten links</text>
-<text x="939.5" y="779.2" font-size="12" text-anchor="end" fill="#667780" font-weight="normal" >0x40 CH6–8</text>
+<circle cx="997.7" cy="722.1" r="6" fill="#333"/>
+<circle cx="965.8" cy="754.0" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
+<text x="965.8" y="759.0" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >3</text>
+<text x="945.8" y="758.0" font-size="12" text-anchor="end" fill="#667780" font-weight="normal" >hinten links</text>
+<text x="945.8" y="773.0" font-size="12" text-anchor="end" fill="#667780" font-weight="normal" >0x40 CH6–8</text>
 <line x1="1268.9" y1="307.3" x2="1328.4" y2="247.9" stroke="#98a7b0" stroke-width="9" stroke-linecap="round"/>
-<line x1="1328.4" y1="247.9" x2="1388.6" y2="187.7" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
+<line x1="1328.4" y1="247.9" x2="1382.3" y2="193.9" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
 <circle cx="1268.9" cy="307.3" r="6" fill="#fff" stroke="#333" stroke-width="2"/>
 <circle cx="1328.4" cy="247.9" r="5" fill="#fff" stroke="#333" stroke-width="2"/>
-<circle cx="1388.6" cy="187.7" r="6" fill="#333"/>
-<circle cx="1420.5" cy="155.8" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
-<text x="1420.5" y="160.8" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >4</text>
-<text x="1440.5" y="153.8" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >vorne rechts</text>
-<text x="1440.5" y="168.8" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >0x41 CH0–2</text>
+<circle cx="1382.3" cy="193.9" r="6" fill="#333"/>
+<circle cx="1414.2" cy="162.0" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
+<text x="1414.2" y="167.0" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >4</text>
+<text x="1434.2" y="160.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >vorne rechts</text>
+<text x="1434.2" y="175.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >0x41 CH0–2</text>
 <line x1="1306.8" y1="458.0" x2="1390.9" y2="458.0" stroke="#98a7b0" stroke-width="9" stroke-linecap="round"/>
-<line x1="1390.9" y1="458.0" x2="1476.0" y2="458.0" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
+<line x1="1390.9" y1="458.0" x2="1467.2" y2="458.0" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
 <circle cx="1306.8" cy="458.0" r="6" fill="#fff" stroke="#333" stroke-width="2"/>
 <circle cx="1390.9" cy="458.0" r="5" fill="#fff" stroke="#333" stroke-width="2"/>
-<circle cx="1476.0" cy="458.0" r="6" fill="#333"/>
-<circle cx="1521.1" cy="458.0" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
-<text x="1521.1" y="463.0" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >5</text>
-<text x="1521.1" y="492.0" font-size="12" text-anchor="middle" fill="#667780" font-weight="normal" >Mitte rechts</text>
-<text x="1521.1" y="507.0" font-size="12" text-anchor="middle" fill="#667780" font-weight="normal" >0x41 CH3–5</text>
+<circle cx="1467.2" cy="458.0" r="6" fill="#333"/>
+<circle cx="1512.3" cy="458.0" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
+<text x="1512.3" y="463.0" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >5</text>
+<text x="1512.3" y="492.0" font-size="12" text-anchor="middle" fill="#667780" font-weight="normal" >Mitte rechts</text>
+<text x="1512.3" y="507.0" font-size="12" text-anchor="middle" fill="#667780" font-weight="normal" >0x41 CH3–5</text>
 <line x1="1268.9" y1="608.7" x2="1328.4" y2="668.1" stroke="#98a7b0" stroke-width="9" stroke-linecap="round"/>
-<line x1="1328.4" y1="668.1" x2="1388.6" y2="728.3" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
+<line x1="1328.4" y1="668.1" x2="1382.3" y2="722.1" stroke="#45b0a1" stroke-width="9" stroke-linecap="round"/>
 <circle cx="1268.9" cy="608.7" r="6" fill="#fff" stroke="#333" stroke-width="2"/>
 <circle cx="1328.4" cy="668.1" r="5" fill="#fff" stroke="#333" stroke-width="2"/>
-<circle cx="1388.6" cy="728.3" r="6" fill="#333"/>
-<circle cx="1420.5" cy="760.2" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
-<text x="1420.5" y="765.2" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >6</text>
-<text x="1440.5" y="764.2" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >hinten rechts</text>
-<text x="1440.5" y="779.2" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >0x41 CH6–8</text>
+<circle cx="1382.3" cy="722.1" r="6" fill="#333"/>
+<circle cx="1414.2" cy="754.0" r="13" fill="#fff" stroke="#333" stroke-width="1.5"/>
+<text x="1414.2" y="759.0" font-size="15" text-anchor="middle" fill="#222" font-weight="bold" >6</text>
+<text x="1434.2" y="758.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >hinten rechts</text>
+<text x="1434.2" y="773.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >0x41 CH6–8</text>
 <line x1="1268.9" y1="307.3" x2="1268.9" y2="232.3" stroke="#1f6fd1" stroke-width="1" stroke-dasharray="6 4"/>
 <path d="M1268.9,249.3 A58,58 0 0,1 1309.9,266.3" fill="none" stroke="#1f6fd1" stroke-width="1.3" />
 <text x="1298.8" y="240.3" font-size="14" text-anchor="middle" fill="#1f6fd1" font-weight="bold" >45°</text>
@@ -228,27 +228,29 @@
 <text x="60.0" y="1064.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >x vorne, y links (mm, ab Körpermitte) · Winkel ab vorne, links +</text>
 <text x="620.0" y="848.0" font-size="15" text-anchor="start" fill="#222" font-weight="bold" >Montagestellung = alle Servos 90° (1500 µs)</text>
 <text x="620.0" y="880.0" font-size="14" text-anchor="start" fill="#667780" font-weight="normal" >Gelenkwinkel (Firmware)</text>
-<text x="810.0" y="880.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >Coxa 0° · Femur +15° · Tibia −15°</text>
+<text x="810.0" y="880.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >Coxa 0° · Femur +30° · Tibia −30°</text>
 <text x="620.0" y="908.0" font-size="14" text-anchor="start" fill="#667780" font-weight="normal" >Körperhöhe (Coxa-Achse)</text>
-<text x="810.0" y="908.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >82,9 mm über Boden</text>
+<text x="810.0" y="908.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >72,5 mm über Boden</text>
 <text x="620.0" y="936.0" font-size="14" text-anchor="start" fill="#667780" font-weight="normal" >Fußabstand</text>
-<text x="810.0" y="936.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >82,5 mm ab Coxa-Achse</text>
+<text x="810.0" y="936.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >78,2 mm ab Coxa-Achse</text>
 <text x="620.0" y="964.0" font-size="14" text-anchor="start" fill="#667780" font-weight="normal" >Fuß-Mitte (Mittelbeine)</text>
-<text x="810.0" y="964.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >139,5 mm ab Längsachse</text>
+<text x="810.0" y="964.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >135,2 mm ab Längsachse</text>
 <text x="620.0" y="1010.0" font-size="13" text-anchor="start" fill="#222" font-weight="normal" >Diese Haltung ist die Standardhaltung der IK</text>
 <text x="620.0" y="1028.0" font-size="13" text-anchor="start" fill="#222" font-weight="normal" >(Tab Steuerung → Körperhaltung).</text>
-<text x="620.0" y="1064.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >Tibia senkrecht = 15° nach innen ggü. rechtwinklig zum Femur</text>
-<text x="1130.0" y="848.0" font-size="15" text-anchor="start" fill="#222" font-weight="bold" >Kalibrier-Nullpunkt (0°)</text>
-<text x="1130.0" y="880.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" >Coxa</text>
-<text x="1190.0" y="880.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >Bein zeigt in Montagerichtung</text>
-<text x="1130.0" y="904.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" ></text>
-<text x="1190.0" y="904.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >(Ecken 45°, Mitte 90°)</text>
-<text x="1130.0" y="928.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" >Femur</text>
-<text x="1190.0" y="928.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >waagerecht (15° unter Montagestellung)</text>
-<text x="1130.0" y="952.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" >Tibia</text>
-<text x="1190.0" y="952.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >rechtwinklig zum Femur –</text>
-<text x="1130.0" y="976.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" ></text>
-<text x="1190.0" y="976.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >zuerst Femur kalibrieren</text>
+<text x="620.0" y="1064.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >Tibia senkrecht = 30° nach innen ggü. rechtwinklig zum Femur</text>
+<text x="1130.0" y="848.0" font-size="15" text-anchor="start" fill="#222" font-weight="bold" >Kalibrierung (Bezug = Montagestellung)</text>
+<text x="1130.0" y="880.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" >1.</text>
+<text x="1158.0" y="880.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >Hörner bei 1500 µs aufstecken,</text>
+<text x="1130.0" y="902.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" ></text>
+<text x="1158.0" y="902.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >Bein ≈ Montagestellung (Montagelehre)</text>
+<text x="1130.0" y="924.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" >2.</text>
+<text x="1158.0" y="924.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >exakt anfahren → „= Montagestellung“</text>
+<text x="1130.0" y="946.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" ></text>
+<text x="1158.0" y="946.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >(je Bein erst Femur, dann Tibia)</text>
+<text x="1130.0" y="968.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" >3.</text>
+<text x="1158.0" y="968.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >2. Bezug: Coxa ±45°, Femur 0°</text>
+<text x="1130.0" y="990.0" font-size="14" text-anchor="start" fill="#667780" font-weight="bold" ></text>
+<text x="1158.0" y="990.0" font-size="14" text-anchor="start" fill="#222" font-weight="normal" >(waagerecht), Tibia 0° (⟂ Femur)</text>
 <text x="1130.0" y="1014.0" font-size="13" text-anchor="start" fill="#222" font-weight="normal" >+ Richtung: Coxa Fuß nach vorne,</text>
 <text x="1130.0" y="1032.0" font-size="13" text-anchor="start" fill="#222" font-weight="normal" >Femur hoch, Tibia Fuß nach außen</text>
 <text x="1130.0" y="1064.0" font-size="12" text-anchor="start" fill="#667780" font-weight="normal" >Details: docs/kalibrierung.md</text>

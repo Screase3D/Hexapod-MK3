@@ -41,13 +41,14 @@ class ServoController {
   uint32_t setAnglesDeg(const float* deg);
   void setAllPulseUs(float us);
   void setAllAngleDeg(float deg);
+  void setAllAssembly();  // alle Gelenke in die Montagestellung
   void setSlewDegPerS(float v);
   float slewDegPerS();
 
   // --- Kalibrierung ----------------------------------------------------------
   ServoCal getCal(int id);
   bool setCal(int id, const ServoCal& c, String& err);
-  bool captureZero(int id, String& err);
+  bool captureCenter(int id, String& err);  // aktuelle Stellung = Montagestellung
   bool captureReference(int id, float deg, String& err);
   void invertDirection(int id);
   bool saveCalibration();

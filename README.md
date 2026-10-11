@@ -27,6 +27,7 @@ docs/
   kalibrierung.md                    Gelenk-Konvention und Kalibrierablauf
   kinematik.md                       Beinmaße, Koordinatensysteme, Körperhaltung
   beingeometrie.svg/.png             Maßzeichnung Bein + Körper (erzeugt von beingeometrie.py)
+  montagelehre.pdf                   Lehre 1:1 zum Aufstecken der Servohörner (montagelehre.py)
   api.md                             REST-, WebSocket- und Stream-Schnittstellen
 firmware/                            PlatformIO-Projekt
   platformio.ini
@@ -149,7 +150,8 @@ Toolchain:
    Alternativ zur IP funktioniert oft auch `http://hexapod.local`.
 2. Zum Bewegen der Servos braucht es den Akku: USB abziehen, SW1 ein, dann über WLAN
    weiterarbeiten.
-3. Servos kalibrieren: Anleitung in [docs/kalibrierung.md](docs/kalibrierung.md).
+3. Servos kalibrieren: Anleitung in [docs/kalibrierung.md](docs/kalibrierung.md), Lehre zum
+   Aufstecken der Hörner: [docs/montagelehre.pdf](docs/montagelehre.pdf).
 
 Nach dem Start sind alle Servos **stromlos**, bis in der Oberfläche *Torque* eingeschaltet wird.
 Not-Aus jederzeit über **STOP** (oder Taste **Esc**).

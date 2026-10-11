@@ -86,7 +86,7 @@
                 <span class="slider"></span>
                 <span class="switch-label">Torque</span>
               </label>
-              <button id="ctl-neutral" class="btn">Neutralstellung (0°)</button>
+              <button id="ctl-assembly" class="btn" title="Alle Gelenke in die Montagestellung (Standardhaltung)">Montagestellung</button>
             </div>
             <label class="slider-row">
               <span>Stellgeschwindigkeit</span>
@@ -139,7 +139,7 @@
             Bewegt sich nur bei eingeschaltetem Torque.</p>
           <div class="manual-grid" id="manual-grid"></div>
           <div class="row wrap">
-            <button id="manual-zero" class="btn">Alle auf 0°</button>
+            <button id="manual-assembly" class="btn">Alle auf Montagestellung</button>
           </div>
         </details>
       </div>
@@ -156,15 +156,15 @@
           <summary>Ablauf (bitte zuerst lesen)</summary>
           <ol>
             <li><b>Montage:</b> Servohörner abnehmen, Torque ein, „Alle auf 1500 µs“. Hörner so
-              aufstecken, dass jedes Gelenk möglichst nah an der Neutralstellung steht.</li>
-            <li><b>Neutralstellung</b> je Servo exakt anfahren (Rohmodus, ±1 µs) und
-              „Aktuelle Stellung = 0°“ drücken.<br>
-              Neutral heißt: <i>Coxa</i> zeigt gerade vom Körper weg, <i>Femur</i> waagerecht,
-              <i>Tibia</i> senkrecht nach unten (90° zum Femur).<br>
-              MK3: bei 1500 µs steht der Femur 15° zu hoch – erst den Femur auf waagerecht
-              absenken, dann die Tibia senkrecht stellen.</li>
-            <li><b>Richtung &amp; Maßstab:</b> Gelenk auf einen bekannten Winkel fahren (z.&nbsp;B. 45°,
-              Winkellehre) und „Aktuelle Stellung = Referenz“ drücken. Positiv bedeutet:
+              aufstecken, dass jedes Bein möglichst nah an der <b>Montagestellung</b> steht:
+              <i>Coxa</i> gerade vom Körper weg (Montagerichtung), <i>Femur</i>
+              <span class="asm-femur">30</span>° nach oben, <i>Tibia</i> senkrecht nach unten
+              (Montagelehre, docs/montagelehre.pdf).</li>
+            <li><b>Montagestellung</b> je Servo exakt anfahren (Rohmodus, ±1 µs) und
+              „Aktuelle Stellung = Montagestellung“ drücken. Je Bein zuerst den Femur, dann die Tibia.</li>
+            <li><b>Richtung &amp; Maßstab:</b> Gelenk auf einen zweiten bekannten Winkel fahren
+              (Coxa ±45°, Femur 0° = waagerecht, Tibia 0° = rechtwinklig zum Femur) und
+              „Aktuelle Stellung = Referenz“ drücken. Positiv bedeutet:
               Coxa nach <b>vorne</b>, Femur nach <b>oben</b>, Tibia nach <b>außen</b>.</li>
             <li><b>Grenzen</b> eintragen, mit dem Test-Schieber prüfen, dann <b>Speichern</b>.</li>
           </ol>
@@ -177,7 +177,7 @@
             <span class="switch-label">Torque</span>
           </label>
           <button id="cal-all-1500" class="btn">Alle auf 1500 µs (Montage)</button>
-          <button id="cal-all-neutral" class="btn">Alle auf 0° (Neutral)</button>
+          <button id="cal-all-assembly" class="btn">Alle auf Montagestellung (kalibriert)</button>
         </div>
         <div class="row wrap">
           <button id="cal-save" class="btn btn-primary">Speichern</button>
@@ -225,16 +225,16 @@
           <div class="ed-section">
             <div class="ed-section-title">2 · Kalibrieren</div>
             <div class="row wrap">
-              <button id="ed-zero" class="btn btn-primary">Aktuelle Stellung = 0°</button>
+              <button id="ed-assembly" class="btn btn-primary">Aktuelle Stellung = Montagestellung</button>
             </div>
             <div class="row wrap">
-              <input id="ed-ref-deg" class="input-num" type="number" value="45" step="5">
+              <input id="ed-ref-deg" class="input-num" type="number" value="0" step="5">
               <span>°</span>
               <button id="ed-ref" class="btn">Aktuelle Stellung = Referenz</button>
               <button id="ed-invert" class="btn">Drehrichtung umkehren</button>
             </div>
             <div class="form-grid cal-fields">
-              <label for="ed-center">Mitte (µs)</label>
+              <label for="ed-center" title="Pulsbreite in der Montagestellung">Montagest. (µs)</label>
               <input id="ed-center" type="number" step="0.5">
               <label for="ed-slope">µs pro Grad</label>
               <input id="ed-slope" type="number" step="0.01">
@@ -252,7 +252,7 @@
             <input id="ed-test" type="range" min="-90" max="90" step="1" value="0">
             <div class="row wrap">
               <button id="ed-go-min" class="btn">Min</button>
-              <button id="ed-go-zero" class="btn">0°</button>
+              <button id="ed-go-ref" class="btn">Montage</button>
               <button id="ed-go-max" class="btn">Max</button>
             </div>
           </div>

@@ -12,22 +12,37 @@ stammen aus dem CAD-Modell:
 | Coxa / Femur / Tibia | 41 / 43 / 94 mm (Achse zu Achse, Tibia bis Fußspitze) |
 | Coxa-Achsen vorne bzw. hinten | 77 mm auseinander, ±73,5 mm vor/hinter der Mitte, Bein 45° schräg |
 | Coxa-Achsen Mitte | 114 mm auseinander, Bein 90° zur Seite |
-| Montagestellung (alle Servos 90°) | Coxa 0°, Femur +15°, Tibia −15° (Tibia senkrecht) |
-| daraus Standardhaltung | Höhe 82,9 mm (Coxa-Achse über Boden), Fußabstand 82,5 mm |
+| Montagestellung (alle Servos 90°) | Coxa 0°, Femur +30°, Tibia −30° (Tibia senkrecht) |
+| daraus Standardhaltung | Höhe 72,5 mm (Coxa-Achse über Boden), Fußabstand 78,2 mm |
 
 Die Zeichnung wird von [`beingeometrie.py`](beingeometrie.py) erzeugt
 (`python3 docs/beingeometrie.py`); ändern sich Maße, dort und in `robot_geometry.h` anpassen.
 
-### Montagestellung ≠ 0°
+### Montagestellung (Servo-Mitte)
 
-Die Beine sind so konstruiert, dass bei Servo-Mitte (90° / 1500 µs) der Femur 15° nach oben
-zeigt und die Tibia senkrecht steht – das ist ungefähr die normale Stehhaltung, die Servos haben
-dort nach beiden Seiten gleich viel Weg. Die IK rechnet aber in der Konvention aus
-[kalibrierung.md](kalibrierung.md) (Femur waagerecht = 0°, Tibia rechtwinklig zum Femur = 0°).
-In dieser Konvention ist die Montagestellung **Coxa 0°, Femur +15°, Tibia −15°**
-(`SERVO_CENTER_POSE`). Die Standardhaltung der Oberfläche (Höhe 82,9 mm, Fußabstand 82,5 mm)
-entspricht genau dieser Stellung, beim Aktivieren der Körperhaltung bewegen sich die Beine also
-kaum.
+Die Servohörner werden bei Servo-Mitte (90° / 1500 µs) in der spinnenartigen Stehhaltung
+aufgesteckt: Femur 30° nach oben, Tibia senkrecht. In der Winkel-Konvention aus
+[kalibrierung.md](kalibrierung.md) (Femur waagerecht = 0°, Tibia rechtwinklig zum Femur = 0°)
+ist das **Coxa 0°, Femur +30°, Tibia −30°** (`ASSEMBLY_POSE`). Die Kalibrierung verwendet diese
+Stellung als Bezug, und die Standardhaltung der Oberfläche (Höhe 72,5 mm, Fußabstand 78,2 mm)
+entspricht ihr genau – beim Aktivieren der Körperhaltung bewegen sich die Beine also kaum.
+Eine Lehre zum Ausdrucken: [montagelehre.pdf](montagelehre.pdf).
+
+**Warum 30°?** Steiler Femur und senkrechte Tibia entlasten die Servos: Die Tibia trägt bei
+senkrechter Stellung kein Drehmoment, der Femur nur über den waagerechten Abstand
+`femur · cos(Femurwinkel)`. Je steiler der Femur aber schon im Stand ist, desto weniger Reserve
+bleibt zum Fußheben – mit dem kurzen Femur (43 mm) und der langen Tibia (94 mm) hebt das Bein
+den Fuß vor allem durch weiteres Anheben des Femurs. Überschlag (Tibia senkrecht, ca. 850 g,
+3 Beine tragen, Schritt ±30 mm, Höhe ±15 mm, Fuß 25 mm heben):
+
+| Femur im Stand | Höhe | Fußabstand | Moment Femur-Servo | Femur im Gang | Tibia im Gang | Fuß senkrecht heben bis Femur 90° |
+|---|---|---|---|---|---|---|
+| +15° | 82,9 mm | 82,5 mm | ≈ 1,18 kg·cm | −6…+56° | −52…+15° | 41 mm |
+| **+30°** | **72,5 mm** | **78,2 mm** | **≈ 1,06 kg·cm** | **+7…+88°** | **−72…−2°** | **29 mm** |
+| +45° | 63,6 mm | 71,4 mm | ≈ 0,86 kg·cm | +18…+116° | −81…−17° | 17 mm (zu wenig) |
+
+Der MG90S schafft etwa 1,8–2,2 kg·cm; +30° ist ein Kompromiss aus Last und Hubreserve. Im Gang
+kann der Fuß beim Heben zusätzlich etwas nach außen wandern, das spart Femurwinkel.
 
 Voraussetzung: Die Servos sind kalibriert ([kalibrierung.md](kalibrierung.md)), denn die IK
 verwendet dieselben Gelenkwinkel-Konventionen.

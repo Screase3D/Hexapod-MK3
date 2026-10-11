@@ -1,11 +1,13 @@
 #pragma once
 // Servokalibrierung: Abbildung Gelenkwinkel (Grad) <-> Pulsbreite (µs).
 //
-//   puls_us = center_us + winkel_deg * us_per_deg
+//   puls_us = center_us + (winkel_deg - ref_deg) * us_per_deg
 //
-// center_us   Puls in der Neutralstellung (Gelenkwinkel 0°, siehe docs/kalibrierung.md)
+// ref_deg     Gelenkwinkel der Montagestellung (ASSEMBLY_POSE in robot_geometry.h,
+//             fest je Gelenktyp), siehe docs/kalibrierung.md
+// center_us   Puls in der Montagestellung
 // us_per_deg  Steigung inkl. Vorzeichen (Vorzeichen = Drehrichtung)
-// min/max_deg Software-Endanschläge des Gelenks
+// min/max_deg Software-Endanschläge des Gelenks (Gelenkwinkel, nicht relativ)
 
 #include <ArduinoJson.h>
 #include "config.h"
@@ -23,6 +25,7 @@ class Calibration {
 
   void setDefaults();
   static ServoCal defaultFor(int id);
+  static float refDeg(int id);  // Gelenkwinkel der Montagestellung
 
   bool load();  // aus NVS; false -> Standardwerte aktiv
   bool save() const;
@@ -36,14 +39,15 @@ class Calibration {
   float clampDeg(int id, float deg) const;
 
   // Plausibilitätsprüfung eines Datensatzes; err enthält ggf. den Grund
-  static bool validate(const ServoCal& c, String& err);
+  static bool validate(int id, const ServoCal& c, String& err);
 
   void toJson(JsonObject obj, int id) const;
   void toJson(JsonDocument& doc) const;
   // Übernimmt alle Servos aus JSON (Format wie toJson). Bei Fehlern bleibt
-  // die bisherige Kalibrierung unverändert.
+  // die bisherige Kalibrierung unverändert. Version 1 (center_us = Puls bei 0°)
+  // wird umgerechnet.
   bool fromJson(JsonVariantConst root, String& err);
-  static bool entryFromJson(JsonVariantConst obj, ServoCal& out, String& err);
+  static bool entryFromJson(JsonVariantConst obj, int id, int version, ServoCal& out, String& err);
 
  private:
   ServoCal cal_[NUM_SERVOS];

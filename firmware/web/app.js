@@ -73,9 +73,17 @@ function isCalibrated(c) {
   return !!c && (c.center_us !== 1500 || Math.abs(Math.abs(c.us_per_deg) - DEFAULT_SLOPE) > 0.01);
 }
 
+// Kalibrierung: puls = center_us + (winkel - ref_deg) * us_per_deg
+// (ref_deg = Gelenkwinkel der Montagestellung)
+const refDeg = (c) => (c && typeof c.ref_deg === 'number' ? c.ref_deg : 0);
+
 function usToDeg(id, us) {
   const c = S.cal[id];
-  return c ? (us - c.center_us) / c.us_per_deg : 0;
+  return c ? refDeg(c) + (us - c.center_us) / c.us_per_deg : 0;
+}
+
+function degToUs(c, deg) {
+  return c.center_us + (deg - refDeg(c)) * c.us_per_deg;
 }
 
 async function api(path, body) {
@@ -141,6 +149,7 @@ function onMessage(m) {
   if (m.type !== 'ack') return;
   if (m.calibration) {
     for (const c of m.calibration.servos) S.cal[c.id] = c;
+    if (S.cal[1]) document.querySelectorAll('.asm-femur').forEach((e) => { e.textContent = refDeg(S.cal[1]); });
     renderLegs();
     renderEditorCal();
     renderManualLimits();
@@ -417,7 +426,7 @@ function buildManual() {
     }
     grid.appendChild(box);
   }
-  $('manual-zero').onclick = () => send('all_deg', { deg: 0 });
+  $('manual-assembly').onclick = () => send('all_assembly');
 }
 
 function renderManualLimits() {
@@ -450,9 +459,13 @@ function currentUs() {
   return c ? c.center_us : 1500;
 }
 
+// Vorschlag für den zweiten Bezugswinkel: Coxa ±45°, Femur/Tibia 0°
+const REF_SUGGEST = [45, 0, 0];
+
 function selectServo(id) {
   S.sel = (id + NUM_SERVOS) % NUM_SERVOS;
   S.localUs = null;
+  $('ed-ref-deg').value = REF_SUGGEST[S.sel % 3];
   const leg = Math.floor(S.sel / 3);
   $('ed-title').textContent = `Bein ${leg + 1} – ${JOINTS[S.sel % 3]}`;
   $('ed-sub').textContent = `${LEGS[leg]} · ID ${S.sel}`;
@@ -472,6 +485,7 @@ function renderEditorCal() {
   const test = $('ed-test');
   test.min = Math.ceil(c.min_deg);
   test.max = Math.floor(c.max_deg);
+  $('ed-assembly').textContent = `Aktuelle Stellung = Montagestellung (${fmtDeg(refDeg(c)).replace('.0', '')}°)`;
 }
 
 function renderEditorLive() {
@@ -511,7 +525,7 @@ function setTestDeg(deg) {
   const c = S.cal[S.sel];
   if (c) deg = clamp(deg, c.min_deg, c.max_deg);
   S.localTime = Date.now();
-  S.localUs = c ? c.center_us + deg * c.us_per_deg : null;
+  S.localUs = c ? degToUs(c, deg) : null;
   $('ed-test').value = Math.round(deg);
   $('ed-test-val').textContent = fmtDeg(deg);
   sendDeg(S.sel, deg);
@@ -526,7 +540,7 @@ function bindEditor() {
   document.querySelectorAll('[data-jog]').forEach((b) => {
     b.onclick = () => setUs(currentUs() + +b.dataset.jog);
   });
-  $('ed-zero').onclick = () => send('cal_zero', { id: S.sel });
+  $('ed-assembly').onclick = () => send('cal_center', { id: S.sel });
   $('ed-ref').onclick = () => {
     const deg = parseFloat($('ed-ref-deg').value);
     if (!isFinite(deg)) return toast('Referenzwinkel eingeben', true);
@@ -545,7 +559,7 @@ function bindEditor() {
   };
   $('ed-test').oninput = (e) => setTestDeg(+e.target.value);
   $('ed-go-min').onclick = () => S.cal[S.sel] && setTestDeg(S.cal[S.sel].min_deg);
-  $('ed-go-zero').onclick = () => setTestDeg(0);
+  $('ed-go-ref').onclick = () => S.cal[S.sel] && setTestDeg(refDeg(S.cal[S.sel]));
   $('ed-go-max').onclick = () => S.cal[S.sel] && setTestDeg(S.cal[S.sel].max_deg);
 }
 
@@ -563,14 +577,14 @@ function bindGlobal() {
       if (!send('torque', { on })) e.target.checked = !on;
     };
   }
-  $('ctl-neutral').onclick = () => send('all_deg', { deg: 0 });
+  $('ctl-assembly').onclick = () => send('all_assembly');
   $('ctl-slew').oninput = (e) => {
     $('ctl-slew-val').textContent = `${e.target.value}°/s`;
   };
   $('ctl-slew').onchange = (e) => send('slew', { deg_per_s: +e.target.value });
 
   $('cal-all-1500').onclick = () => send('all_us', { us: 1500 });
-  $('cal-all-neutral').onclick = () => send('all_deg', { deg: 0 });
+  $('cal-all-assembly').onclick = () => send('all_assembly');
   $('cal-save').onclick = () => send('cal_save');
   $('cal-reload').onclick = () => {
     if (confirm('Ungespeicherte Änderungen verwerfen und gespeicherte Kalibrierung laden?')) send('cal_reload');

@@ -29,7 +29,7 @@ state = {
                "max_fps": 15, "rotation": 0, "xclk_mhz": 20, "xclk_active_mhz": 20, "clients": 0, "port": 81, "sensor": "OV2640 (Mock)"},
     "start": time.time(),
     "mode": "manual",
-    "pose": {"x": 0, "y": 0, "z": 72, "roll": 0, "pitch": 0, "yaw": 0, "stance": 90},
+    "pose": {"x": 0, "y": 0, "z": 72.5, "roll": 0, "pitch": 0, "yaw": 0, "stance": 78.2},
     # WLAN: startet im Access-Point-Modus (MOCK_WIFI=sta für Heimnetz-Betrieb)
     "wifi_ap": os.environ.get("MOCK_WIFI", "ap") == "ap",
     "wifi_sta": "idle" if os.environ.get("MOCK_WIFI", "ap") == "ap" else "connected",
@@ -48,10 +48,21 @@ def battery():
     return {"v": 7.62, "pct": 63, "state": "ok", "enabled": True, "deep_sleep": state["bat_sleep"]}
 
 
+ASSEMBLY = [0.0, 30.0, -30.0]  # Montagestellung je Gelenktyp (robot_geometry.h)
+
+
 def default_cal(i):
+    ref = ASSEMBLY[i % 3]
+    span = 60.0 if i % 3 == 0 else 70.0
     return {"id": i, "leg": i // 3, "joint": i % 3, "board": 0 if i < 9 else 1, "channel": i % 9,
-            "center_us": 1500.0, "us_per_deg": round(DEFAULT_SLOPE, 3),
-            "min_deg": -60.0 if i % 3 == 0 else -80.0, "max_deg": 60.0 if i % 3 == 0 else 80.0}
+            "ref_deg": ref, "center_us": 1500.0, "us_per_deg": round(DEFAULT_SLOPE, 3),
+            "min_deg": ref - span, "max_deg": ref + span}
+
+
+def us_of(i, deg):
+    c = state["cal"][i]
+    d = max(c["min_deg"], min(c["max_deg"], deg))
+    return c["center_us"] + (d - c["ref_deg"]) * c["us_per_deg"]
 
 
 state["cal"] = [default_cal(i) for i in range(18)]
@@ -60,7 +71,7 @@ saved_cal = json.loads(json.dumps(state["cal"]))
 
 def deg_of(i):
     c = state["cal"][i]
-    return round((state["us"][i] - c["center_us"]) / c["us_per_deg"], 1)
+    return round(c["ref_deg"] + (state["us"][i] - c["center_us"]) / c["us_per_deg"], 1)
 
 
 def i2c():
@@ -147,35 +158,38 @@ def handle(cmd):
             if k in cmd:
                 state["pose"][k] = cmd[k]
     elif c == "pose_reset":
-        state["pose"] = {"x": 0, "y": 0, "z": 72, "roll": 0, "pitch": 0, "yaw": 0, "stance": 90}
+        state["pose"] = {"x": 0, "y": 0, "z": 72.5, "roll": 0, "pitch": 0, "yaw": 0, "stance": 78.2}
         out["msg"] = "Haltung zurückgesetzt"
     elif c == "servo_us":
         state["us"][i] = max(500, min(2500, cmd["us"]))
     elif c == "servo_deg":
-        cal = state["cal"][i]
-        d = max(cal["min_deg"], min(cal["max_deg"], cmd["deg"]))
-        state["us"][i] = cal["center_us"] + d * cal["us_per_deg"]
+        state["us"][i] = us_of(i, cmd["deg"])
     elif c == "all_us":
         state["us"] = [float(cmd.get("us", 1500))] * 18
     elif c == "all_deg":
+        state["us"] = [us_of(k, cmd.get("deg", 0)) for k in range(18)]
+    elif c == "all_assembly":
         state["us"] = [cal["center_us"] for cal in state["cal"]]
     elif c == "slew":
         state["slew"] = float(cmd["deg_per_s"])
     elif c == "cal_get":
         if i is None:
-            out["calibration"] = {"version": 1, "servos": state["cal"], "dirty": state["dirty"]}
+            out["calibration"] = {"version": 2, "servos": state["cal"], "dirty": state["dirty"]}
         else:
             out["cal"] = state["cal"][i]
-    elif c == "cal_zero":
+    elif c == "cal_center":
         state["cal"][i]["center_us"] = state["us"][i]
         state["dirty"] = True
-        out.update(msg="Neutralstellung übernommen", cal=state["cal"][i])
+        out.update(msg="Montagestellung übernommen", cal=state["cal"][i])
     elif c == "cal_ref":
         delta = state["us"][i] - state["cal"][i]["center_us"]
-        if abs(delta) < 40:
-            out.update(ok=False, msg="Servo steht noch zu nah an 0 Grad")
+        d_deg = cmd["deg"] - state["cal"][i]["ref_deg"]
+        if abs(d_deg) < 10:
+            out.update(ok=False, msg="Referenzwinkel muss mindestens 10 Grad von der Montagestellung entfernt sein")
+        elif abs(delta) < 40:
+            out.update(ok=False, msg="Servo steht noch zu nah an der Montagestellung")
         else:
-            state["cal"][i]["us_per_deg"] = round(delta / cmd["deg"], 3)
+            state["cal"][i]["us_per_deg"] = round(delta / d_deg, 3)
             state["dirty"] = True
             out["msg"] = "Referenzwinkel übernommen"
         out["cal"] = state["cal"][i]
@@ -310,8 +324,8 @@ async def kinematics(_):
         "mounts": [{"x": 73.5, "y": 38.5, "angle": 45}, {"x": 0, "y": 57, "angle": 90},
                    {"x": -73.5, "y": 38.5, "angle": 135}, {"x": 73.5, "y": -38.5, "angle": -45},
                    {"x": 0, "y": -57, "angle": -90}, {"x": -73.5, "y": -38.5, "angle": -135}],
-        "limits": {"height_min": 50, "height_max": 115, "height_default": 82.9,
-                   "stance_min": 60, "stance_max": 135, "stance_default": 82.5,
+        "limits": {"height_min": 50, "height_max": 115, "height_default": 72.5,
+                   "stance_min": 60, "stance_max": 135, "stance_default": 78.2,
                    "shift_max": 40, "tilt_max": 20, "yaw_max": 25}})
 
 

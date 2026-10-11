@@ -32,10 +32,13 @@ constexpr kin::LegMount LEG_MOUNTS[6] = {
     {-73.5f, -38.5f, -135.0f},  // Bein 6 hinten rechts
 };
 
-// Gelenkwinkel (Konvention aus docs/kalibrierung.md), bei denen alle Servos in
-// der Mitte stehen (90° / 1500 µs) – so ist das Bein konstruiert: Femur 15°
-// nach oben, Tibia senkrecht (also 15° nach innen gegenüber "rechtwinklig").
-constexpr kin::JointAngles SERVO_CENTER_POSE = {0.0f, 15.0f, -15.0f};
+// Montagestellung: Gelenkwinkel (Konvention aus docs/kalibrierung.md), in denen
+// die Servohörner bei Servo-Mitte (1500 µs) aufgesteckt werden. Die Kalibrierung
+// verwendet sie als Bezug (center_us = Puls in dieser Stellung).
+// Spinnenartig: Femur 30° nach oben, Tibia senkrecht (= 30° nach innen
+// gegenüber "rechtwinklig zum Femur"). Liegt mitten im Arbeitsbereich beim
+// Laufen (Femur ca. +5..+90°, Tibia ca. -70..0°), siehe docs/kinematik.md.
+constexpr kin::JointAngles ASSEMBLY_POSE = {0.0f, 30.0f, -30.0f};
 
 // Körperhaltung: Standardwerte und Grenzen der Oberfläche
 struct PoseLimits {
@@ -46,12 +49,12 @@ struct PoseLimits {
   float yaw_max;                                 // Gieren
 };
 
-// Standardhaltung = SERVO_CENTER_POSE:
-//   Höhe       = tibia - femur * sin 15° = 82,9 mm
-//   Fußabstand = coxa + femur * cos 15° = 82,5 mm
+// Standardhaltung = ASSEMBLY_POSE (alle Servos in der Mitte):
+//   Höhe       = tibia - femur * sin 30° = 72,5 mm
+//   Fußabstand = coxa + femur * cos 30° = 78,2 mm
 constexpr PoseLimits POSE_LIMITS = {
-    50.0f, 115.0f, 82.9f,
-    60.0f, 135.0f, 82.5f,
+    50.0f, 115.0f, 72.5f,
+    60.0f, 135.0f, 78.2f,
     40.0f,
     20.0f,
     25.0f,

@@ -107,6 +107,10 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     motion::setMode(motion::Mode::Manual);
     servos.setAllAngleDeg(in["deg"] | 0.0f);
     result(out, true);
+  } else if (strcmp(cmd, "all_assembly") == 0) {
+    motion::setMode(motion::Mode::Manual);
+    servos.setAllAssembly();
+    result(out, true);
   } else if (strcmp(cmd, "slew") == 0) {
     servos.setSlewDegPerS(in["deg_per_s"] | SERVO_SLEW_DEG_PER_S);
     out["deg_per_s"] = servos.slewDegPerS();
@@ -132,9 +136,9 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     if (in["max_deg"].is<float>()) c.max_deg = in["max_deg"];
     result(out, servos.setCal(id, c, err), err);
     attachCal(out, id);
-  } else if (strcmp(cmd, "cal_zero") == 0) {
+  } else if (strcmp(cmd, "cal_center") == 0) {
     if (!validId(in, id, out)) return;
-    result(out, servos.captureZero(id, err), err.isEmpty() ? "Neutralstellung übernommen" : err);
+    result(out, servos.captureCenter(id, err), err.isEmpty() ? "Montagestellung übernommen" : err);
     attachCal(out, id);
   } else if (strcmp(cmd, "cal_ref") == 0) {
     if (!validId(in, id, out)) return;

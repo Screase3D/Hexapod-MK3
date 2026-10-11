@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297" font-family="Helvetica, Arial, 'Liberation Sans', 'DejaVu Sans', sans-serif">
+<rect width="210" height="297" fill="#fff"/>
+<text x="12.00" y="16.00" font-size="5.5" text-anchor="start" fill="#222" font-weight="bold" >Hexapod MK3 – Montagelehre (1:1)</text>
+<text x="12.00" y="22.00" font-size="2.8" text-anchor="start" fill="#666" font-weight="normal" >Montagestellung bei 1500 µs: Coxa 0° · Femur +30° · Tibia −30° (senkrecht). Mit 100 % / „Tatsächliche Größe“ drucken.</text>
+<line x1="12.00" y1="29.00" x2="62.00" y2="29.00" stroke="#222" stroke-width="0.4" />
+<line x1="12.00" y1="27.00" x2="12.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="17.00" y1="27.80" x2="17.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="22.00" y1="27.00" x2="22.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="27.00" y1="27.80" x2="27.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="32.00" y1="27.00" x2="32.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="37.00" y1="27.80" x2="37.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="42.00" y1="27.00" x2="42.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="47.00" y1="27.80" x2="47.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="52.00" y1="27.00" x2="52.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="57.00" y1="27.80" x2="57.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<line x1="62.00" y1="27.00" x2="62.00" y2="29.00" stroke="#222" stroke-width="0.25" />
+<text x="65.00" y="30.00" font-size="2.8" text-anchor="start" fill="#d0453f" font-weight="bold" >Kontrollmaß 50 mm – nachmessen, sonst stimmt der Maßstab nicht</text>
+<rect x="18.00" y="44.50" width="74.24" height="118.00" fill="none" stroke="#999" stroke-width="0.25" stroke-dasharray="2 1.5"/>
+<text x="55.12" y="50.50" font-size="3.4" text-anchor="middle" fill="#222" font-weight="bold" >A – Bein zeigt nach rechts</text>
+<line x1="18.00" y1="80.00" x2="79.24" y2="80.00" stroke="#d0453f" stroke-width="0.3" stroke-dasharray="3 1.2"/>
+<text x="37.00" y="84.00" font-size="2.3" text-anchor="start" fill="#d0453f" font-weight="normal" >waagerecht (Femur 0°)</text>
+<text x="19.00" y="78.50" font-size="2.3" text-anchor="start" fill="#d0453f" font-weight="normal" >Körper</text>
+<line x1="18.00" y1="152.50" x2="92.24" y2="152.50" stroke="#666" stroke-width="0.3" />
+<text x="55.12" y="156.50" font-size="2.3" text-anchor="middle" fill="#666" font-weight="normal" >Boden in Standardhaltung (72,5 mm unter der Achse)</text>
+<line x1="30.00" y1="80.00" x2="67.24" y2="58.50" stroke="#222" stroke-width="0.6" />
+<line x1="67.24" y1="58.50" x2="67.24" y2="152.50" stroke="#222" stroke-width="0.6" />
+<text x="47.12" y="66.65" font-size="2.6" text-anchor="middle" fill="#222" font-weight="normal" transform="rotate(-30.0 47.12 66.65)">Femur 43</text>
+<text x="69.24" y="115.50" font-size="2.6" text-anchor="start" fill="#222" font-weight="normal" >Tibia 94</text>
+<line x1="67.24" y1="58.50" x2="84.24" y2="87.94" stroke="#1f6fd1" stroke-width="0.25" stroke-dasharray="2 1"/>
+<text x="80.24" y="91.44" font-size="2.3" text-anchor="middle" fill="#1f6fd1" font-weight="normal" >Tibia 0° (⟂ Femur)</text>
+<path d="M40.39,74.00 A12,12 0 0,1 42.00,80.00" fill="none" stroke="#1f6fd1" stroke-width="0.3"/>
+<text x="43.50" y="78.20" font-size="2.8" text-anchor="start" fill="#1f6fd1" font-weight="bold" >30°</text>
+<circle cx="30.00" cy="80.00" r="3" fill="none" stroke="#222" stroke-width="0.35"/>
+<line x1="25.00" y1="80.00" x2="35.00" y2="80.00" stroke="#222" stroke-width="0.25" />
+<line x1="30.00" y1="75.00" x2="30.00" y2="85.00" stroke="#222" stroke-width="0.25" />
+<circle cx="30.00" cy="80.00" r="0.5" fill="#222"/>
+<text x="30.00" y="89.00" font-size="2.8" text-anchor="middle" fill="#222" font-weight="bold" >Femur-Achse</text>
+<circle cx="67.24" cy="58.50" r="3" fill="none" stroke="#222" stroke-width="0.35"/>
+<line x1="62.24" y1="58.50" x2="72.24" y2="58.50" stroke="#222" stroke-width="0.25" />
+<line x1="67.24" y1="53.50" x2="67.24" y2="63.50" stroke="#222" stroke-width="0.25" />
+<circle cx="67.24" cy="58.50" r="0.5" fill="#222"/>
+<text x="61.24" y="55.00" font-size="2.8" text-anchor="end" fill="#222" font-weight="bold" >Knie-Achse</text>
+<path d="M64.24,147.50 L67.24,152.50 L70.24,147.50" fill="none" stroke="#222" stroke-width="0.4"/>
+<circle cx="67.24" cy="152.50" r="0.7" fill="#222"/>
+<text x="71.24" y="150.50" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" >Fußspitze</text>
+<rect x="117.76" y="44.50" width="74.24" height="118.00" fill="none" stroke="#999" stroke-width="0.25" stroke-dasharray="2 1.5"/>
+<text x="154.88" y="50.50" font-size="3.4" text-anchor="middle" fill="#222" font-weight="bold" >B – Bein zeigt nach links</text>
+<line x1="192.00" y1="80.00" x2="130.76" y2="80.00" stroke="#d0453f" stroke-width="0.3" stroke-dasharray="3 1.2"/>
+<text x="173.00" y="84.00" font-size="2.3" text-anchor="end" fill="#d0453f" font-weight="normal" >waagerecht (Femur 0°)</text>
+<text x="191.00" y="78.50" font-size="2.3" text-anchor="end" fill="#d0453f" font-weight="normal" >Körper</text>
+<line x1="117.76" y1="152.50" x2="192.00" y2="152.50" stroke="#666" stroke-width="0.3" />
+<text x="154.88" y="156.50" font-size="2.3" text-anchor="middle" fill="#666" font-weight="normal" >Boden in Standardhaltung (72,5 mm unter der Achse)</text>
+<line x1="180.00" y1="80.00" x2="142.76" y2="58.50" stroke="#222" stroke-width="0.6" />
+<line x1="142.76" y1="58.50" x2="142.76" y2="152.50" stroke="#222" stroke-width="0.6" />
+<text x="162.88" y="66.65" font-size="2.6" text-anchor="middle" fill="#222" font-weight="normal" transform="rotate(30.0 162.88 66.65)">Femur 43</text>
+<text x="140.76" y="115.50" font-size="2.6" text-anchor="end" fill="#222" font-weight="normal" >Tibia 94</text>
+<line x1="142.76" y1="58.50" x2="125.76" y2="87.94" stroke="#1f6fd1" stroke-width="0.25" stroke-dasharray="2 1"/>
+<text x="129.76" y="91.44" font-size="2.3" text-anchor="middle" fill="#1f6fd1" font-weight="normal" >Tibia 0° (⟂ Femur)</text>
+<path d="M168.00,80.00 A12,12 0 0,1 169.61,74.00" fill="none" stroke="#1f6fd1" stroke-width="0.3"/>
+<text x="166.50" y="78.20" font-size="2.8" text-anchor="end" fill="#1f6fd1" font-weight="bold" >30°</text>
+<circle cx="180.00" cy="80.00" r="3" fill="none" stroke="#222" stroke-width="0.35"/>
+<line x1="175.00" y1="80.00" x2="185.00" y2="80.00" stroke="#222" stroke-width="0.25" />
+<line x1="180.00" y1="75.00" x2="180.00" y2="85.00" stroke="#222" stroke-width="0.25" />
+<circle cx="180.00" cy="80.00" r="0.5" fill="#222"/>
+<text x="180.00" y="89.00" font-size="2.8" text-anchor="middle" fill="#222" font-weight="bold" >Femur-Achse</text>
+<circle cx="142.76" cy="58.50" r="3" fill="none" stroke="#222" stroke-width="0.35"/>
+<line x1="137.76" y1="58.50" x2="147.76" y2="58.50" stroke="#222" stroke-width="0.25" />
+<line x1="142.76" y1="53.50" x2="142.76" y2="63.50" stroke="#222" stroke-width="0.25" />
+<circle cx="142.76" cy="58.50" r="0.5" fill="#222"/>
+<text x="148.76" y="55.00" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" >Knie-Achse</text>
+<path d="M139.76,147.50 L142.76,152.50 L145.76,147.50" fill="none" stroke="#222" stroke-width="0.4"/>
+<circle cx="142.76" cy="152.50" r="0.7" fill="#222"/>
+<text x="138.76" y="150.50" font-size="2.8" text-anchor="end" fill="#222" font-weight="bold" >Fußspitze</text>
+<text x="12.00" y="177.00" font-size="3.4" text-anchor="start" fill="#222" font-weight="bold" >C – Coxa-Winkel (Draufsicht)</text>
+<path d="M20,240 L75,240 A55,55 0 0,0 20,185 z" fill="none" stroke="#999" stroke-width="0.25" stroke-dasharray="2 1.5"/>
+<line x1="70.00" y1="240.00" x2="75.00" y2="240.00" stroke="#222" stroke-width="0.25" />
+<line x1="72.30" y1="235.42" x2="74.79" y2="235.21" stroke="#222" stroke-width="0.25" />
+<line x1="71.70" y1="230.88" x2="74.16" y2="230.45" stroke="#222" stroke-width="0.25" />
+<line x1="68.30" y1="227.06" x2="73.13" y2="225.76" stroke="#222" stroke-width="0.25" />
+<line x1="69.33" y1="222.04" x2="71.68" y2="221.19" stroke="#222" stroke-width="0.25" />
+<line x1="67.58" y1="217.81" x2="69.85" y2="216.76" stroke="#222" stroke-width="0.25" />
+<line x1="63.30" y1="215.00" x2="67.63" y2="212.50" stroke="#222" stroke-width="0.25" />
+<line x1="63.01" y1="209.89" x2="65.05" y2="208.45" stroke="#222" stroke-width="0.25" />
+<line x1="60.22" y1="206.25" x2="62.13" y2="204.65" stroke="#222" stroke-width="0.25" />
+<line x1="55.36" y1="204.64" x2="58.89" y2="201.11" stroke="#222" stroke-width="0.25" />
+<line x1="53.75" y1="199.78" x2="55.35" y2="197.87" stroke="#222" stroke-width="0.25" />
+<line x1="50.11" y1="196.99" x2="51.55" y2="194.95" stroke="#222" stroke-width="0.25" />
+<line x1="45.00" y1="196.70" x2="47.50" y2="192.37" stroke="#222" stroke-width="0.25" />
+<line x1="42.19" y1="192.42" x2="43.24" y2="190.15" stroke="#222" stroke-width="0.25" />
+<line x1="37.96" y1="190.67" x2="38.81" y2="188.32" stroke="#222" stroke-width="0.25" />
+<line x1="32.94" y1="191.70" x2="34.24" y2="186.87" stroke="#222" stroke-width="0.25" />
+<line x1="29.12" y1="188.30" x2="29.55" y2="185.84" stroke="#222" stroke-width="0.25" />
+<line x1="24.58" y1="187.70" x2="24.79" y2="185.21" stroke="#222" stroke-width="0.25" />
+<line x1="20.00" y1="190.00" x2="20.00" y2="185.00" stroke="#222" stroke-width="0.25" />
+<line x1="20.00" y1="240.00" x2="69.00" y2="240.00" stroke="#222" stroke-width="0.4" />
+<line x1="20.00" y1="240.00" x2="54.65" y2="205.35" stroke="#d0453f" stroke-width="0.4" />
+<line x1="20.00" y1="240.00" x2="20.00" y2="191.00" stroke="#d0453f" stroke-width="0.4" />
+<circle cx="20" cy="240" r="0.7" fill="#222"/>
+<text x="23.00" y="244.00" font-size="2.6" text-anchor="start" fill="#222" font-weight="bold" >Coxa-Achse</text>
+<text x="75.00" y="244.00" font-size="2.4" text-anchor="end" fill="#666" font-weight="normal" >parallel zur Längsachse</text>
+<text x="59.40" y="200.40" font-size="2.6" text-anchor="start" fill="#d0453f" font-weight="bold" >Eckbeine 45°</text>
+<text x="19.00" y="183.00" font-size="2.6" text-anchor="start" fill="#d0453f" font-weight="bold" >Mittelbeine 90°</text>
+<text x="92.00" y="182.00" font-size="3.4" text-anchor="start" fill="#222" font-weight="bold" >So geht's</text>
+<text x="92.00" y="188.00" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" >1.</text>
+<text x="97.00" y="188.00" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Roboter aufbocken (Beine frei). Oberfläche → Kalibrierung:</text>
+<text x="92.00" y="192.60" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" ></text>
+<text x="97.00" y="192.60" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Torque an, „Alle auf 1500 µs (Montage)“.</text>
+<text x="92.00" y="197.20" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" >2.</text>
+<text x="97.00" y="197.20" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Lehre A/B ausschneiden, am besten auf Karton kleben;</text>
+<text x="92.00" y="201.80" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" ></text>
+<text x="97.00" y="201.80" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >A oder B – je nachdem, von welcher Seite du schaust.</text>
+<text x="92.00" y="206.40" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" >3.</text>
+<text x="97.00" y="206.40" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Kreuz „Femur-Achse“ auf die Femur-Drehachse legen, rote</text>
+<text x="92.00" y="211.00" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" ></text>
+<text x="97.00" y="211.00" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Linie parallel zur Körperebene (Unterseite/Coxa-Halter).</text>
+<text x="92.00" y="215.60" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" >4.</text>
+<text x="97.00" y="215.60" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Femur-Horn auf den Zahn stecken, bei dem die Knie-Achse</text>
+<text x="92.00" y="220.20" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" ></text>
+<text x="97.00" y="220.20" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >am nächsten am Kreuz „Knie-Achse“ liegt (1 Zahn ≈ 18°).</text>
+<text x="92.00" y="224.80" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" >5.</text>
+<text x="97.00" y="224.80" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Tibia-Horn so, dass die Fußspitze auf der Marke liegt.</text>
+<text x="92.00" y="229.40" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" >6.</text>
+<text x="97.00" y="229.40" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Coxa mit Lehre C: Bein in Montagerichtung (45° / 90°).</text>
+<text x="92.00" y="234.00" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" >7.</text>
+<text x="97.00" y="234.00" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Feinjustage je Servo im Rohmodus (±1 µs) bis alles</text>
+<text x="92.00" y="238.60" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" ></text>
+<text x="97.00" y="238.60" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >deckungsgleich ist → „Aktuelle Stellung = Montagestellung“.</text>
+<text x="92.00" y="243.20" font-size="2.8" text-anchor="start" fill="#222" font-weight="bold" ></text>
+<text x="97.00" y="243.20" font-size="2.8" text-anchor="start" fill="#222" font-weight="normal" >Je Bein zuerst Femur, dann Tibia. Details: docs/kalibrierung.md</text>
+<text x="12.00" y="287.00" font-size="2.4" text-anchor="start" fill="#666" font-weight="normal" >Linien = Achslinien (Drehpunkt zu Drehpunkt), nicht Bauteilkanten. Erzeugt mit docs/montagelehre.py.</text>
+</svg>

@@ -44,9 +44,9 @@ bool ServoController::begin(TwoWire& wire) {
 
   lock();
   if (!cal_.load()) log_w("Keine gültige Kalibrierung im NVS - Standardwerte aktiv");
-  // Startsollwert: Neutralstellung laut Kalibrierung (Servos bleiben aber aus)
+  // Startsollwert: Montagestellung laut Kalibrierung (Servos bleiben aber aus)
   for (int i = 0; i < NUM_SERVOS; ++i) {
-    ch_[i].target_us = ch_[i].current_us = cal_.degToUs(i, 0.0f);
+    ch_[i].target_us = ch_[i].current_us = cal_.degToUs(i, Calibration::refDeg(i));
     ch_[i].active = false;
   }
   force_write_ = true;
@@ -232,6 +232,14 @@ void ServoController::setAllAngleDeg(float deg) {
   unlock();
 }
 
+void ServoController::setAllAssembly() {
+  lock();
+  for (int i = 0; i < NUM_SERVOS; ++i) {
+    ch_[i].target_us = clampUs(cal_.degToUs(i, Calibration::refDeg(i)));
+  }
+  unlock();
+}
+
 void ServoController::setSlewDegPerS(float v) {
   lock();
   slew_deg_per_s_ = constrain(v, 10.0f, 1000.0f);
@@ -259,7 +267,7 @@ bool ServoController::setCal(int id, const ServoCal& c, String& err) {
     err = "ungültige Servo-ID";
     return false;
   }
-  if (!Calibration::validate(c, err)) return false;
+  if (!Calibration::validate(id, c, err)) return false;
   lock();
   cal_[id] = c;
   cal_dirty_ = true;
@@ -267,7 +275,7 @@ bool ServoController::setCal(int id, const ServoCal& c, String& err) {
   return true;
 }
 
-bool ServoController::captureZero(int id, String& err) {
+bool ServoController::captureCenter(int id, String& err) {
   if (id < 0 || id >= NUM_SERVOS) {
     err = "ungültige Servo-ID";
     return false;
@@ -284,8 +292,9 @@ bool ServoController::captureReference(int id, float deg, String& err) {
     err = "ungültige Servo-ID";
     return false;
   }
-  if (fabsf(deg) < 10.0f) {
-    err = "Referenzwinkel muss mindestens 10 Grad betragen";
+  float d_deg = deg - Calibration::refDeg(id);
+  if (fabsf(d_deg) < 10.0f) {
+    err = "Referenzwinkel muss mindestens 10 Grad von der Montagestellung entfernt sein";
     return false;
   }
   lock();
@@ -293,10 +302,10 @@ bool ServoController::captureReference(int id, float deg, String& err) {
   float delta = ch_[id].target_us - c.center_us;
   bool ok = false;
   if (fabsf(delta) < 40.0f) {
-    err = "Servo steht noch zu nah an 0 Grad";
+    err = "Servo steht noch zu nah an der Montagestellung";
   } else {
-    c.us_per_deg = delta / deg;
-    ok = Calibration::validate(c, err);
+    c.us_per_deg = delta / d_deg;
+    ok = Calibration::validate(id, c, err);
     if (ok) {
       cal_[id] = c;
       cal_dirty_ = true;

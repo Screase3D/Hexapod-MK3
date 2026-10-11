@@ -13,7 +13,7 @@ from pathlib import Path
 
 # --- Maße in mm (Achse zu Achse) -------------------------------------------
 COXA, FEMUR, TIBIA = 41.0, 43.0, 94.0
-FEMUR_NEUTRAL_DEG = 15.0  # Montagestellung: Femur bei Servo 90° über der Waagerechten, Tibia senkrecht
+FEMUR_ASSEMBLY_DEG = 30.0  # Montagestellung (ASSEMBLY_POSE): Femur über der Waagerechten, Tibia senkrecht
 FRONT_SPAN, MID_SPAN, LENGTH = 77.0, 114.0, 147.0  # Abstände der Coxa-Achsen
 CORNER_ANGLE = 45.0  # Beine vorne/hinten gegenüber der Längsachse
 
@@ -22,7 +22,7 @@ PLATE_X, PLATE_Y = 72.0, 43.5  # halbe Länge/Breite der Grundplatte
 ESP_X0, ESP_X1, ESP_Y = -27.0, 60.0, 21.0  # ESP32-Platine
 
 # --- abgeleitete Werte ------------------------------------------------------
-fa = math.radians(FEMUR_NEUTRAL_DEG)
+fa = math.radians(FEMUR_ASSEMBLY_DEG)
 REACH = COXA + FEMUR * math.cos(fa)  # Coxa-Achse -> Fuß (waagerecht)
 HEIGHT = TIBIA - FEMUR * math.sin(fa)  # Coxa-Achse über Boden
 MOUNTS = [  # (Name, x, y, Winkel, PCA, Kanäle)
@@ -162,7 +162,10 @@ joint(fx, fy)
 joint(kx, ky)
 el(f'<circle cx="{footx:.1f}" cy="{footy:.1f}" r="6" fill="{C_LINE}"/>')
 text((X0 + fx) / 2, Y0 + 30, "Coxa", size=14, weight="bold")
-text((fx + kx) / 2 - 42, (fy + ky) / 2 - 20, "Femur", size=14, weight="bold")
+_lx = (fx + kx) / 2 - 22 * math.sin(fa)
+_ly = (fy + ky) / 2 - 22 * math.cos(fa)
+text(_lx, _ly + 5, "Femur", size=14, weight="bold",
+     extra=f'transform="rotate({-FEMUR_ASSEMBLY_DEG:.1f} {_lx:.1f} {_ly:.1f})"')
 text(kx + 14, (ky + GROUND) / 2 + 60, "Tibia", size=14, anchor="start", weight="bold")
 text(kx + 16, GROUND - 52, "Tibia = Linie Knieachse → Fußspitze", size=12, anchor="start", color=C_MUTED)
 text(kx + 16, GROUND - 36, "(das Bauteil selbst ist gebogen)", size=12, anchor="start", color=C_MUTED)
@@ -174,14 +177,14 @@ dim(kx, ky, footx, footy, fmt(TIBIA), offset=45)
 
 # Femur-Winkel
 line(fx, fy, fx + 110, fy, C_DIM, 1, 'stroke-dasharray="6 4"')
-arc(fx, fy, 72, -FEMUR_NEUTRAL_DEG, 0)
-text(fx + 78, fy - 4, f"{fmt(FEMUR_NEUTRAL_DEG)}°", size=15, anchor="start", color=C_DIM, weight="bold")
+arc(fx, fy, 72, -FEMUR_ASSEMBLY_DEG, 0)
+text(fx + 78, fy - 4, f"{fmt(FEMUR_ASSEMBLY_DEG)}°", size=15, anchor="start", color=C_DIM, weight="bold")
 
 # Tibia-Winkel gegenüber "rechtwinklig zum Femur"
 pdx, pdy = math.sin(fa), math.cos(fa)  # Bildschirmrichtung senkrecht zum Femur, nach unten/außen
 line(kx, ky, kx + pdx * 120, ky + pdy * 120, C_DIM, 1, 'stroke-dasharray="6 4"')
-arc(kx, ky, 95, 90 - FEMUR_NEUTRAL_DEG, 90)
-text(kx + 42, ky + 96, f"{fmt(-FEMUR_NEUTRAL_DEG)}°", size=15, anchor="start", color=C_DIM, weight="bold")
+arc(kx, ky, 95, 90 - FEMUR_ASSEMBLY_DEG, 90)
+text(kx + 50, ky + 96, f"{fmt(-FEMUR_ASSEMBLY_DEG)}°", size=15, anchor="start", color=C_DIM, weight="bold")
 text(kx + 42, ky + 114, "Tibia ggü. rechtwinklig", size=12, anchor="start", color=C_DIM)
 text(kx + 42, ky + 129, "zum Femur", size=12, anchor="start", color=C_DIM)
 
@@ -349,7 +352,7 @@ text(c1, TY + BOX_H - 14, "x vorne, y links (mm, ab Körpermitte) · Winkel ab v
 c2 = 620
 text(c2, TY + 30, "Montagestellung = alle Servos 90° (1500 µs)", size=15, anchor="start", weight="bold")
 rows = [
-    ("Gelenkwinkel (Firmware)", f"Coxa 0° · Femur +{fmt(FEMUR_NEUTRAL_DEG)}° · Tibia {fmt(-FEMUR_NEUTRAL_DEG)}°"),
+    ("Gelenkwinkel (Firmware)", f"Coxa 0° · Femur +{fmt(FEMUR_ASSEMBLY_DEG)}° · Tibia {fmt(-FEMUR_ASSEMBLY_DEG)}°"),
     ("Körperhöhe (Coxa-Achse)", f"{fmt(HEIGHT)} mm über Boden"),
     ("Fußabstand", f"{fmt(REACH)} mm ab Coxa-Achse"),
     ("Fuß-Mitte (Mittelbeine)", f"{fmt(MID_SPAN / 2 + REACH)} mm ab Längsachse"),
@@ -360,23 +363,24 @@ for i, (k, v) in enumerate(rows):
     text(c2 + 190, y, v, size=14, anchor="start")
 text(c2, TY + 192, "Diese Haltung ist die Standardhaltung der IK", size=13, anchor="start", color=C_TEXT)
 text(c2, TY + 210, "(Tab Steuerung → Körperhaltung).", size=13, anchor="start", color=C_TEXT)
-text(c2, TY + BOX_H - 14, "Tibia senkrecht = 15° nach innen ggü. rechtwinklig zum Femur",
+text(c2, TY + BOX_H - 14, f"Tibia senkrecht = {fmt(FEMUR_ASSEMBLY_DEG)}° nach innen ggü. rechtwinklig zum Femur",
      size=12, anchor="start", color=C_MUTED)
 
 # Spalte 3: Kalibrierung
 c3 = 1130
-text(c3, TY + 30, "Kalibrier-Nullpunkt (0°)", size=15, anchor="start", weight="bold")
+text(c3, TY + 30, "Kalibrierung (Bezug = Montagestellung)", size=15, anchor="start", weight="bold")
 rows = [
-    ("Coxa", "Bein zeigt in Montagerichtung"),
-    ("", f"(Ecken {fmt(CORNER_ANGLE)}°, Mitte 90°)"),
-    ("Femur", "waagerecht (15° unter Montagestellung)"),
-    ("Tibia", "rechtwinklig zum Femur –"),
-    ("", "zuerst Femur kalibrieren"),
+    ("1.", "Hörner bei 1500 µs aufstecken,"),
+    ("", "Bein ≈ Montagestellung (Montagelehre)"),
+    ("2.", "exakt anfahren → „= Montagestellung“"),
+    ("", "(je Bein erst Femur, dann Tibia)"),
+    ("3.", "2. Bezug: Coxa ±45°, Femur 0°"),
+    ("", "(waagerecht), Tibia 0° (⟂ Femur)"),
 ]
 for i, (k, v) in enumerate(rows):
-    y = TY + 62 + i * 24
+    y = TY + 62 + i * 22
     text(c3, y, k, size=14, anchor="start", color=C_MUTED, weight="bold")
-    text(c3 + 60, y, v, size=14, anchor="start")
+    text(c3 + 28, y, v, size=14, anchor="start")
 text(c3, TY + 196, "+ Richtung: Coxa Fuß nach vorne,", size=13, anchor="start")
 text(c3, TY + 214, "Femur hoch, Tibia Fuß nach außen", size=13, anchor="start")
 text(c3, TY + BOX_H - 14, "Details: docs/kalibrierung.md", size=12, anchor="start", color=C_MUTED)

@@ -20,8 +20,8 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 | Methode & Pfad | Body | Antwort |
 |---|---|---|
 | `GET /api/status` | – | Firmware, Chip, Speicher, WLAN, Kamera, Geräte, Akku |
-| `GET /api/calibration` | – | `{"version":1,"servos":[…18…],"dirty":bool}` |
-| `POST /api/calibration` | wie GET (ohne `dirty`) | übernimmt alle 18 Servos und **speichert sofort** |
+| `GET /api/calibration` | – | `{"version":2,"servos":[…18…],"dirty":bool}`, je Servo u. a. `ref_deg`, `center_us`, `us_per_deg`, `min_deg`, `max_deg` (siehe [kalibrierung.md](kalibrierung.md)) |
+| `POST /api/calibration` | wie GET (ohne `dirty`) | übernimmt alle 18 Servos und **speichert sofort**; Dateien mit `version` 1 (`center_us` = Puls bei 0°) werden umgerechnet |
 | `GET /api/camera` | – | Einstellungen + verfügbare Auflösungen |
 | `POST /api/camera` | `{"framesize","quality","vflip","hmirror","max_fps","rotation"}` (Teilmenge) | neue Einstellungen (persistent); `rotation` 0/90/180/270 |
 | `GET /api/wifi` | – | WLAN-Status: `mode` (`ap`/`ap+sta`/`sta`), `ap` {active, ip, clients, off_in_s}, `sta` {state, ssid, ip, rssi, reason}, `saved_ssid` |
@@ -43,7 +43,7 @@ Fehler: HTTP 4xx/5xx mit `{"ok":false,"msg":"…"}`.
 ### Befehle (Client → ESP32)
 
 Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantwortet. Die Befehle
-`servo_us`, `servo_deg`, `all_us` und `all_deg` schalten den Pose-Modus ab.
+`servo_us`, `servo_deg`, `all_us`, `all_deg` und `all_assembly` schalten den Pose-Modus ab.
 
 | `cmd` | Parameter | Wirkung |
 |---|---|---|
@@ -57,12 +57,13 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `servo_us` | `id`, `us` | Rohmodus: Pulsbreite 500–2500 µs |
 | `servo_deg` | `id`, `deg` | kalibrierter Gelenkwinkel (auf Grenzen begrenzt) |
 | `all_us` | `us` | alle Servos auf eine Pulsbreite (Montage: 1500) |
-| `all_deg` | `deg` | alle Gelenke auf einen Winkel (Neutral: 0) |
+| `all_deg` | `deg` | alle Gelenke auf denselben Gelenkwinkel |
+| `all_assembly` | – | alle Gelenke in die Montagestellung (= Standardhaltung) |
 | `slew` | `deg_per_s` | Rampengeschwindigkeit (10–1000 °/s) |
 | `cal_get` | `id`? | einzelner Servo → `cal`, ohne `id` → `calibration` |
 | `cal_set` | `id`, `center_us`?, `us_per_deg`?, `min_deg`?, `max_deg`? | Werte setzen (geprüft) |
-| `cal_zero` | `id` | aktuelle Stellung als 0° übernehmen |
-| `cal_ref` | `id`, `deg` | aktuelle Stellung als Referenzwinkel → `us_per_deg` |
+| `cal_center` | `id` | aktuelle Stellung als Montagestellung übernehmen (`center_us`) |
+| `cal_ref` | `id`, `deg` | aktuelle Stellung als zweiter Bezugswinkel → `us_per_deg` (mind. 10° von der Montagestellung entfernt) |
 | `cal_invert` | `id` | Drehrichtung umkehren |
 | `cal_save` | – | Kalibrierung in NVS speichern |
 | `cal_reload` | – | gespeicherte Kalibrierung laden (Änderungen verwerfen) |
