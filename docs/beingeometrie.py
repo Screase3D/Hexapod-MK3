@@ -13,7 +13,11 @@ from pathlib import Path
 
 # --- Maße in mm (Achse zu Achse) -------------------------------------------
 COXA, FEMUR, TIBIA = 41.0, 43.0, 94.0
-FEMUR_ASSEMBLY_DEG = 30.0  # Montagestellung (ASSEMBLY_POSE): Femur über der Waagerechten, Tibia senkrecht
+# Montagestellung = Grundstellung aus dem CAD (ASSEMBLY_POSE in robot_geometry.h):
+FEMUR_ASSEMBLY_DEG = 49.3   # Femur über der Waagerechten
+TIBIA_ASSEMBLY_DEG = -23.5  # Tibia ggü. "rechtwinklig zum Femur" (Firmware-Konvention)
+BODY_BELOW_AXIS = 26.3      # Chassis-Unterkante unter der Femur-Achse (CAD)
+TIP_ABOVE_GROUND = 2.1      # Ende der 94 mm (Fußspitze) über dem Boden (runder Fuß)
 FRONT_SPAN, MID_SPAN, LENGTH = 77.0, 114.0, 147.0  # Abstände der Coxa-Achsen
 CORNER_ANGLE = 45.0  # Beine vorne/hinten gegenüber der Längsachse
 
@@ -23,8 +27,27 @@ ESP_X0, ESP_X1, ESP_Y = -27.0, 60.0, 21.0  # ESP32-Platine
 
 # --- abgeleitete Werte ------------------------------------------------------
 fa = math.radians(FEMUR_ASSEMBLY_DEG)
-REACH = COXA + FEMUR * math.cos(fa)  # Coxa-Achse -> Fuß (waagerecht)
-HEIGHT = TIBIA - FEMUR * math.sin(fa)  # Coxa-Achse über Boden
+ta = fa + math.radians(TIBIA_ASSEMBLY_DEG + 90.0) - math.pi  # Richtung Knie -> Fußspitze
+REACH = COXA + FEMUR * math.cos(fa) + TIBIA * math.cos(ta)  # Coxa-Achse -> Fuß (waagerecht)
+HEIGHT = -(FEMUR * math.sin(fa) + TIBIA * math.sin(ta))     # Femur-Achse über der Fußspitze
+CLEARANCE = HEIGHT + TIP_ABOVE_GROUND - BODY_BELOW_AXIS     # Bodenfreiheit Chassis
+
+# Umriss des gebogenen Tibia-Bauteils aus der CAD-Seitenansicht (Pixel; Knie
+# bei (322.7, 87), Fußspitze bei (52, 648), 6.64 px/mm, links = außen)
+TIBIA_OUTLINE_CAD = [(300, 47), (125, 125), (102, 143), (50, 245), (42, 610), (30, 640), (55, 662),
+                     (80, 640), (85, 610), (135, 262), (183, 186), (215, 176), (322, 128)]
+
+
+def tibia_outline(kx, ky, angle, scale):
+    """CAD-Umriss auf die aktuelle Tibia-Richtung drehen und ins Bild setzen."""
+    k, tip, px = (322.7, 87.0), (52.0, 648.0), 6.64
+    a_cad = math.atan2(-(tip[1] - k[1]), -(tip[0] - k[0]))  # außen/oben-Koordinaten
+    pts = []
+    for x, y in TIBIA_OUTLINE_CAD:
+        out, up = -(x - k[0]) / px, -(y - k[1]) / px
+        r, phi = math.hypot(out, up), math.atan2(up, out) - a_cad + angle
+        pts.append((kx + r * math.cos(phi) * scale, ky - r * math.sin(phi) * scale))
+    return pts
 MOUNTS = [  # (Name, x, y, Winkel, PCA, Kanäle)
     ("vorne links", LENGTH / 2, FRONT_SPAN / 2, CORNER_ANGLE, "0x41", "CH0–2"),
     ("Mitte links", 0.0, MID_SPAN / 2, 90.0, "0x41", "CH3–5"),
@@ -133,80 +156,92 @@ text(40, 84, "Maße aus dem CAD-Modell. Achsabstände (Drehpunkt zu Drehpunkt) i
 
 # ============================================================================
 # Seitenansicht Bein
-S1 = 4.0  # px/mm
-X0, Y0 = 250.0, 310.0  # Coxa-Achse
+S1 = 3.4  # px/mm
+X0, Y0 = 245.0, 330.0  # Coxa-Achse
 GROUND = Y0 + HEIGHT * S1
 fx, fy = X0 + COXA * S1, Y0  # Femur-Achse
 kx, ky = fx + FEMUR * math.cos(fa) * S1, fy - FEMUR * math.sin(fa) * S1  # Knie
-footx, footy = kx, GROUND
+footx, footy = kx + TIBIA * math.cos(ta) * S1, ky - TIBIA * math.sin(ta) * S1
+TIBIA_LINE_DEG = -math.degrees(ta)  # unter der Waagerechten
 
-text(420, 130, "Bein – Seitenansicht (Montagestellung)", size=18, weight="bold")
+text(420, 130, "Bein – Seitenansicht (Montagestellung = Grundstellung)", size=18, weight="bold")
 
 # Boden
-el(f'<rect x="60" y="{GROUND:.1f}" width="680" height="14" fill="url(#hatch)"/>')
-line(60, GROUND, 740, GROUND, C_LINE, 2)
+el(f'<rect x="60" y="{GROUND + TIP_ABOVE_GROUND * S1:.1f}" width="700" height="14" fill="url(#hatch)"/>')
+line(60, GROUND + TIP_ABOVE_GROUND * S1, 760, GROUND + TIP_ABOVE_GROUND * S1, C_LINE, 2)
 
-# Körper (Schnitt) mit Coxa-Servo-Achse
-el(f'<rect x="{X0 - 120:.1f}" y="{Y0 - 45:.1f}" width="120" height="105" rx="6" fill="{C_BODY}" '
-   f'stroke="{C_LINE}" stroke-width="1.5"/>')
-text(X0 - 60, Y0 + 85, "Körper", size=14, color=C_MUTED)
+# Körper (Schnitt) mit Coxa-Achse und Bodenfreiheit
+body_bottom = Y0 + BODY_BELOW_AXIS * S1
+el(f'<rect x="{X0 - 120:.1f}" y="{Y0 - 45:.1f}" width="120" height="{body_bottom - Y0 + 45:.1f}" rx="6" '
+   f'fill="{C_BODY}" stroke="{C_LINE}" stroke-width="1.5"/>')
+text(X0 - 60, Y0 - 18, "Körper", size=14, color=C_MUTED)
 line(X0, Y0 - 95, X0, GROUND + 18, C_AXIS, 1.2, 'stroke-dasharray="10 4 2 4"')
 text(X0 + 6, Y0 - 100, "Coxa-Achse (senkrecht)", size=13, anchor="start", color=C_AXIS)
+dim(X0 - 40, body_bottom, X0 - 40, GROUND + TIP_ABOVE_GROUND * S1, fmt(CLEARANCE), offset=0, size=13)
+text(X0 - 60, body_bottom + 20, "Bodenfreiheit", size=11, anchor="end", color=C_DIM)
 
-# Glieder
+# Tibia-Bauteil (gebogen, nach CAD) hinter den Achslinien
+pts = tibia_outline(kx, ky, ta, S1)
+el('<polygon points="' + " ".join(f"{x:.1f},{y:.1f}" for x, y in pts) +
+   f'" fill="#eceff3" stroke="#a9b3b9" stroke-width="1.2"/>')
+
+# Glieder (Achslinien)
 line(X0, Y0, fx, fy, C_COXA, 11, 'stroke-linecap="round"')
 line(fx, fy, kx, ky, C_FEMUR, 11, 'stroke-linecap="round"')
-line(kx, ky, footx, footy, C_TIBIA, 9, 'stroke-linecap="round"')
+line(kx, ky, footx, footy, C_TIBIA, 7, 'stroke-linecap="round"')
 joint(X0, Y0)
 joint(fx, fy)
 joint(kx, ky)
 el(f'<circle cx="{footx:.1f}" cy="{footy:.1f}" r="6" fill="{C_LINE}"/>')
 text((X0 + fx) / 2, Y0 + 30, "Coxa", size=14, weight="bold")
-_lx = (fx + kx) / 2 - 22 * math.sin(fa)
-_ly = (fy + ky) / 2 - 22 * math.cos(fa)
+_lx = (fx + kx) / 2 + 24 * math.sin(fa)
+_ly = (fy + ky) / 2 + 24 * math.cos(fa)
 text(_lx, _ly + 5, "Femur", size=14, weight="bold",
      extra=f'transform="rotate({-FEMUR_ASSEMBLY_DEG:.1f} {_lx:.1f} {_ly:.1f})"')
-text(kx + 14, (ky + GROUND) / 2 + 60, "Tibia", size=14, anchor="start", weight="bold")
-text(kx + 16, GROUND - 52, "Tibia = Linie Knieachse → Fußspitze", size=12, anchor="start", color=C_MUTED)
-text(kx + 16, GROUND - 36, "(das Bauteil selbst ist gebogen)", size=12, anchor="start", color=C_MUTED)
+text((kx + footx) / 2 - 18, (ky + footy) / 2 + 30, "Tibia", size=14, anchor="end", weight="bold")
+text((kx + footx) / 2 - 18, (ky + footy) / 2 + 50, "= Linie Knieachse → Fußspitze;", size=12, anchor="end", color=C_MUTED)
+text((kx + footx) / 2 - 18, (ky + footy) / 2 + 66, "das Bauteil (grau) ist gebogen", size=12, anchor="end", color=C_MUTED)
 
 # Maße der Glieder
-dim(X0, Y0, fx, fy, fmt(COXA), offset=-48)
-dim(fx, fy, kx, ky, fmt(FEMUR), offset=-52)
-dim(kx, ky, footx, footy, fmt(TIBIA), offset=45)
+dim(X0, Y0, fx, fy, fmt(COXA), offset=-40)
+dim(fx, fy, kx, ky, fmt(FEMUR), offset=-44)
+dim(kx, ky, footx, footy, fmt(TIBIA), offset=-34)
 
 # Femur-Winkel
-line(fx, fy, fx + 110, fy, C_DIM, 1, 'stroke-dasharray="6 4"')
-arc(fx, fy, 72, -FEMUR_ASSEMBLY_DEG, 0)
-text(fx + 78, fy - 4, f"{fmt(FEMUR_ASSEMBLY_DEG)}°", size=15, anchor="start", color=C_DIM, weight="bold")
+line(fx, fy, fx + 95, fy, C_DIM, 1, 'stroke-dasharray="6 4"')
+arc(fx, fy, 62, -FEMUR_ASSEMBLY_DEG, 0)
+text(fx + 68, fy - 6, f"{fmt(FEMUR_ASSEMBLY_DEG)}°", size=15, anchor="start", color=C_DIM, weight="bold")
 
-# Tibia-Winkel gegenüber "rechtwinklig zum Femur"
+# Tibia-Winkel gegenüber "rechtwinklig zum Femur" (Firmware) und gegenüber der Waagerechten
 pdx, pdy = math.sin(fa), math.cos(fa)  # Bildschirmrichtung senkrecht zum Femur, nach unten/außen
-line(kx, ky, kx + pdx * 120, ky + pdy * 120, C_DIM, 1, 'stroke-dasharray="6 4"')
-arc(kx, ky, 95, 90 - FEMUR_ASSEMBLY_DEG, 90)
-text(kx + 50, ky + 96, f"{fmt(-FEMUR_ASSEMBLY_DEG)}°", size=15, anchor="start", color=C_DIM, weight="bold")
-text(kx + 42, ky + 114, "Tibia ggü. rechtwinklig", size=12, anchor="start", color=C_DIM)
-text(kx + 42, ky + 129, "zum Femur", size=12, anchor="start", color=C_DIM)
+line(kx, ky, kx + pdx * 110, ky + pdy * 110, C_DIM, 1, 'stroke-dasharray="6 4"')
+a_perp = math.degrees(math.atan2(pdy, pdx))
+a_tib = math.degrees(math.atan2(footy - ky, footx - kx))
+arc(kx, ky, 80, min(a_perp, a_tib), max(a_perp, a_tib))
+text(kx + 128, ky + 70, f"{fmt(TIBIA_ASSEMBLY_DEG)}°", size=15, anchor="start", color=C_DIM, weight="bold")
+text(kx + 128, ky + 86, "Tibia ggü. rechtwinklig", size=11, anchor="start", color=C_DIM)
+text(kx + 128, ky + 100, "zum Femur", size=11, anchor="start", color=C_DIM)
+line(kx, ky, kx + 70, ky, C_DIM, 1, 'stroke-dasharray="6 4"')
+text(kx + 76, ky + 4, f"Linie {fmt(TIBIA_LINE_DEG)}° unter waagerecht", size=11, anchor="start", color=C_MUTED)
 
 # Höhe und Fußabstand
 dim(X0 - 165, Y0, X0 - 165, GROUND, fmt(HEIGHT), offset=0)
 line(X0 - 175, Y0, X0 - 125, Y0, C_DIM, 1)
-text(X0 - 165, GROUND + 38, "Höhe Coxa-Achse", size=12, color=C_DIM)
-text(X0 - 165, GROUND + 53, "über Boden", size=12, color=C_DIM)
+line(X0 - 175, GROUND, footx - 12, GROUND, C_DIM, 1, 'stroke-dasharray="3 3"')
+text(X0 - 165, GROUND + 38, "Höhe Femur-Achse", size=12, color=C_DIM)
+text(X0 - 165, GROUND + 53, "über Fußspitze", size=12, color=C_DIM)
 yd = GROUND + 62
-for xx in (X0, fx, footx):
-    line(xx, GROUND + 18, xx, yd + 8, C_DIM, 1)
+for xx in (X0, fx, kx, footx):
+    line(xx, GROUND + 18, xx, yd + 48, C_DIM, 1)
 dim(X0, yd, footx, yd, fmt(REACH), offset=0)
-dim(X0, yd + 40, fx, yd + 40, fmt(COXA), offset=0, size=14)
-dim(fx, yd + 40, footx, yd + 40, fmt(FEMUR * math.cos(fa)), offset=0, size=14)
-line(X0, yd + 8, X0, yd + 48, C_DIM, 1)
-line(fx, yd + 8, fx, yd + 48, C_DIM, 1)
-line(footx, yd + 8, footx, yd + 48, C_DIM, 1)
-text((X0 + footx) / 2, yd + 82, "Fußabstand Coxa-Achse → Fuß (waagerecht)", size=12, color=C_DIM)
+dim(X0, yd + 40, fx, yd + 40, fmt(COXA), offset=0, size=13)
+dim(fx, yd + 40, kx, yd + 40, fmt(FEMUR * math.cos(fa)), offset=0, size=13)
+dim(kx, yd + 40, footx, yd + 40, fmt(TIBIA * math.cos(ta)), offset=0, size=13)
+text((X0 + footx) / 2, yd + 82, "Fußabstand Coxa-Achse → Fußspitze (waagerecht)", size=12, color=C_DIM)
 
 # ============================================================================
 # Draufsicht Körper
-S2 = 2.05
+S2 = 1.6
 CX, CY = 1190.0, 458.0
 
 
@@ -352,7 +387,7 @@ text(c1, TY + BOX_H - 14, "x vorne, y links (mm, ab Körpermitte) · Winkel ab v
 c2 = 620
 text(c2, TY + 30, "Montagestellung = alle Servos 90° (1500 µs)", size=15, anchor="start", weight="bold")
 rows = [
-    ("Gelenkwinkel (Firmware)", f"Coxa 0° · Femur +{fmt(FEMUR_ASSEMBLY_DEG)}° · Tibia {fmt(-FEMUR_ASSEMBLY_DEG)}°"),
+    ("Gelenkwinkel (Firmware)", f"Coxa 0° · Femur +{fmt(FEMUR_ASSEMBLY_DEG)}° · Tibia {fmt(TIBIA_ASSEMBLY_DEG)}°"),
     ("Körperhöhe (Coxa-Achse)", f"{fmt(HEIGHT)} mm über Boden"),
     ("Fußabstand", f"{fmt(REACH)} mm ab Coxa-Achse"),
     ("Fuß-Mitte (Mittelbeine)", f"{fmt(MID_SPAN / 2 + REACH)} mm ab Längsachse"),
@@ -363,7 +398,7 @@ for i, (k, v) in enumerate(rows):
     text(c2 + 190, y, v, size=14, anchor="start")
 text(c2, TY + 192, "Diese Haltung ist die Standardhaltung der IK", size=13, anchor="start", color=C_TEXT)
 text(c2, TY + 210, "(Tab Steuerung → Körperhaltung).", size=13, anchor="start", color=C_TEXT)
-text(c2, TY + BOX_H - 14, f"Tibia senkrecht = {fmt(FEMUR_ASSEMBLY_DEG)}° nach innen ggü. rechtwinklig zum Femur",
+text(c2, TY + BOX_H - 14, f"Fußspitze {fmt(TIBIA * math.cos(ta))} mm außerhalb des Knies, Bodenfreiheit {fmt(CLEARANCE)} mm",
      size=12, anchor="start", color=C_MUTED)
 
 # Spalte 3: Kalibrierung

@@ -35,10 +35,12 @@ constexpr kin::LegMount LEG_MOUNTS[6] = {
 // Montagestellung: Gelenkwinkel (Konvention aus docs/kalibrierung.md), in denen
 // die Servohörner bei Servo-Mitte (1500 µs) aufgesteckt werden. Die Kalibrierung
 // verwendet sie als Bezug (center_us = Puls in dieser Stellung).
-// Spinnenartig: Femur 30° nach oben, Tibia senkrecht (= 30° nach innen
-// gegenüber "rechtwinklig zum Femur"). Liegt mitten im Arbeitsbereich beim
-// Laufen (Femur ca. +5..+90°, Tibia ca. -70..0°), siehe docs/kinematik.md.
-constexpr kin::JointAngles ASSEMBLY_POSE = {0.0f, 30.0f, -30.0f};
+// = Grundstellung aus dem CAD (Roboter aufgebockt): Femur 49,3° nach oben,
+// Linie Knie -> Fußspitze 64° unter der Waagerechten (Fuß 41 mm außerhalb des
+// Knies; das Tibia-Bauteil ist gebogen, maßgeblich ist nur diese Linie).
+// Ergibt Höhe 52 mm und Fußabstand 110 mm. Alle Haltungen bleiben innerhalb
+// von ±60° um diese Stellung, siehe docs/kinematik.md.
+constexpr kin::JointAngles ASSEMBLY_POSE = {0.0f, 49.3f, -23.5f};
 
 // Körperhaltung: Standardwerte und Grenzen der Oberfläche
 struct PoseLimits {
@@ -49,12 +51,12 @@ struct PoseLimits {
   float yaw_max;                                 // Gieren
 };
 
-// Standardhaltung = ASSEMBLY_POSE (alle Servos in der Mitte):
-//   Höhe       = tibia - femur * sin 30° = 72,5 mm
-//   Fußabstand = coxa + femur * cos 30° = 78,2 mm
+// Standardhaltung = ASSEMBLY_POSE (alle Servos in der Mitte): Höhe 52 mm
+// (Femur-Achse über der Fußspitze; Bodenfreiheit des Chassis dann ca. 28 mm),
+// Fußabstand 110 mm. Höhe über 100 mm bringt Femur/Tibia an die Servo-Grenzen.
 constexpr PoseLimits POSE_LIMITS = {
-    50.0f, 115.0f, 72.5f,
-    60.0f, 135.0f, 78.2f,
+    35.0f, 100.0f, 52.0f,
+    75.0f, 135.0f, 110.0f,
     40.0f,
     20.0f,
     25.0f,
@@ -64,14 +66,17 @@ constexpr PoseLimits POSE_LIMITS = {
 constexpr float POSE_SPEED_MM_PER_S = 80.0f;
 constexpr float POSE_SPEED_DEG_PER_S = 45.0f;
 
-// Sitzen (Körper liegt auf, Füße weit außen) und Aufstehen/Hinsetzen.
-// sit_height = Höhe der Coxa-/Femur-Achsen über dem Boden, wenn der Körper flach
-// aufliegt – BITTE AM ROBOTER NACHMESSEN (lieber etwas zu groß als zu klein:
-// zu groß -> Füße schweben knapp über dem Boden, zu klein -> Füße drücken den
-// Körper beim Einschalten etwas hoch). Beim Einschalten von Torque fahren die
-// Servos in diese Haltung.
-constexpr float SIT_HEIGHT = 40.0f;
-constexpr float SIT_STANCE = 115.0f;  // Fußabstand im Sitzen (weit außen, Bein flach)
+// Sitzen (Körper liegt auf) und Aufstehen/Hinsetzen.
+// SIT_HEIGHT = Höhe der Femur-Achsen über den Fußspitzen, wenn der Körper flach
+// aufliegt. Laut CAD liegt die Chassis-Unterkante 26 mm unter der Femur-Achse,
+// die Fußspitze (Ende der 94 mm) ca. 2 mm über dem Boden -> ca. 24 mm.
+// Lieber etwas zu klein als zu groß: zu klein -> Füße schweben knapp über dem
+// Boden, zu groß -> Füße drücken den Körper beim Einschalten etwas hoch.
+// Beim Einschalten von Torque fahren die Servos in diese Haltung.
+constexpr float SIT_HEIGHT = 23.0f;
+// Gleicher Fußabstand wie im Stand: Aufstehen ist dann ein reines Anheben,
+// die Füße müssen nicht umgesetzt werden
+constexpr float SIT_STANCE = 110.0f;
 constexpr float SIT_RISE_S = 1.5f;    // Dauer des Anhebens/Absenkens
 
 // Laufen: Grenzen der Gangparameter in der Oberfläche

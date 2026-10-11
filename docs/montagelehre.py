@@ -11,8 +11,24 @@ import math
 from pathlib import Path
 
 COXA, FEMUR, TIBIA = 41.0, 43.0, 94.0
-FEMUR_DEG = 30.0  # Montagestellung: Femur über der Waagerechten
-TIBIA_DEG = -30.0  # Montagestellung: Tibia ggü. "rechtwinklig zum Femur" (hier: senkrecht)
+FEMUR_DEG = 49.3   # Montagestellung (= Grundstellung, CAD): Femur über der Waagerechten
+TIBIA_DEG = -23.5  # Montagestellung: Tibia ggü. "rechtwinklig zum Femur"
+
+# Umriss des gebogenen Tibia-Bauteils aus der CAD-Seitenansicht (wie beingeometrie.py)
+TIBIA_OUTLINE_CAD = [(300, 47), (125, 125), (102, 143), (50, 245), (42, 610), (30, 640), (55, 662),
+                     (80, 640), (85, 610), (135, 262), (183, 186), (215, 176), (322, 128)]
+
+
+def tibia_outline(kx, ky, angle, sx):
+    """CAD-Umriss (Pixel) in mm um das Knie gedreht; sx = -1 spiegelt (Bein nach links)."""
+    k, tip, px = (322.7, 87.0), (52.0, 648.0), 6.64
+    a_cad = math.atan2(-(tip[1] - k[1]), -(tip[0] - k[0]))
+    pts = []
+    for x, y in TIBIA_OUTLINE_CAD:
+        out, up = -(x - k[0]) / px, -(y - k[1]) / px
+        r, phi = math.hypot(out, up), math.atan2(up, out) - a_cad + angle
+        pts.append((kx + sx * r * math.cos(phi), ky - r * math.sin(phi)))
+    return pts
 CORNER_ANGLE = 45.0
 
 FONT = "Helvetica, Arial, 'Liberation Sans', 'DejaVu Sans', sans-serif"
@@ -61,13 +77,18 @@ def leg_template(ox, oy, mirror, title):
     kx, ky = ox + sx * FEMUR * math.cos(fa), oy - FEMUR * math.sin(fa)
     td = math.radians(FEMUR_DEG + TIBIA_DEG + 90 - 180)  # Tibia-Richtung ggü. Waagerechte
     fx, fy = kx + sx * TIBIA * math.cos(td), ky - TIBIA * math.sin(td)
-    inner, outer = ox - sx * 12, kx + sx * 25
+    outline = tibia_outline(kx, ky, td, sx)
+    inner = ox - sx * 10
+    outer = (max if sx > 0 else min)([kx, fx] + [p[0] for p in outline]) + sx * 8
 
     # Umriss zum Ausschneiden
     x0, x1 = sorted([inner, outer])
     el(f'<rect x="{x0:.2f}" y="{ky - 14:.2f}" width="{x1 - x0:.2f}" height="{fy - ky + 24:.2f}" '
        f'fill="none" stroke="#999" stroke-width="0.25" stroke-dasharray="2 1.5"/>')
     text((x0 + x1) / 2, ky - 8, title, 3.4, "middle", weight="bold")
+    # Bauteil-Umriss (nur zur Orientierung, maßgeblich sind die Achslinien)
+    el('<polygon points="' + " ".join(f"{x:.2f},{y:.2f}" for x, y in outline) +
+       '" fill="#f1f3f5" stroke="#b5bcc2" stroke-width="0.25"/>')
 
     # Körperebene (waagerecht = Femur 0°)
     line(inner, oy, kx + sx * 12, oy, C_REF, 0.3, 'stroke-dasharray="3 1.2"')
@@ -76,19 +97,19 @@ def leg_template(ox, oy, mirror, title):
 
     # Boden in der Standardhaltung
     line(x0, fy, x1, fy, C_MUTED, 0.3)
-    text((x0 + x1) / 2, fy + 4, f"Boden in Standardhaltung ({fmt(fy - oy)} mm unter der Achse)", 2.3, "middle", C_MUTED)
+    text((x0 + x1) / 2, fy + 4, f"Fußspitze {fmt(fy - oy)} mm unter der Femur-Achse", 2.3, "middle", C_MUTED)
 
     # Glieder (Achslinien)
     line(ox, oy, kx, ky, C_LINE, 0.6)
     line(kx, ky, fx, fy, C_LINE, 0.6)
     mx, my = (ox + kx) / 2 - sx * 3 * math.sin(fa), (oy + ky) / 2 - 3 * math.cos(fa)
     text(mx, my, f"Femur {fmt(FEMUR)}", 2.6, "middle", extra=f'transform="rotate({-sx * FEMUR_DEG:.1f} {mx:.2f} {my:.2f})"')
-    text(kx + sx * 2, (ky + fy) / 2 + 10, f"Tibia {fmt(TIBIA)}", 2.6, a_start)
+    text((kx + fx) / 2 - sx * 3, (ky + fy) / 2 + 6, f"Tibia {fmt(TIBIA)}", 2.6, a_end)
 
     # Tibia 0° (rechtwinklig zum Femur) als Bezug für den zweiten Kalibrierpunkt
     ex, ey = kx + sx * math.sin(fa) * 34, ky + math.cos(fa) * 34
     line(kx, ky, ex, ey, C_DIM, 0.25, 'stroke-dasharray="2 1"')
-    text(ex - sx * 4, ey + 3.5, "Tibia 0° (⟂ Femur)", 2.3, "middle", C_DIM)
+    text(ex + sx * 1.5, ey + 1, "Tibia 0° (⟂ Femur)", 2.3, a_start, C_DIM)
 
     # Femur-Winkel
     if mirror:
@@ -103,14 +124,14 @@ def leg_template(ox, oy, mirror, title):
     el(f'<path d="M{fx - 3:.2f},{fy - 5:.2f} L{fx:.2f},{fy:.2f} L{fx + 3:.2f},{fy - 5:.2f}" fill="none" '
        f'stroke="{C_LINE}" stroke-width="0.4"/>')
     el(f'<circle cx="{fx:.2f}" cy="{fy:.2f}" r="0.7" fill="{C_LINE}"/>')
-    text(fx + sx * 4, fy - 2, "Fußspitze", 2.8, a_start, weight="bold")
+    text(fx - sx * 4, fy - 2, "Fußspitze", 2.8, a_end, weight="bold")
 
 
 el('<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297" '
    f'font-family="{FONT}">')
 el('<rect width="210" height="297" fill="#fff"/>')
 text(12, 16, "Hexapod MK3 – Montagelehre (1:1)", 5.5, weight="bold")
-text(12, 22, f"Montagestellung bei 1500 µs: Coxa 0° · Femur +{fmt(FEMUR_DEG)}° · Tibia {fmt(TIBIA_DEG)}° (senkrecht). "
+text(12, 22, f"Montagestellung bei 1500 µs: Coxa 0° · Femur +{fmt(FEMUR_DEG)}° · Tibia {fmt(TIBIA_DEG)}°. "
      "Mit 100 % / „Tatsächliche Größe“ drucken.", 2.8, color=C_MUTED)
 
 # Kontrollmaß
@@ -120,8 +141,8 @@ for i in range(0, 51, 5):
     line(12 + i, y0 - (2 if i % 10 == 0 else 1.2), 12 + i, y0, C_LINE, 0.25)
 text(65, y0 + 1, "Kontrollmaß 50 mm – nachmessen, sonst stimmt der Maßstab nicht", 2.8, color=C_REF, weight="bold")
 
-leg_template(30, 80, False, "A – Bein zeigt nach rechts")
-leg_template(180, 80, True, "B – Bein zeigt nach links")
+leg_template(20, 90, False, "A – Bein zeigt nach rechts")
+leg_template(190, 90, True, "B – Bein zeigt nach links")
 
 # Coxa-Winkellehre (Draufsicht)
 R = 55
@@ -147,15 +168,16 @@ text(gx - 1, gy - R - 2, "Mittelbeine 90°", 2.6, color=C_REF, weight="bold")
 tx, ty = 92, 182
 steps = [
     ("So geht's", None),
-    ("1.", "Roboter aufbocken (Beine frei). Oberfläche → Kalibrierung:"),
-    ("", "Torque an, „Alle auf 1500 µs (Montage)“."),
+    ("1.", "Roboter aufbocken: Femur-Achsen 52 mm über dem Tisch (Chassis-"),
+    ("", "Unterkante ca. 28 mm). Kalibrierung: Torque an, „Alle auf 1500 µs“."),
     ("2.", "Lehre A/B ausschneiden, am besten auf Karton kleben;"),
     ("", "A oder B – je nachdem, von welcher Seite du schaust."),
     ("3.", "Kreuz „Femur-Achse“ auf die Femur-Drehachse legen, rote"),
     ("", "Linie parallel zur Körperebene (Unterseite/Coxa-Halter)."),
     ("4.", "Femur-Horn auf den Zahn stecken, bei dem die Knie-Achse"),
     ("", "am nächsten am Kreuz „Knie-Achse“ liegt (1 Zahn ≈ 18°)."),
-    ("5.", "Tibia-Horn so, dass die Fußspitze auf der Marke liegt."),
+    ("5.", "Tibia-Horn so, dass die Fußspitze auf der Marke liegt – bei"),
+    ("", "richtiger Höhe also auf dem Tisch, 110 mm von der Coxa-Achse."),
     ("6.", "Coxa mit Lehre C: Bein in Montagerichtung (45° / 90°)."),
     ("7.", "Feinjustage je Servo im Rohmodus (±1 µs) bis alles"),
     ("", "deckungsgleich ist → „Aktuelle Stellung = Montagestellung“."),

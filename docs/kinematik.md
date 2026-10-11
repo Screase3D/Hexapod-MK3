@@ -12,37 +12,52 @@ stammen aus dem CAD-Modell:
 | Coxa / Femur / Tibia | 41 / 43 / 94 mm (Achse zu Achse, Tibia bis Fußspitze) |
 | Coxa-Achsen vorne bzw. hinten | 77 mm auseinander, ±73,5 mm vor/hinter der Mitte, Bein 45° schräg |
 | Coxa-Achsen Mitte | 114 mm auseinander, Bein 90° zur Seite |
-| Montagestellung (alle Servos 90°) | Coxa 0°, Femur +30°, Tibia −30° (Tibia senkrecht) |
-| daraus Standardhaltung | Höhe 72,5 mm (Coxa-Achse über Boden), Fußabstand 78,2 mm |
+| Montagestellung (alle Servos 90°) | Coxa 0°, Femur +49,3°, Tibia −23,5° (Grundstellung aus dem CAD) |
+| daraus Standardhaltung | Höhe 52 mm (Femur-Achse über der Fußspitze), Fußabstand 110 mm, Bodenfreiheit ca. 28 mm |
 
 Die Zeichnung wird von [`beingeometrie.py`](beingeometrie.py) erzeugt
 (`python3 docs/beingeometrie.py`); ändern sich Maße, dort und in `robot_geometry.h` anpassen.
 
-### Montagestellung (Servo-Mitte)
+### Montagestellung (Servo-Mitte) = Grundstellung
 
-Die Servohörner werden bei Servo-Mitte (90° / 1500 µs) in der spinnenartigen Stehhaltung
-aufgesteckt: Femur 30° nach oben, Tibia senkrecht. In der Winkel-Konvention aus
-[kalibrierung.md](kalibrierung.md) (Femur waagerecht = 0°, Tibia rechtwinklig zum Femur = 0°)
-ist das **Coxa 0°, Femur +30°, Tibia −30°** (`ASSEMBLY_POSE`). Die Kalibrierung verwendet diese
-Stellung als Bezug, und die Standardhaltung der Oberfläche (Höhe 72,5 mm, Fußabstand 78,2 mm)
-entspricht ihr genau – beim Aktivieren der Körperhaltung bewegen sich die Beine also kaum.
-Eine Lehre zum Ausdrucken: [montagelehre.pdf](montagelehre.pdf).
+Die Servohörner werden bei Servo-Mitte (90° / 1500 µs) in der **Grundstellung** aufgesteckt,
+in der der Roboter auch steht. Sie stammt aus dem CAD (Seitenansicht des Beins, Roboter
+aufgebockt):
 
-**Warum 30°?** Steiler Femur und senkrechte Tibia entlasten die Servos: Die Tibia trägt bei
-senkrechter Stellung kein Drehmoment, der Femur nur über den waagerechten Abstand
-`femur · cos(Femurwinkel)`. Je steiler der Femur aber schon im Stand ist, desto weniger Reserve
-bleibt zum Fußheben – mit dem kurzen Femur (43 mm) und der langen Tibia (94 mm) hebt das Bein
-den Fuß vor allem durch weiteres Anheben des Femurs. Überschlag (Tibia senkrecht, ca. 850 g,
-3 Beine tragen, Schritt ±30 mm, Höhe ±15 mm, Fuß 25 mm heben):
+| | Wert |
+|---|---|
+| Femur | 49,3° über der Waagerechten |
+| Linie Knieachse → Fußspitze | 64,2° unter der Waagerechten, Fußspitze 41 mm außerhalb des Knies |
+| Gelenkwinkel (Firmware) | **Coxa 0°, Femur +49,3°, Tibia −23,5°** (`ASSEMBLY_POSE`) |
+| Höhe / Fußabstand | 52 mm (Femur-Achse über der Fußspitze) / 110 mm |
+| Bodenfreiheit Chassis | ca. 28 mm (Unterkante 26 mm unter der Femur-Achse, runder Fuß ca. 2 mm) |
 
-| Femur im Stand | Höhe | Fußabstand | Moment Femur-Servo | Femur im Gang | Tibia im Gang | Fuß senkrecht heben bis Femur 90° |
-|---|---|---|---|---|---|---|
-| +15° | 82,9 mm | 82,5 mm | ≈ 1,18 kg·cm | −6…+56° | −52…+15° | 41 mm |
-| **+30°** | **72,5 mm** | **78,2 mm** | **≈ 1,06 kg·cm** | **+7…+88°** | **−72…−2°** | **29 mm** |
-| +45° | 63,6 mm | 71,4 mm | ≈ 0,86 kg·cm | +18…+116° | −81…−17° | 17 mm (zu wenig) |
+Das Tibia-Bauteil ist gebogen: Vom Knie geht es erst nach außen und knickt dann nach unten ab,
+die Fußspitze steht etwa unter diesem Knick. Für die IK zählt nur die gerade Linie von der
+Knieachse zur Fußspitze (94 mm); die Form spielt nur für Anschläge eine Rolle.
 
-Der MG90S schafft etwa 1,8–2,2 kg·cm; +30° ist ein Kompromiss aus Last und Hubreserve. Im Gang
-kann der Fuß beim Heben zusätzlich etwas nach außen wandern, das spart Femurwinkel.
+Die Kalibrierung verwendet diese Stellung als Bezug, und die Standardhaltung der Oberfläche
+entspricht ihr genau. Eine Lehre zum Ausdrucken: [montagelehre.pdf](montagelehre.pdf).
+
+**Warum diese Stellung als Servo-Mitte?** Sie liegt mitten im Arbeitsbereich – alle Haltungen
+bleiben innerhalb von ±60° um sie (MG90S: etwa ±90°):
+
+| Haltung | Femur | Tibia | Knie innen |
+|---|---|---|---|
+| Grundstellung 52 / 110 mm | 49° (±0) | −24° (±0) | 67° |
+| Fuß 20 mm angehoben | 76° (+26) | −37° (−14) | 53° |
+| Liegen (Sitzhaltung 23 / 110 mm) | 87° (+38) | −42° (−18) | 48° |
+| Körper hoch 80 / 100 mm | 17° (−33) | −6° (+18) | 84° |
+| Körper sehr hoch 100 / 100 mm | −10° (−59) | +20° (+44) | 110° |
+
+Außerdem ist sie gut einzustellen: 1 mm Fehler in der Höhe macht nur ca. 1,3° am Femur.
+
+**Last:** Das Femur-Moment hängt vom waagerechten Abstand Femur-Achse → Fuß ab (in der
+Grundstellung 69 mm). Bei ca. 850 g und drei tragenden Beinen (Dreifuß-Gang) sind das etwa
+2 kg·cm – so viel, wie ein MG90S gerade noch hält. Im Stand auf sechs Beinen ist es die Hälfte.
+Wird der Femur beim Laufen zu schwach: Fußabstand verkleinern (95 mm → ca. 1,5 kg·cm,
+85 mm → ca. 1,25 kg·cm) oder Ripple-Gang (vier Beine tragen). Am besten den fertigen Roboter
+einmal wiegen.
 
 Voraussetzung: Die Servos sind kalibriert ([kalibrierung.md](kalibrierung.md)), denn die IK
 verwendet dieselben Gelenkwinkel-Konventionen.
@@ -105,8 +120,8 @@ darüber:
 
 | Regler | Bedeutung |
 |---|---|
-| Höhe | Abstand Coxa-Achsen ↔ Boden (50–115 mm, Standard 72,5) |
-| Fußabstand | Abstand Fuß ↔ Coxa-Achse (waagerecht, 60–135 mm, Standard 78,2) |
+| Höhe | Femur-Achsen über den Fußspitzen (35–100 mm, Standard 52) |
+| Fußabstand | Abstand Fuß ↔ Coxa-Achse (waagerecht, 75–135 mm, Standard 110) |
 | Vor/zurück, Links/rechts | Körper über den Füßen verschieben |
 | Rollen | + = rechte Seite runter |
 | Nicken | + = Nase hoch |
@@ -123,25 +138,25 @@ stimmt dessen Kalibrierung (Drehrichtung) oder Montagewinkel nicht.
 
 ## Aufstehen und Hinsetzen
 
-Beim Einschalten von Torque fahren die Beine in die **Sitzhaltung**: Körper liegt auf, Füße weit
-außen auf dem Boden (Fußabstand 115 mm, `SIT_STANCE`). So drücken die Beine einen auf dem Bauch
-liegenden Roboter nicht ruckartig hoch.
+Beim Einschalten von Torque fahren die Beine in die **Sitzhaltung**: Körper liegt auf, Füße auf
+dem Boden im gleichen Abstand wie im Stand (110 mm, `SIT_STANCE`). So drücken die Beine einen auf
+dem Bauch liegenden Roboter nicht ruckartig hoch.
 
 Karte **Laufen** → **Aufstehen** ([`posture.cpp`](../firmware/src/kinematics/posture.cpp)):
 
-1. Körper bei weit stehenden Füßen ruckfrei auf die eingestellte Höhe heben (1,5 s, Füße bleiben
-   stehen),
-2. Füße mit zwei Dreifuß-Schritten auf den normalen Fußabstand setzen – nicht unter Last
-   schieben.
+1. Körper ruckfrei auf die eingestellte Höhe heben (1,5 s, Füße bleiben stehen),
+2. weicht der Fußabstand im Stand von dem im Sitzen ab, die Füße mit Schritten umsetzen – nicht
+   unter Last schieben. Mit den aktuellen Werten (beide 110 mm) entfällt das.
 
-**Hinsetzen** geht umgekehrt: Körper gerade ausrichten und Füße nach außen setzen, dann absenken.
+**Hinsetzen** geht umgekehrt: Körper gerade ausrichten, ggf. Füße umsetzen, dann absenken.
 Laufen ist nur im Stehen möglich. Torque aus oder Not-Aus gilt als „liegt“: Danach muss der
 Roboter wieder aufstehen.
 
-> **Bitte nachmessen:** `SIT_HEIGHT` in `robot_geometry.h` ist die Höhe der Coxa-/Femur-Achsen
-> über dem Boden, wenn der Körper flach aufliegt – derzeit geschätzt **40 mm**. Lieber etwas zu
-> groß als zu klein: Zu groß, und die Füße schweben in der Sitzhaltung knapp über dem Boden;
-> zu klein, und sie drücken den Körper beim Einschalten etwas hoch.
+> `SIT_HEIGHT` in `robot_geometry.h` ist die Höhe der Femur-Achsen über den Fußspitzen, wenn
+> der Körper flach aufliegt. Laut CAD liegt die Chassis-Unterkante 26 mm unter der Femur-Achse
+> und die Fußspitze ca. 2 mm über dem Boden, also ca. 24 mm; eingestellt sind **23 mm**. Lieber
+> etwas zu klein als zu groß: Zu klein, und die Füße schweben knapp über dem Boden; zu groß,
+> und sie drücken den Körper beim Einschalten etwas hoch.
 
 ## Laufen
 

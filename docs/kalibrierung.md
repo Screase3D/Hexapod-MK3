@@ -11,7 +11,7 @@ puls_us = center_us + (winkel_deg − ref_deg) × us_per_deg     (begrenzt auf m
 
 | Wert | Bedeutung |
 |---|---|
-| `ref_deg` | Gelenkwinkel der Montagestellung, fest je Gelenktyp (`ASSEMBLY_POSE` in `robot_geometry.h`): Coxa 0°, Femur +30°, Tibia −30° |
+| `ref_deg` | Gelenkwinkel der Montagestellung, fest je Gelenktyp (`ASSEMBLY_POSE` in `robot_geometry.h`): Coxa 0°, Femur +49,3°, Tibia −23,5° |
 | `center_us` | Pulsbreite in der Montagestellung (nach dem Aufstecken ≈ 1500 µs) |
 | `us_per_deg` | Steigung; das **Vorzeichen** ist die Drehrichtung (MG90S ≈ ±11,1 µs/°) |
 | `min_deg`, `max_deg` | Software-Endanschläge des Gelenks (Gelenkwinkel) |
@@ -21,26 +21,29 @@ Tab **System** als JSON exportieren – am besten eine Kopie ins Repository lege
 
 ## Montagestellung
 
-Der Hexapod steht „spinnenartig“: Femur deutlich nach oben, Tibia etwa senkrecht. Deshalb
-werden die Hörner nicht bei 0° (Femur waagerecht), sondern in dieser Haltung aufgesteckt:
+Die Hörner werden nicht bei 0° (Femur waagerecht), sondern in der **Grundstellung** aufgesteckt,
+in der der Roboter steht (aus dem CAD):
 
 | Gelenk | Montagestellung | Gelenkwinkel |
 |---|---|---|
 | Coxa | Bein zeigt in Montagerichtung (Ecken 45°, Mitte 90°) | 0° |
-| Femur | 30° nach oben | +30° |
-| Tibia | senkrecht nach unten (30° nach innen ggü. „rechtwinklig zum Femur“) | −30° |
+| Femur | 49,3° nach oben | +49,3° |
+| Tibia | Linie Knie → Fußspitze 64° unter der Waagerechten, Fußspitze 41 mm außerhalb des Knies | −23,5° |
 
-So liegt die Servo-Mitte in der Mitte des Bereichs, den das Bein beim Laufen braucht
-(Femur etwa +5…+90°, Tibia etwa −70…0°, siehe [kinematik.md](kinematik.md)); jeder Servo hat
-nach beiden Seiten genug Weg. Die Montagestellung ist zugleich die **Standardhaltung** der IK
-(Körperhöhe 72,5 mm, Fußabstand 78,2 mm) – „Alle auf Montagestellung“ stellt den Roboter hin.
+Praktisch heißt das: **Roboter so aufbocken, dass die Femur-Achsen 52 mm über dem Tisch liegen**
+(Chassis-Unterkante ca. 28 mm) und die Fußspitzen **110 mm von der Coxa-Achse** entfernt auf den
+Tisch stellen – dann steht jedes Bein genau in der Montagestellung.
+
+So liegt die Servo-Mitte mitten im Arbeitsbereich: Alle Haltungen bleiben innerhalb von ±60°
+(siehe [kinematik.md](kinematik.md)). Die Montagestellung ist zugleich die **Standardhaltung**
+der IK – „Alle auf Montagestellung“ stellt den Roboter hin.
 
 Zum Aufstecken und Prüfen gibt es eine **Lehre zum Ausdrucken**:
 [montagelehre.pdf](montagelehre.pdf) (A4, mit 100 % drucken, Kontrollmaß 50 mm nachmessen).
 Sie zeigt die Achslinien in Originalgröße: Femur-Achse und Knie-Achse als Kreuze, die
-Fußspitze als Marke und eine Winkellehre für die Coxa. Wer es genauer will, konstruiert im CAD
-kleine Keile, die zwischen Coxa-Halter und Femur bzw. Femur und Tibia genau 30° bzw. 60°
-(Kniewinkel) einstellen.
+Fußspitze als Marke, den gebogenen Unterschenkel als Umriss und eine Winkellehre für die Coxa.
+Wer es genauer will, konstruiert im CAD kleine Keile, die zwischen Coxa-Halter und Femur bzw.
+Femur und Tibia genau 49,3° bzw. 66,5° (Kniewinkel zwischen den Achslinien) einstellen.
 
 ## Gelenk-Konvention
 

@@ -121,7 +121,10 @@ static void testStandUpAndSitDown() {
     if (s.gait.swingMask()) ++lifted;
   }
   CHECK(s.seq.state() == posture::State::Standing);
-  CHECK(lifted > 0);  // die Füße wurden mit Schritten umgesetzt
+  // Weicht der Fußabstand im Sitzen deutlich ab, werden die Füße mit Schritten
+  // umgesetzt, sonst ist Aufstehen ein reines Anheben
+  if (std::fabs(SIT_STANCE - POSE_LIMITS.stance_default) > 10.0f) CHECK(lifted > 0);
+  else CHECK(lifted == 0);
   CHECK(k * DT < SIT_RISE_S + 2.5f);
   CHECK_NEAR(s.height, POSE_LIMITS.height_default, 1e-3);
   Vec3 n[6];
