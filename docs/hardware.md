@@ -1,6 +1,6 @@
 # Hardware und Pinbelegung
 
-Quelle: [`hexapod_schaltplan_v3.png`](hexapod_schaltplan_v3.png) und
+Quelle: [`hexapod_schaltplan_v4.png`](hexapod_schaltplan_v4.png) und
 [`ESP32_S3_Camera_Instructions.pdf`](ESP32_S3_Camera_Instructions.pdf) (Seite „Product Pin Description“).
 Alle Pins stehen zentral in [`firmware/include/config.h`](../firmware/include/config.h).
 
@@ -42,12 +42,15 @@ Servo-ID = Bein × 3 + Gelenk (Gelenk 0 = Coxa, 1 = Femur, 2 = Tibia).
 
 | Bein (UI) | Position | PCA9685 | Kanäle Coxa / Femur / Tibia | Servo-IDs |
 |---|---|---|---|---|
-| 1 | vorne links | #1 (0x40) | CH0 / CH1 / CH2 | 0 / 1 / 2 |
-| 2 | Mitte links | #1 (0x40) | CH3 / CH4 / CH5 | 3 / 4 / 5 |
-| 3 | hinten links | #1 (0x40) | CH6 / CH7 / CH8 | 6 / 7 / 8 |
-| 4 | vorne rechts | #2 (0x41) | CH0 / CH1 / CH2 | 9 / 10 / 11 |
-| 5 | Mitte rechts | #2 (0x41) | CH3 / CH4 / CH5 | 12 / 13 / 14 |
-| 6 | hinten rechts | #2 (0x41) | CH6 / CH7 / CH8 | 15 / 16 / 17 |
+| 1 | vorne links | #2 (0x41) | CH0 / CH1 / CH2 | 0 / 1 / 2 |
+| 2 | Mitte links | #2 (0x41) | CH3 / CH4 / CH5 | 3 / 4 / 5 |
+| 3 | hinten links | #2 (0x41) | CH6 / CH7 / CH8 | 6 / 7 / 8 |
+| 4 | vorne rechts | #1 (0x40) | CH0 / CH1 / CH2 | 9 / 10 / 11 |
+| 5 | Mitte rechts | #1 (0x40) | CH3 / CH4 / CH5 | 12 / 13 / 14 |
+| 6 | hinten rechts | #1 (0x40) | CH6 / CH7 / CH8 | 15 / 16 / 17 |
+
+Die beiden PCA9685 sind gespiegelt eingebaut: **#1 (0x40) sitzt rechts** und versorgt über
+UBEC 1 die Beine 4–6, **#2 (0x41, A0 gebrückt) sitzt links** mit UBEC 2 und den Beinen 1–3.
 
 Weicht die Verkabelung ab, nur die Tabelle `SERVO_MAP` in
 [`firmware/src/servo/servo_map.h`](../firmware/src/servo/servo_map.h) anpassen.

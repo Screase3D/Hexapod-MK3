@@ -1,6 +1,6 @@
 #pragma once
 // Zentrale Hardware- und Systemkonfiguration des Hexapod MK3.
-// Pinbelegung gemäß docs/hexapod_schaltplan_v3.png und Board-Doku
+// Pinbelegung gemäß docs/hexapod_schaltplan_v4.png und Board-Doku
 // (docs/ESP32_S3_Camera_Instructions.pdf, Seite "Product Pin Description").
 
 #include <stdint.h>
@@ -14,8 +14,8 @@ constexpr int      PIN_I2C_SDA  = 47;
 constexpr int      PIN_I2C_SCL  = 21;
 constexpr uint32_t I2C_FREQ_HZ  = 400000;
 
-constexpr uint8_t  PCA1_ADDR    = 0x40;  // linke Seite  (Beine 1-3)
-constexpr uint8_t  PCA2_ADDR    = 0x41;  // rechte Seite (Beine 4-6), A0 gebrückt
+constexpr uint8_t  PCA1_ADDR    = 0x40;  // rechte Seite (Beine 4-6)
+constexpr uint8_t  PCA2_ADDR    = 0x41;  // linke Seite  (Beine 1-3), A0 gebrückt
 constexpr uint8_t  MPU6050_ADDR = 0x68;  // AD0 an GND
 
 // Interner Oszillator der PCA9685. Nominal 25 MHz, real oft 24-27 MHz.

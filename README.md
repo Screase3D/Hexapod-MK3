@@ -21,7 +21,7 @@ später erweitert um KI-Funktionen mit der Kamera.
 
 ```
 docs/
-  hexapod_schaltplan_v3.png          Verdrahtungsplan
+  hexapod_schaltplan_v4.png          Verdrahtungsplan (PCA #1 = rechte Beine, #2 = linke)
   ESP32_S3_Camera_Instructions.pdf   Board-Doku (Pinout S. 4)
   hardware.md                        Pinbelegung, Servo-Zuordnung, Hinweise zur Schaltung
   kalibrierung.md                    Gelenk-Konvention und Kalibrierablauf

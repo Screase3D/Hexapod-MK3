@@ -1,9 +1,10 @@
 #pragma once
-// Zuordnung Bein/Gelenk -> PCA9685-Board/Kanal (laut Schaltplan v3).
+// Zuordnung Bein/Gelenk -> PCA9685-Board/Kanal (laut Schaltplan v4).
 //
 //   Servo-ID = Bein * 3 + Gelenk
-//   Bein 0..2 = linke Seite (vorne, Mitte, hinten)  -> PCA #1 (0x40), CH0..CH8
-//   Bein 3..5 = rechte Seite (vorne, Mitte, hinten) -> PCA #2 (0x41), CH0..CH8
+//   Bein 0..2 = linke Seite (vorne, Mitte, hinten)  -> PCA #2 (0x41), CH0..CH8
+//   Bein 3..5 = rechte Seite (vorne, Mitte, hinten) -> PCA #1 (0x40), CH0..CH8
+//   (Die Platinen sind gespiegelt eingebaut: #1 sitzt rechts, #2 links.)
 //   Gelenk 0 = Coxa (Hüfte), 1 = Femur (Oberschenkel), 2 = Tibia (Unterschenkel)
 //
 // In der Oberfläche werden die Beine wie im Schaltplan 1..6 nummeriert.
@@ -14,23 +15,23 @@
 enum Joint : uint8_t { JOINT_COXA = 0, JOINT_FEMUR = 1, JOINT_TIBIA = 2 };
 
 struct ServoMapEntry {
-  uint8_t board;    // 0 = PCA #1, 1 = PCA #2
+  uint8_t board;    // 0 = PCA #1 (0x40, rechts), 1 = PCA #2 (0x41, links)
   uint8_t channel;  // 0..15
 };
 
 constexpr ServoMapEntry SERVO_MAP[NUM_SERVOS] = {
-    // Bein 1 - vorne links
-    {0, 0}, {0, 1}, {0, 2},
-    // Bein 2 - Mitte links
-    {0, 3}, {0, 4}, {0, 5},
-    // Bein 3 - hinten links
-    {0, 6}, {0, 7}, {0, 8},
-    // Bein 4 - vorne rechts
+    // Bein 1 - vorne links  (PCA #2)
     {1, 0}, {1, 1}, {1, 2},
-    // Bein 5 - Mitte rechts
+    // Bein 2 - Mitte links   (PCA #2)
     {1, 3}, {1, 4}, {1, 5},
-    // Bein 6 - hinten rechts
+    // Bein 3 - hinten links  (PCA #2)
     {1, 6}, {1, 7}, {1, 8},
+    // Bein 4 - vorne rechts  (PCA #1)
+    {0, 0}, {0, 1}, {0, 2},
+    // Bein 5 - Mitte rechts  (PCA #1)
+    {0, 3}, {0, 4}, {0, 5},
+    // Bein 6 - hinten rechts (PCA #1)
+    {0, 6}, {0, 7}, {0, 8},
 };
 
 constexpr int NUM_BOARDS = 2;

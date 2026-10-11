@@ -16,8 +16,8 @@ struct KnownDevice {
 };
 
 constexpr KnownDevice KNOWN[] = {
-    {PCA1_ADDR, "PCA9685 #1 (Beine links)", true},
-    {PCA2_ADDR, "PCA9685 #2 (Beine rechts)", true},
+    {PCA1_ADDR, "PCA9685 #1 (Beine rechts)", true},
+    {PCA2_ADDR, "PCA9685 #2 (Beine links)", true},
     {MPU6050_ADDR, "MPU6050", true},
     {0x69, "MPU6050 mit AD0 = high (erwartet: AD0 an GND → 0x68)", false},
     {0x70, "PCA9685 All-Call (antwortet bis zur Initialisierung)", false},

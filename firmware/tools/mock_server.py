@@ -59,7 +59,7 @@ ASSEMBLY = [0.0, 30.0, -30.0]  # Montagestellung je Gelenktyp (robot_geometry.h)
 def default_cal(i):
     ref = ASSEMBLY[i % 3]
     span = 60.0 if i % 3 == 0 else 70.0
-    return {"id": i, "leg": i // 3, "joint": i % 3, "board": 0 if i < 9 else 1, "channel": i % 9,
+    return {"id": i, "leg": i // 3, "joint": i % 3, "board": 1 if i < 9 else 0, "channel": i % 9,
             "ref_deg": ref, "center_us": 1500.0, "us_per_deg": round(DEFAULT_SLOPE, 3),
             "min_deg": ref - span, "max_deg": ref + span}
 
@@ -81,9 +81,9 @@ def deg_of(i):
 
 def i2c():
     return {"sda": 47, "scl": 21, "freq_khz": 400, "scanned": True, "age_s": 3, "duration_ms": 18,
-            "devices": [{"addr": 0x40, "name": "PCA9685 #1 (Beine links)", "expected": True},
+            "devices": [{"addr": 0x40, "name": "PCA9685 #1 (Beine rechts)", "expected": True},
                         {"addr": 0x68, "name": "MPU6050", "expected": True}],
-            "missing": [{"addr": 0x41, "name": "PCA9685 #2 (Beine rechts)"}]}
+            "missing": [{"addr": 0x41, "name": "PCA9685 #2 (Beine links)"}]}
 
 
 NETWORKS = [

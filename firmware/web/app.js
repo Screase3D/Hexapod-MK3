@@ -1062,7 +1062,7 @@ async function loadStatus() {
     ]);
     const dev = $('sys-devices');
     dev.innerHTML = '';
-    const names = { pca1: 'PCA9685 #1 (0x40, links)', pca2: 'PCA9685 #2 (0x41, rechts)', imu: 'MPU6050 (0x68)', camera: `Kamera${s.camera.sensor ? ' ' + s.camera.sensor : ''}` };
+    const names = { pca1: 'PCA9685 #1 (0x40, rechts)', pca2: 'PCA9685 #2 (0x41, links)', imu: 'MPU6050 (0x68)', camera: `Kamera${s.camera.sensor ? ' ' + s.camera.sensor : ''}` };
     for (const [key, label] of Object.entries(names)) {
       const li = document.createElement('li');
       const ok = s.devices[key];

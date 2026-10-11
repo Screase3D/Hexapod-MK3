@@ -26,12 +26,12 @@ fa = math.radians(FEMUR_ASSEMBLY_DEG)
 REACH = COXA + FEMUR * math.cos(fa)  # Coxa-Achse -> Fuß (waagerecht)
 HEIGHT = TIBIA - FEMUR * math.sin(fa)  # Coxa-Achse über Boden
 MOUNTS = [  # (Name, x, y, Winkel, PCA, Kanäle)
-    ("vorne links", LENGTH / 2, FRONT_SPAN / 2, CORNER_ANGLE, "0x40", "CH0–2"),
-    ("Mitte links", 0.0, MID_SPAN / 2, 90.0, "0x40", "CH3–5"),
-    ("hinten links", -LENGTH / 2, FRONT_SPAN / 2, 180.0 - CORNER_ANGLE, "0x40", "CH6–8"),
-    ("vorne rechts", LENGTH / 2, -FRONT_SPAN / 2, -CORNER_ANGLE, "0x41", "CH0–2"),
-    ("Mitte rechts", 0.0, -MID_SPAN / 2, -90.0, "0x41", "CH3–5"),
-    ("hinten rechts", -LENGTH / 2, -FRONT_SPAN / 2, -(180.0 - CORNER_ANGLE), "0x41", "CH6–8"),
+    ("vorne links", LENGTH / 2, FRONT_SPAN / 2, CORNER_ANGLE, "0x41", "CH0–2"),
+    ("Mitte links", 0.0, MID_SPAN / 2, 90.0, "0x41", "CH3–5"),
+    ("hinten links", -LENGTH / 2, FRONT_SPAN / 2, 180.0 - CORNER_ANGLE, "0x41", "CH6–8"),
+    ("vorne rechts", LENGTH / 2, -FRONT_SPAN / 2, -CORNER_ANGLE, "0x40", "CH0–2"),
+    ("Mitte rechts", 0.0, -MID_SPAN / 2, -90.0, "0x40", "CH3–5"),
+    ("hinten rechts", -LENGTH / 2, -FRONT_SPAN / 2, -(180.0 - CORNER_ANGLE), "0x40", "CH6–8"),
 ]
 
 # --- Darstellung ------------------------------------------------------------
