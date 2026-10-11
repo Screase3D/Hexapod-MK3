@@ -122,8 +122,8 @@ also nicht die Außenkante des Bauteils.
   Beine montiert sind.
 - Alle Bewegungen laufen über eine Rampe (Standard 240 °/s, einstellbar im Tab *Steuerung*).
 - Nach dem Einschalten fahren die Servos beim Aktivieren von Torque direkt in die
-  Montagestellung (die echte Position ist vorher unbekannt). Der Roboter sollte dabei
-  aufgebockt sein oder frei liegen.
+  Sitzhaltung (Füße weit außen, siehe [kinematik.md](kinematik.md#aufstehen-und-hinsetzen); die
+  echte Position ist vorher unbekannt). Für die Montage danach „Alle auf 1500 µs (Montage)“.
 - Import einer JSON-Datei überschreibt alle 18 Servos und speichert sofort.
 - Kalibrierungen aus älteren Firmware-Ständen (Bezug 0°, Version 1) werden beim Laden und beim
   Import automatisch auf die Montagestellung umgerechnet; nie kalibrierte Servos (1500 µs,

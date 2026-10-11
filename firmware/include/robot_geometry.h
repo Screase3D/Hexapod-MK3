@@ -64,6 +64,16 @@ constexpr PoseLimits POSE_LIMITS = {
 constexpr float POSE_SPEED_MM_PER_S = 80.0f;
 constexpr float POSE_SPEED_DEG_PER_S = 45.0f;
 
+// Sitzen (Körper liegt auf, Füße weit außen) und Aufstehen/Hinsetzen.
+// sit_height = Höhe der Coxa-/Femur-Achsen über dem Boden, wenn der Körper flach
+// aufliegt – BITTE AM ROBOTER NACHMESSEN (lieber etwas zu groß als zu klein:
+// zu groß -> Füße schweben knapp über dem Boden, zu klein -> Füße drücken den
+// Körper beim Einschalten etwas hoch). Beim Einschalten von Torque fahren die
+// Servos in diese Haltung.
+constexpr float SIT_HEIGHT = 40.0f;
+constexpr float SIT_STANCE = 115.0f;  // Fußabstand im Sitzen (weit außen, Bein flach)
+constexpr float SIT_RISE_S = 1.5f;    // Dauer des Anhebens/Absenkens
+
 // Laufen: Grenzen der Gangparameter in der Oberfläche
 struct GaitLimits {
   float swing_min, swing_max, swing_default;     // Dauer eines Fußschwungs (s)

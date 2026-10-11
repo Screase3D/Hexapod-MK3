@@ -60,6 +60,8 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `pose_reset` | – | Standardhaltung |
 | `walk` | `vx`, `vy`, `turn` (je −1…1) | Fahrbefehl: vor/zurück, links/rechts, drehen (+ = links). Schaltet in den IK-Modus. **Ohne Antwort**; ohne neuen Befehl für 0,6 s hält der Roboter an – also während der Fahrt etwa alle 100 ms senden |
 | `stop` | – | Fahrbefehl auf 0 (Roboter läuft noch in die Neutralstellung) |
+| `stand` | – | aufstehen (aus dem Sitzen; braucht Torque), schaltet in den IK-Modus |
+| `sit` | – | hinsetzen |
 | `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wirkt im Stillstand |
 | `servo_us` | `id`, `us` | Rohmodus: Pulsbreite 500–2500 µs |
 | `servo_deg` | `id`, `deg` | kalibrierter Gelenkwinkel (auf Grenzen begrenzt) |
@@ -92,7 +94,7 @@ Beispiel:
   "servo": {"torque": true, "active": 18, "estop": false, "inhibit": "", "slew": 240,
             "cal_dirty": false, "us": [1500, …18…], "deg": [0.0, …18…], "boards": [true, true]},
   "imu":   {"ok": true, "pitch": 1.2, "roll": -0.4},
-  "motion": {"mode": "pose", "pose": {"x": 0, "y": 0, "z": 72.5, "roll": 0, "pitch": 0, "yaw": 0,
+  "motion": {"mode": "pose", "posture": "standing", "pose": {"x": 0, "y": 0, "z": 72.5, "roll": 0, "pitch": 0, "yaw": 0,
              "stance": 78.2},
              "gait": {"type": "tripod", "swing_s": 0.5, "step_height": 15, "active": "tripod",
                       "walking": true, "swing": 21, "vx": 48, "vy": 0, "wz": 0,
@@ -109,6 +111,8 @@ Beispiel:
 `bat.state`: `off` (Überwachung ausgeschaltet – `v` ist dann nur ein ungeprüfter Messwert),
 `usb` (kein Akku), `ok`, `warn`, `critical`. `servo.inhibit` enthält den Grund einer
 Sperre (z. B. „Akku leer“). `motion.unreachable` / `motion.clamped` listen Beine (0–5), die ihren
-Fußpunkt nicht erreichen bzw. an eine Gelenkgrenze stoßen. `motion.gait`: `type` = gewählte,
+Fußpunkt nicht erreichen bzw. an eine Gelenkgrenze stoßen. `motion.posture` (nur im IK-Modus):
+`sitting`, `standing_up`, `standing`, `sitting_down` – gelaufen wird nur in `standing`.
+`motion.gait`: `type` = gewählte,
 `active` = laufende Gangart, `swing` = Bitmaske der Beine in der Luft (Bit 0 = Bein 1),
 `vx`/`vy` in mm/s, `wz` in °/s, `max_*` = Höchstwerte bei den aktuellen Parametern.

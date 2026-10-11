@@ -13,6 +13,8 @@
 //                und Ende 0, kein Aufschlagen).
 // Ohne Fahrbefehl laufen die Beine noch in die Neutralstellung zurück und
 // bleiben dann stehen; Beine, die schon dort stehen, heben nicht ab.
+// Springen die Neutralpunkte im Stillstand um mehr als 10 mm (Aufstehen),
+// werden die Füße ebenso mit Schritten umgesetzt.
 
 #include <stdint.h>
 

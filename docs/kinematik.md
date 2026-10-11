@@ -121,9 +121,31 @@ eine Warnung; das Bein behält dann seine letzte gültige Stellung.
 ändern. Alle Füße sollten sich gleichmäßig senkrecht bewegen. Bewegt sich ein Bein falsch herum,
 stimmt dessen Kalibrierung (Drehrichtung) oder Montagewinkel nicht.
 
+## Aufstehen und Hinsetzen
+
+Beim Einschalten von Torque fahren die Beine in die **Sitzhaltung**: Körper liegt auf, Füße weit
+außen auf dem Boden (Fußabstand 115 mm, `SIT_STANCE`). So drücken die Beine einen auf dem Bauch
+liegenden Roboter nicht ruckartig hoch.
+
+Karte **Laufen** → **Aufstehen** ([`posture.cpp`](../firmware/src/kinematics/posture.cpp)):
+
+1. Körper bei weit stehenden Füßen ruckfrei auf die eingestellte Höhe heben (1,5 s, Füße bleiben
+   stehen),
+2. Füße mit zwei Dreifuß-Schritten auf den normalen Fußabstand setzen – nicht unter Last
+   schieben.
+
+**Hinsetzen** geht umgekehrt: Körper gerade ausrichten und Füße nach außen setzen, dann absenken.
+Laufen ist nur im Stehen möglich. Torque aus oder Not-Aus gilt als „liegt“: Danach muss der
+Roboter wieder aufstehen.
+
+> **Bitte nachmessen:** `SIT_HEIGHT` in `robot_geometry.h` ist die Höhe der Coxa-/Femur-Achsen
+> über dem Boden, wenn der Körper flach aufliegt – derzeit geschätzt **40 mm**. Lieber etwas zu
+> groß als zu klein: Zu groß, und die Füße schweben in der Sitzhaltung knapp über dem Boden;
+> zu klein, und sie drücken den Körper beim Einschalten etwas hoch.
+
 ## Laufen
 
-Tab *Steuerung* → Karte **Laufen**: linker Joystick *Fahren* (vor/zurück, seitlich), rechter
+Erst **Aufstehen** (siehe oben). Tab *Steuerung* → Karte **Laufen**: linker Joystick *Fahren* (vor/zurück, seitlich), rechter
 *Drehen*; am PC auch **W/S** (vor/zurück), **A/D** (seitlich), **Q/E** (drehen), **Leertaste**
 (Stopp). Der Joystick schaltet den IK-Modus ein; die Körperhaltung (Höhe, Neigung, …) gilt
 beim Laufen weiter.
@@ -168,7 +190,7 @@ Damit die Servo-Rampe die glatten Schrittbahnen nicht ausbremst, gilt im IK-Betr
 mindestens `GAIT_SERVO_SLEW_DEG_PER_S` (450 °/s) – erst, nachdem der Übergang in die Haltung mit
 der normalen Rampe abgeschlossen ist.
 
-**Erster Test:** Roboter aufbocken (Füße frei), Torque an, Tempo auf 20–30 %, Dreifuß, langsam
+**Erster Test:** Roboter aufbocken (Füße frei), Torque an, Aufstehen, Tempo auf 20–30 %, Dreifuß, langsam
 nach vorne. Zu sehen sein sollte: abwechselnd drei Beine heben (vorne links, hinten links, Mitte
 rechts und umgekehrt), die Füße am Boden wandern gleichmäßig nach hinten. Danach auf dem Boden,
 zuerst langsam.
@@ -182,6 +204,9 @@ Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet, auch in der
 - [`gait_test.cpp`](../firmware/test_host/gait_test.cpp): Standbeine rutschen nicht, höchstens 3/2/1
   Beine gleichzeitig in der Luft, keine Sprünge, alle Fußpunkte erreichbar und innerhalb der
   Standardgrenzen (auch bei Extremwerten), Gelenkgeschwindigkeiten, Anhalten und Anfahren
+- [`posture_test.cpp`](../firmware/test_host/posture_test.cpp): Sitzhaltung erreichbar,
+  Aufstehen und Hinsetzen komplett durchgerechnet (Füße bleiben beim Heben stehen, alle Stellungen
+  erreichbar und innerhalb der Grenzen)
 
 ```
 cd firmware/test_host
@@ -189,4 +214,6 @@ g++ -std=c++17 -I../src -I../include kinematics_test.cpp ../src/kinematics/kinem
 ./kin_test
 g++ -std=c++17 -I../src -I../include gait_test.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o gait_test
 ./gait_test
+g++ -std=c++17 -I../src -I../include posture_test.cpp ../src/kinematics/posture.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o posture_test
+./posture_test
 ```

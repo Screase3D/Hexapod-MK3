@@ -450,6 +450,10 @@ function walkChanged() {
   if (!W.timer && W.last.some((x) => Math.abs(x) > 1e-3)) {
     W.timer = setInterval(walkTick, WALK_SEND_MS);
     torqueHint();
+    const m = S.tel && S.tel.motion;
+    if (m && m.mode === 'pose' && m.posture && m.posture !== 'standing') {
+      toast('Erst aufstehen – im Sitzen läuft der Roboter nicht.');
+    }
   }
 }
 
@@ -556,9 +560,15 @@ function renderWalk(m) {
   if (!m) return;
   const g = m.gait || {};
   const st = $('walk-state');
+  const posture = m.mode === 'pose' ? m.posture : null;
+  const busy = posture === 'standing_up' || posture === 'sitting_down';
+  const POSTURE_TEXT = { sitting: 'sitzt', standing_up: 'steht auf …', sitting_down: 'setzt sich …' };
   if (m.mode !== 'pose') {
     st.textContent = 'IK aus';
     st.className = 'badge badge-muted';
+  } else if (posture && posture !== 'standing') {
+    st.textContent = POSTURE_TEXT[posture] || posture;
+    st.className = busy ? 'badge badge-warn' : 'badge badge-muted';
   } else if (g.walking) {
     st.textContent = 'läuft';
     st.className = 'badge badge-on';
@@ -566,6 +576,10 @@ function renderWalk(m) {
     st.textContent = 'steht';
     st.className = 'badge badge-muted';
   }
+  const powered = S.tel && S.tel.servo.torque && !S.tel.servo.estop;
+  $('walk-stand').disabled = !powered || busy || posture === 'standing';
+  $('walk-stand').title = powered ? '' : 'Erst Torque einschalten';
+  $('walk-sit').disabled = !powered || busy || m.mode !== 'pose' || posture === 'sitting';
   const swing = g.swing || 0;
   document.querySelectorAll('#walk-legs [data-leg]').forEach((d) => {
     d.classList.toggle('up', !!(swing & (1 << +d.dataset.leg)));
@@ -598,6 +612,11 @@ function bindWalk() {
   } catch (e) { /* kein Speicher */ }
   $('walk-scale').value = Math.round(W.scale * 100);
 
+  $('walk-stand').onclick = () => send('stand');
+  $('walk-sit').onclick = () => {
+    walkStopAll();
+    send('sit');
+  };
   makeJoystick($('joy-move'), false, (x, y) => {
     W.joyMove = [-y, -x];  // hoch = vor, links = +y
     walkChanged();

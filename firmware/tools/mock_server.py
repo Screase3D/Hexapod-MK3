@@ -31,6 +31,8 @@ state = {
     "mode": "manual",
     "pose": {"x": 0, "y": 0, "z": 72.5, "roll": 0, "pitch": 0, "yaw": 0, "stance": 78.2},
     "walk": [0, 0, 0],
+    "posture": "sitting",
+    "posture_t": 0,
     "walk_t": 0,
     "gait": {"type": "tripod", "swing_s": 0.5, "step_height": 15},
     # WLAN: startet im Access-Point-Modus (MOCK_WIFI=sta für Heimnetz-Betrieb)
@@ -127,9 +129,19 @@ SWING_START = {  # wie gait.cpp: Beginn der Schwungphase je Bein
 }
 
 
+def posture():
+    # wie motion.cpp: ohne Torque liegt der Roboter; Übergänge dauern ca. 2,5 s
+    if not state["torque"] or state["estop"]:
+        state["posture"] = "sitting"
+    elif state["posture"] in ("standing_up", "sitting_down") and time.time() - state["posture_t"] > 2.5:
+        state["posture"] = "standing" if state["posture"] == "standing_up" else "sitting"
+    return state["posture"]
+
+
 def gait_status():
     g = dict(state["gait"])
-    fresh = time.time() - state["walk_t"] < 0.6 and state["torque"] and state["mode"] == "pose"
+    fresh = (time.time() - state["walk_t"] < 0.6 and state["torque"] and state["mode"] == "pose"
+             and posture() == "standing")
     cmd = state["walk"] if fresh else [0, 0, 0]
     sigma = SWING_FRACTION[g["type"]]
     cycle = g["swing_s"] / sigma
@@ -158,7 +170,7 @@ def telemetry():
                 "roll": round(5 * math.sin(t / 2), 1), "acc": [0.05, -0.09, 0.99], "hz": 50, "temp": 28.4},
         "ctl": {"hz": 50.0, "max_us": 1830},
         "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3},
-        "motion": {"mode": state["mode"], "pose": state["pose"], "gait": gait_status(),
+        "motion": {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "gait": gait_status(),
                    "unreachable": [], "clamped": []},
         "wifi": {"mode": wifi_json()["mode"]}, "heap": 182000, "ws": 1,
     }
@@ -186,6 +198,8 @@ def handle(cmd):
         state["estop"] = False
         out["msg"] = "Not-Aus freigegeben (Servos bleiben aus)"
     elif c == "mode":
+        if cmd.get("mode") == "pose" and state["mode"] != "pose":
+            state["posture"] = "standing"
         state["mode"] = cmd.get("mode", "manual")
         out["msg"] = "Körperhaltung (IK) aktiv" if state["mode"] == "pose" else "Manueller Modus"
     elif c == "pose":
@@ -194,6 +208,20 @@ def handle(cmd):
                 state["pose"][k] = cmd[k]
     elif c == "stop":
         state["walk"] = [0, 0, 0]
+    elif c == "stand":
+        if not state["torque"]:
+            return {**out, "ok": False, "msg": "Erst Torque einschalten"}
+        if state["mode"] != "pose":
+            state["mode"], state["posture"] = "pose", "sitting"
+        if posture() == "sitting":
+            state["posture"], state["posture_t"] = "standing_up", time.time()
+        out["msg"] = "Steht auf"
+    elif c == "sit":
+        state["mode"] = "pose"
+        if posture() == "standing":
+            state["posture"], state["posture_t"] = "sitting_down", time.time()
+        state["walk"] = [0, 0, 0]
+        out["msg"] = "Setzt sich"
     elif c == "gait":
         if "type" in cmd:
             if cmd["type"] not in SWING_FRACTION:

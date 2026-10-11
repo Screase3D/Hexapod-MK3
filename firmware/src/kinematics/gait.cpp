@@ -7,6 +7,9 @@ namespace gait {
 namespace {
 
 constexpr float SETTLE_TOL = 2.0f;     // mm: Fuß gilt als "in Neutralstellung"
+// Weicht ein Fuß im Stillstand weiter ab (Neutralpunkt sprunghaft geändert,
+// z. B. beim Aufstehen), wird er mit Schritten umgesetzt statt verschoben
+constexpr float REPOSITION_MIN = 10.0f;
 constexpr float MOVING_EPS = 1e-3f;    // normierter Befehl, ab dem gelaufen wird
 constexpr float LATE_START = 0.25f;    // Schwungfenster erst so spät erreicht -> aussetzen
 constexpr float MAX_DT = 0.05f;        // größere Zeitschritte (Hänger) begrenzen
@@ -155,8 +158,14 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
                 std::fabs(cmd_ramped_[2]) > MOVING_EPS;
 
   if (idle_) {
-    if (!moving) {
-      // Stillstand: Füße folgen direkt den Neutralpunkten (z. B. Fußabstand)
+    float dev = 0.0f;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+      float d = distXY(legs_[i].pos, neutral[i]);
+      if (d > dev) dev = d;
+    }
+    if (!moving && dev <= REPOSITION_MIN) {
+      // Stillstand: Füße folgen kleinen Änderungen der Neutralpunkte direkt
+      // (z. B. Regler Fußabstand, max. 80 mm/s)
       for (int i = 0; i < NUM_LEGS; ++i) legs_[i].pos = {neutral[i].x, neutral[i].y, 0.0f};
       active_type_ = params_.type;
       return;

@@ -5,6 +5,7 @@
 #include "config.h"
 #include "kinematics/gait.h"
 #include "kinematics/kinematics.h"
+#include "kinematics/posture.h"
 #include "robot_geometry.h"
 #include "servo/servo_controller.h"
 
@@ -23,7 +24,11 @@ portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
 Mode g_mode = Mode::Manual;
 PoseState g_target;
 bool g_enter_pose = false;      // beim Wechsel in den Pose-Modus Haltung übernehmen
+bool g_enter_sitting = false;   // ... und dabei in der Sitzhaltung beginnen
 bool g_leave_pose = false;      // Rampen-Untergrenze im Regel-Task zurücksetzen
+bool g_req_stand = false;
+bool g_req_sit = false;
+posture::State g_posture = posture::State::Sitting;  // für die Telemetrie
 float g_walk_cmd[3] = {0, 0, 0};
 uint32_t g_walk_ms = 0;         // Zeitpunkt des letzten Fahrbefehls
 gait::Params g_gait_params;
@@ -39,12 +44,20 @@ struct GaitStatus {
 // --- nur im Regel-Task ---
 PoseState g_current;
 gait::Gait g_gait;
+posture::Sequencer g_seq{posture::Config{SIT_HEIGHT, SIT_STANCE, SIT_RISE_S}};
 bool g_settling = false;  // Übergang in die IK-Haltung läuft noch (normale Rampe)
 
 PoseState defaults() {
   PoseState s;
   s.pose = {0.0f, 0.0f, POSE_LIMITS.height_default, 0.0f, 0.0f, 0.0f};
   s.stance = POSE_LIMITS.stance_default;
+  return s;
+}
+
+PoseState sitState() {
+  PoseState s;
+  s.pose = {0.0f, 0.0f, SIT_HEIGHT, 0.0f, 0.0f, 0.0f};
+  s.stance = SIT_STANCE;
   return s;
 }
 
@@ -69,20 +82,49 @@ void neutralFeet(float stance, kin::Vec3 out[NUM_LEGS]) {
   for (int leg = 0; leg < NUM_LEGS; ++leg) out[leg] = kin::stanceFoot(LEG_MOUNTS[leg], stance);
 }
 
+// Gelenkwinkel aller Beine für die aktuelle Haltung und Fußpunkte;
+// unerreichbare Beine behalten ihre bisherigen Werte (Bitmaske zurück)
+uint8_t solveIk(const kin::BodyPose& pose, const gait::Gait& g, float angles[NUM_SERVOS]) {
+  uint8_t unreachable = 0;
+  for (int leg = 0; leg < NUM_LEGS; ++leg) {
+    const kin::LegMount& mount = LEG_MOUNTS[leg];
+    kin::Vec3 foot_leg = kin::bodyToLeg(mount, kin::worldToBody(pose, g.foot(leg)));
+    kin::JointAngles a;
+    if (kin::legIk(LEG_GEOMETRY, mount, foot_leg, a)) {
+      angles[leg * 3 + 0] = a.coxa;
+      angles[leg * 3 + 1] = a.femur;
+      angles[leg * 3 + 2] = a.tibia;
+    } else {
+      unreachable |= 1 << leg;
+    }
+  }
+  return unreachable;
+}
+
+float g_angles[NUM_SERVOS] = {};
+
 }  // namespace
 
 void begin() {
-  g_target = g_current = defaults();
+  g_target = defaults();
+  g_current = sitState();
   g_gait_params = defaultGait();
   g_gait.setParams(g_gait_params);
   kin::Vec3 n[NUM_LEGS];
   neutralFeet(g_current.stance, n);
   g_gait.reset(n);
+  g_seq.reset(posture::State::Sitting);
+  // Startsollwert der Servos: Sitzhaltung. Liegt der Roboter beim Einschalten
+  // von Torque auf dem Bauch, drücken die Beine ihn so nicht ruckartig hoch.
+  if (solveIk(g_current.pose, g_gait, g_angles) == 0) servos.setAnglesDeg(g_angles);
 }
 
 void setMode(Mode m) {
   portENTER_CRITICAL(&g_mux);
-  if (m == Mode::Pose && g_mode != Mode::Pose) g_enter_pose = true;
+  if (m == Mode::Pose && g_mode != Mode::Pose) {
+    g_enter_pose = true;
+    g_enter_sitting = false;
+  }
   if (m != Mode::Pose && g_mode == Mode::Pose) {
     g_leave_pose = true;
     g_walk_cmd[0] = g_walk_cmd[1] = g_walk_cmd[2] = 0.0f;
@@ -122,6 +164,31 @@ void applyPoseJson(JsonVariantConst o) {
 void resetPose() {
   portENTER_CRITICAL(&g_mux);
   g_target = defaults();
+  portEXIT_CRITICAL(&g_mux);
+}
+
+void stand() {
+  portENTER_CRITICAL(&g_mux);
+  if (g_mode != Mode::Pose) {
+    g_mode = Mode::Pose;
+    g_enter_pose = true;
+    g_enter_sitting = true;  // vom Boden aus aufstehen
+  }
+  g_req_stand = true;
+  g_req_sit = false;
+  portEXIT_CRITICAL(&g_mux);
+}
+
+void sit() {
+  portENTER_CRITICAL(&g_mux);
+  if (g_mode != Mode::Pose) {
+    g_mode = Mode::Pose;
+    g_enter_pose = true;
+    g_enter_sitting = false;
+  }
+  g_req_sit = true;
+  g_req_stand = false;
+  g_walk_cmd[0] = g_walk_cmd[1] = g_walk_cmd[2] = 0.0f;
   portEXIT_CRITICAL(&g_mux);
 }
 
@@ -171,8 +238,11 @@ void update(float dt) {
   Mode m = g_mode;
   PoseState target = g_target;
   bool entering = g_enter_pose;
+  bool enter_sitting = g_enter_sitting;
   bool leaving = g_leave_pose;
-  g_enter_pose = g_leave_pose = false;
+  bool req_stand = g_req_stand;
+  bool req_sit = g_req_sit;
+  g_enter_pose = g_leave_pose = g_req_stand = g_req_sit = false;
   gait::Params gp = g_gait_params;
   float cmd[3] = {g_walk_cmd[0], g_walk_cmd[1], g_walk_cmd[2]};
   uint32_t walk_ms = g_walk_ms;
@@ -182,15 +252,23 @@ void update(float dt) {
   if (m != Mode::Pose) return;
 
   kin::Vec3 neutral[NUM_LEGS];
-  if (entering) {
+  const bool powered = servos.torqueRequested() && !servos.emergencyStopActive();
+  // Ohne Kraft in den Servos liegt der Roboter -> Sitzhaltung (beim nächsten
+  // Einschalten fahren die Beine dorthin, statt ihn hochzudrücken)
+  bool collapse = !powered && g_seq.state() != posture::State::Sitting;
+  if (entering || collapse) {
     // Direkt mit der Zielhaltung starten; die Servo-Rampen sorgen für den
     // weichen Übergang aus der bisherigen Stellung.
-    g_current = target;
+    bool sitting = collapse || enter_sitting;
+    g_current = sitting ? sitState() : target;
+    g_seq.reset(sitting ? posture::State::Sitting : posture::State::Standing);
     neutralFeet(g_current.stance, neutral);
     g_gait.reset(neutral);
     servos.setSlewFloor(0.0f);
     g_settling = true;
   }
+  if (req_stand && powered) g_seq.requestStand();
+  if (req_sit) g_seq.requestSit();
   // Übergang abgeschlossen -> schnellere Rampe, damit die Füße den (glatten)
   // Schrittbahnen ohne Verzögerung folgen
   if (g_settling && servos.atTarget(3.0f)) {
@@ -198,22 +276,35 @@ void update(float dt) {
     servos.setSlewFloor(GAIT_SERVO_SLEW_DEG_PER_S);
   }
 
-  // Sicherheit: ohne frische Befehle, Torque oder bei Not-Aus nicht laufen
-  bool can_walk = !g_settling && servos.torqueRequested() && !servos.emergencyStopActive() &&
+  // Sicherheit: ohne frische Befehle, Torque oder bei Not-Aus nicht laufen;
+  // laufen nur im Stehen
+  bool can_walk = !g_settling && powered && g_seq.state() == posture::State::Standing &&
                   millis() - walk_ms < WALK_TIMEOUT_MS;
   if (!can_walk) cmd[0] = cmd[1] = cmd[2] = 0.0f;
 
-  // Haltung mit begrenzter Geschwindigkeit nachführen (fließende Bewegung)
+  // Haltungswechsel (sitzen/aufstehen/hinsetzen) geben Höhe und Fußabstand vor;
+  // solange der Übergang in die Haltung läuft, wartet der Ablauf
+  posture::Output po = g_seq.update(g_settling ? 0.0f : dt, target.pose.z, target.stance,
+                                    g_current.pose.z, g_gait.idle());
+  PoseState goal = target;
+  if (po.active) {
+    goal.pose = {0.0f, 0.0f, po.height, 0.0f, 0.0f, 0.0f};  // Körper gerade ausrichten
+    goal.stance = po.stance;
+  }
+
+  // Haltung mit begrenzter Geschwindigkeit nachführen (fließende Bewegung).
+  // Höhe und Fußabstand aus dem Haltungswechsel direkt (dort schon geglättet bzw.
+  // als Sprung gewollt: die Gangart setzt die Füße dann mit Schritten um).
   const float lin = POSE_SPEED_MM_PER_S * dt;
   const float ang = POSE_SPEED_DEG_PER_S * dt;
   kin::BodyPose& c = g_current.pose;
-  c.x = approach(c.x, target.pose.x, lin);
-  c.y = approach(c.y, target.pose.y, lin);
-  c.z = approach(c.z, target.pose.z, lin);
-  c.roll_deg = approach(c.roll_deg, target.pose.roll_deg, ang);
-  c.pitch_deg = approach(c.pitch_deg, target.pose.pitch_deg, ang);
-  c.yaw_deg = approach(c.yaw_deg, target.pose.yaw_deg, ang);
-  g_current.stance = approach(g_current.stance, target.stance, lin);
+  c.x = approach(c.x, goal.pose.x, lin);
+  c.y = approach(c.y, goal.pose.y, lin);
+  c.z = po.active ? goal.pose.z : approach(c.z, goal.pose.z, lin);
+  c.roll_deg = approach(c.roll_deg, goal.pose.roll_deg, ang);
+  c.pitch_deg = approach(c.pitch_deg, goal.pose.pitch_deg, ang);
+  c.yaw_deg = approach(c.yaw_deg, goal.pose.yaw_deg, ang);
+  g_current.stance = po.active ? goal.stance : approach(g_current.stance, goal.stance, lin);
 
   // Gang: Füße im Lauf-System
   neutralFeet(g_current.stance, neutral);
@@ -222,21 +313,8 @@ void update(float dt) {
   g_gait.update(dt, neutral);
 
   // Gelenkwinkel aller Beine per IK; unerreichbare Beine behalten ihre Werte
-  static float angles[NUM_SERVOS] = {};
-  uint8_t unreachable = 0;
-  for (int leg = 0; leg < NUM_LEGS; ++leg) {
-    const kin::LegMount& mount = LEG_MOUNTS[leg];
-    kin::Vec3 foot_leg = kin::bodyToLeg(mount, kin::worldToBody(g_current.pose, g_gait.foot(leg)));
-    kin::JointAngles a;
-    if (kin::legIk(LEG_GEOMETRY, mount, foot_leg, a)) {
-      angles[leg * 3 + 0] = a.coxa;
-      angles[leg * 3 + 1] = a.femur;
-      angles[leg * 3 + 2] = a.tibia;
-    } else {
-      unreachable |= 1 << leg;
-    }
-  }
-  uint32_t clamped = servos.setAnglesDeg(angles);
+  uint8_t unreachable = solveIk(g_current.pose, g_gait, g_angles);
+  uint32_t clamped = servos.setAnglesDeg(g_angles);
 
   GaitStatus st;
   st.walking = !g_gait.idle();
@@ -252,6 +330,7 @@ void update(float dt) {
   g_unreachable = unreachable;
   g_clamped = clamped;
   g_status = st;
+  g_posture = g_seq.state();
   portEXIT_CRITICAL(&g_mux);
 }
 
@@ -263,9 +342,11 @@ void toJson(JsonObject obj) {
   uint32_t clamped = g_clamped;
   gait::Params gp = g_gait_params;
   GaitStatus st = g_status;
+  posture::State ps = g_posture;
   portEXIT_CRITICAL(&g_mux);
 
   obj["mode"] = m == Mode::Pose ? "pose" : "manual";
+  if (m == Mode::Pose) obj["posture"] = posture::stateName(ps);
   JsonObject p = obj["pose"].to<JsonObject>();
   p["x"] = t.pose.x;
   p["y"] = t.pose.y;

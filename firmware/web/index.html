@@ -81,7 +81,11 @@
         <div class="card" id="walk-card">
           <div class="row space-between">
             <h2>Laufen</h2>
-            <span id="walk-state" class="badge badge-muted">steht</span>
+            <span id="walk-state" class="badge badge-muted">–</span>
+          </div>
+          <div class="row wrap">
+            <button id="walk-stand" class="btn btn-primary">Aufstehen</button>
+            <button id="walk-sit" class="btn">Hinsetzen</button>
           </div>
           <div class="joy-row">
             <div class="joy" id="joy-move" role="application" aria-label="Fahren">
@@ -113,7 +117,9 @@
           </div>
           <p class="muted small">Tastatur: <b>W</b>/<b>S</b> vor/zurück, <b>A</b>/<b>D</b> seitlich,
             <b>Q</b>/<b>E</b> drehen, <b>Leertaste</b> Stopp. Ein Wechsel der Gangart wirkt nach dem
-            Anhalten. Ohne Verbindung bleibt der Roboter nach 0,6&nbsp;s stehen.</p>
+            Anhalten. Ohne Verbindung bleibt der Roboter nach 0,6&nbsp;s stehen.<br>
+            Torque ein → die Beine fahren in die Sitzhaltung (Körper liegt auf). Laufen geht erst
+            nach <b>Aufstehen</b>; Torque aus oder Not-Aus gilt als „liegt“.</p>
         </div>
         </div>
 

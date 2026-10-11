@@ -95,11 +95,25 @@ static void testIdle() {
   for (int k = 0; k < 200; ++k) g.update(DT, n);
   CHECK(g.idle());
   CHECK(g.swingMask() == 0);
+  // kleine Änderung (Regler): Füße folgen direkt
   Vec3 wide[6];
-  neutralFeet(wide, POSE_LIMITS.stance_default + 10);
+  neutralFeet(wide, POSE_LIMITS.stance_default + 5);
   g.update(DT, wide);
   CHECK_NEAR(g.foot(0).x, wide[0].x, 1e-4);
   CHECK(g.idle());
+  // großer Sprung (Aufstehen): Füße werden mit Schritten umgesetzt
+  neutralFeet(wide, POSE_LIMITS.stance_default + 30);
+  g.update(DT, wide);
+  CHECK(!g.idle());
+  CHECK(g.swingMask() != 0);
+  int k = 0;
+  while (!g.idle() && k < 200) {
+    g.update(DT, wide);
+    ++k;
+  }
+  CHECK(g.idle());
+  CHECK(k * DT < 1.5f * gait::cycleTime(gait::Type::Tripod, GAIT_LIMITS.swing_default));
+  for (int i = 0; i < 6; ++i) CHECK_NEAR(g.foot(i).y, wide[i].y, 1e-3);
 }
 
 // Standbeine dürfen auf dem Boden nicht rutschen; gleichzeitig angehobene

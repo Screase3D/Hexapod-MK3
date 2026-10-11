@@ -47,6 +47,9 @@ jobs:
           g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include \
             gait_test.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o gait_test
           ./gait_test
+          g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include posture_test.cpp \
+            ../src/kinematics/posture.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o posture_test
+          ./posture_test
 
       - name: Firmware bauen
         run: pio run -d firmware

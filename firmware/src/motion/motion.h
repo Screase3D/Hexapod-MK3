@@ -6,6 +6,7 @@
 //                 Neutralpunkten, beim Laufen in Schritten), die Körperhaltung
 //                 (Höhe, Verschiebung, Rollen/Nicken/Gieren, Fußabstand) kommt
 //                 obendrauf; die IK rechnet daraus die Gelenkwinkel.
+//                 Haltung: sitzen -> aufstehen -> stehen/laufen -> hinsetzen.
 //
 // update() läuft im Regel-Task; alle anderen Funktionen sind thread-sicher.
 
@@ -24,6 +25,11 @@ Mode mode();
 // x, y, z (Höhe), roll, pitch, yaw, stance. Werte werden begrenzt.
 void applyPoseJson(JsonVariantConst obj);
 void resetPose();
+
+// Aufstehen / Hinsetzen (schalten in den IK-Modus). Ohne Torque oder bei
+// Not-Aus gilt der Roboter als liegend (Sitzhaltung); Laufen geht nur im Stehen.
+void stand();
+void sit();
 
 // Fahrbefehl, normiert -1..1 (vx vor, vy links, turn + = links drehen).
 // Schaltet in den IK-Modus. Bleibt ein neuer Befehl länger als

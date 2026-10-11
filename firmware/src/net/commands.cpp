@@ -92,6 +92,16 @@ void handle(JsonVariantConst in, JsonDocument& out) {
   } else if (strcmp(cmd, "pose_reset") == 0) {
     motion::resetPose();
     result(out, true, "Haltung zurückgesetzt");
+  } else if (strcmp(cmd, "stand") == 0) {
+    if (!servos.torqueRequested() || servos.emergencyStopActive()) {
+      result(out, false, "Erst Torque einschalten");
+    } else {
+      motion::stand();
+      result(out, true, "Steht auf");
+    }
+  } else if (strcmp(cmd, "sit") == 0) {
+    motion::sit();
+    result(out, true, "Setzt sich");
   } else if (strcmp(cmd, "stop") == 0) {
     motion::stopWalking();
     result(out, true);
