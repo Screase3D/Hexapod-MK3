@@ -11,6 +11,7 @@
 #include <esp_sleep.h>
 
 #include "config.h"
+#include "control_stats.h"
 #include "motion/motion.h"
 #include "net/camera.h"
 #include "net/commands.h"
@@ -33,6 +34,7 @@ void controlTask(void*) {
   TickType_t last_wake = xTaskGetTickCount();
   uint32_t cycle = 0;
   uint32_t last_us = micros();
+  uint32_t stats_start = millis(), stats_cycles = 0, stats_max_us = 0;
   for (;;) {
     vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(CONTROL_PERIOD_MS));
     uint32_t now_us = micros();
@@ -44,6 +46,19 @@ void controlTask(void*) {
     if (++cycle % BATTERY_EVERY_N_CYCLES == 0) g_battery_cutoff = battery.update();
     motion::update(dt);  // im Pose-Modus: Körperhaltung -> IK -> Servo-Sollwerte
     servos.update(dt);
+
+    // Statistik: Zyklen pro Sekunde und längste Rechenzeit
+    uint32_t work_us = micros() - now_us;
+    if (work_us > stats_max_us) stats_max_us = work_us;
+    ++stats_cycles;
+    uint32_t now_ms = millis();
+    if (now_ms - stats_start >= 1000) {
+      control_stats::hz = stats_cycles * 1000.0f / (now_ms - stats_start);
+      control_stats::max_work_us = stats_max_us;
+      stats_start = now_ms;
+      stats_cycles = 0;
+      stats_max_us = 0;
+    }
   }
 }
 

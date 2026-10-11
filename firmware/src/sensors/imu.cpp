@@ -113,10 +113,21 @@ bool Imu::update(float dt_s) {
 
   int16_t raw[7];
   if (!readRaw(raw)) {
+    ++errors_total_;
     if (++error_count_ > 10) ok_ = false;
     return false;
   }
   error_count_ = 0;
+
+  // Leserate für die Diagnose
+  ++rate_reads_;
+  uint32_t now = millis();
+  if (now - rate_start_ms_ >= 1000) {
+    rate_hz_ = rate_reads_ * 1000.0f / (now - rate_start_ms_);
+    rate_start_ms_ = now;
+    rate_reads_ = 0;
+  }
+  temp_c_ = raw[3] / 340.0f + 36.53f;
 
   for (int a = 0; a < 3; ++a) {
     accel_g_[a] = raw[a] / ACCEL_LSB_PER_G;
@@ -132,7 +143,14 @@ bool Imu::update(float dt_s) {
 
 void Imu::toJson(JsonObject obj) const {
   obj["ok"] = ok_;
+  obj["who"] = who_am_i_;
+  obj["errors"] = errors_total_;
   if (!ok_) return;
   obj["pitch"] = roundf(pitch_ * 10.0f) / 10.0f;
   obj["roll"] = roundf(roll_ * 10.0f) / 10.0f;
+  // Rohwerte zur Kontrolle: liegt der Sensor flach, ist az ≈ 1 g
+  JsonArray a = obj["acc"].to<JsonArray>();
+  for (int i = 0; i < 3; ++i) a.add(roundf(accel_g_[i] * 100.0f) / 100.0f);
+  obj["hz"] = roundf(rate_hz_);
+  obj["temp"] = roundf(temp_c_ * 10.0f) / 10.0f;
 }

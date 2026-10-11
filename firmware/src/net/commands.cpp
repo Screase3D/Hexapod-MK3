@@ -4,6 +4,7 @@
 #include <WiFi.h>
 
 #include "config.h"
+#include "control_stats.h"
 #include "motion/motion.h"
 #include "net/camera.h"
 #include "net/web_server.h"
@@ -172,6 +173,10 @@ void buildTelemetry(JsonDocument& doc) {
   if (sta) w["rssi"] = WiFi.RSSI();
   doc["heap"] = ESP.getFreeHeap();
   doc["ws"] = web::wsClientCount();
+  JsonObject ctl = doc["ctl"].to<JsonObject>();
+  ctl["hz"] = roundf(control_stats::hz.load() * 10.0f) / 10.0f;
+  ctl["max_us"] = control_stats::max_work_us.load();
+  camera::statsToJson(doc["cam"].to<JsonObject>());
 }
 
 void buildStatus(JsonDocument& doc) {

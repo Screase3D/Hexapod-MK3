@@ -22,6 +22,7 @@ struct Settings {
   bool hmirror;
   int max_fps;    // Bildratenbegrenzung des Streams
   int rotation;   // 0/90/180/270 Grad im Uhrzeigersinn (Einbaulage der Kamera)
+  int xclk_mhz;   // Kamera-Takt 10/16/20 MHz (wirkt nach Neustart)
 };
 
 bool begin();
@@ -32,5 +33,7 @@ Settings settings();
 // Übernimmt nur die im JSON vorhandenen Felder; persistiert in NVS.
 bool applyJson(JsonVariantConst obj, String& err);
 void toJson(JsonObject obj);
+// Live-Statistik des Streams (Bildrate, Bildgröße, Datenrate, Fehler)
+void statsToJson(JsonObject obj);
 
 }  // namespace camera

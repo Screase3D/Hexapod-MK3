@@ -34,6 +34,13 @@ class Imu {
   float roll_ = 0.0f;
   uint8_t error_count_ = 0;
   uint32_t last_retry_ms_ = 0;
+
+  // Diagnose
+  float temp_c_ = 0.0f;
+  uint32_t errors_total_ = 0;
+  float rate_hz_ = 0.0f;
+  uint32_t rate_start_ms_ = 0;
+  uint32_t rate_reads_ = 0;
 };
 
 extern Imu imu;

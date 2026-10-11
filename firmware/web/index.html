@@ -47,6 +47,7 @@
             <a id="cam-snap" class="btn" target="_blank" rel="noopener">Foto</a>
             <span id="cam-info" class="muted small"></span>
           </div>
+          <p id="cam-stats" class="muted small mono cam-stats"></p>
           <details class="cam-settings">
             <summary>Kameraeinstellungen</summary>
             <div class="form-grid">
@@ -63,6 +64,13 @@
                 <option value="180">180°</option>
                 <option value="270">270° im Uhrzeigersinn</option>
               </select>
+              <label for="cam-xclk">Kamera-Takt</label>
+              <select id="cam-xclk">
+                <option value="20">20 MHz (Standard)</option>
+                <option value="16">16 MHz</option>
+                <option value="10">10 MHz (stabiler, langsamer)</option>
+              </select>
+              <p id="cam-xclk-note" class="warn-text small span-2" hidden>Kamera-Takt wird nach einem Neustart wirksam.</p>
               <label class="check"><input id="cam-vflip" type="checkbox"> Vertikal spiegeln</label>
               <label class="check"><input id="cam-hmirror" type="checkbox"> Horizontal spiegeln</label>
             </div>
@@ -118,6 +126,7 @@
                 <dt>Roll</dt><dd id="imu-roll" class="mono">–</dd>
               </dl>
             </div>
+            <p id="imu-raw" class="muted small mono"></p>
           </div>
         </div>
       </div>

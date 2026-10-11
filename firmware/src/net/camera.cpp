@@ -13,15 +13,24 @@ namespace {
 
 #define PART_BOUNDARY "hexapodframe"
 constexpr const char* STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
-constexpr const char* STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
-constexpr const char* STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
+constexpr const char* STREAM_PART =
+    "\r\n--" PART_BOUNDARY "\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
 constexpr const char* NVS_NAMESPACE = "camera";
 
 bool g_ok = false;
 httpd_handle_t g_httpd = nullptr;
 std::atomic<int> g_stream_clients{0};
-Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0};
+Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0, CAM_XCLK_HZ / 1000000};
+int g_xclk_active_mhz = 0;  // beim Start tatsächlich verwendeter Takt
+
+// Stream-Statistik (über ein 2-s-Fenster gemittelt)
+std::atomic<float> g_stat_fps{0.0f};
+std::atomic<uint32_t> g_stat_avg_bytes{0};
+std::atomic<uint32_t> g_stat_kbps{0};
+std::atomic<uint32_t> g_fb_errors{0};
+
+bool validXclk(int mhz) { return mhz == 10 || mhz == 16 || mhz == 20; }
 
 struct FramesizeInfo {
   framesize_t id;
@@ -52,6 +61,8 @@ void loadSettings() {
   g_settings.max_fps = constrain(p.getInt("fps", g_settings.max_fps), 1, 30);
   int rot = p.getInt("rot", 0);
   g_settings.rotation = (rot == 90 || rot == 180 || rot == 270) ? rot : 0;
+  int xclk = p.getInt("xclk", g_settings.xclk_mhz);
+  if (validXclk(xclk)) g_settings.xclk_mhz = xclk;
   p.end();
 }
 
@@ -64,6 +75,7 @@ void saveSettings() {
   p.putBool("hmirror", g_settings.hmirror);
   p.putInt("fps", g_settings.max_fps);
   p.putInt("rot", g_settings.rotation);
+  p.putInt("xclk", g_settings.xclk_mhz);
   p.end();
 }
 
@@ -92,10 +104,12 @@ esp_err_t streamHandler(httpd_req_t* req) {
   httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 
   ++g_stream_clients;
-  char part[96];
+  char part[128];
   esp_err_t res = ESP_OK;
   int64_t last_frame_us = 0;
-  int fail_count = 0;
+  int64_t fail_since_us = 0;
+  int64_t window_start_us = esp_timer_get_time();
+  uint32_t window_frames = 0, window_bytes = 0;
 
   while (res == ESP_OK) {
     // Bildrate begrenzen
@@ -106,22 +120,44 @@ esp_err_t streamHandler(httpd_req_t* req) {
 
     camera_fb_t* fb = esp_camera_fb_get();
     if (!fb) {
-      if (++fail_count > 20) res = ESP_FAIL;
-      vTaskDelay(pdMS_TO_TICKS(20));
+      // Einzelne Aussetzer tolerieren, erst nach 3 s ohne Bild aufgeben
+      ++g_fb_errors;
+      int64_t now = esp_timer_get_time();
+      if (fail_since_us == 0) fail_since_us = now;
+      if (now - fail_since_us > 3000000LL) {
+        log_e("Kamera liefert seit 3 s keine Bilder - Stream beendet");
+        res = ESP_FAIL;
+      }
+      vTaskDelay(pdMS_TO_TICKS(10));
       continue;
     }
-    fail_count = 0;
+    fail_since_us = 0;
     if (fb->format == PIXFORMAT_JPEG) {
-      res = httpd_resp_send_chunk(req, STREAM_BOUNDARY, strlen(STREAM_BOUNDARY));
-      if (res == ESP_OK) {
-        size_t hlen = snprintf(part, sizeof(part), STREAM_PART, (unsigned)fb->len);
-        res = httpd_resp_send_chunk(req, part, hlen);
-      }
+      // Trenner + Kopf in einem Paket, danach das Bild
+      size_t hlen = snprintf(part, sizeof(part), STREAM_PART, (unsigned)fb->len);
+      res = httpd_resp_send_chunk(req, part, hlen);
       if (res == ESP_OK) res = httpd_resp_send_chunk(req, (const char*)fb->buf, fb->len);
+      if (res == ESP_OK) {
+        ++window_frames;
+        window_bytes += fb->len;
+      }
     }
     esp_camera_fb_return(fb);
+
+    int64_t now = esp_timer_get_time();
+    if (now - window_start_us >= 2000000LL) {
+      float secs = (now - window_start_us) / 1e6f;
+      g_stat_fps = window_frames / secs;
+      g_stat_avg_bytes = window_frames ? window_bytes / window_frames : 0;
+      g_stat_kbps = (uint32_t)(window_bytes * 8 / 1000 / secs);
+      window_start_us = now;
+      window_frames = window_bytes = 0;
+    }
   }
-  --g_stream_clients;
+  if (--g_stream_clients == 0) {
+    g_stat_fps = 0;
+    g_stat_kbps = 0;
+  }
   return res;
 }
 
@@ -162,7 +198,8 @@ bool begin() {
   config.sccb_i2c_port = 1;  // Port 0 gehört Wire (Servos/IMU)
   config.pin_pwdn = CAM_PIN_PWDN;
   config.pin_reset = CAM_PIN_RESET;
-  config.xclk_freq_hz = CAM_XCLK_HZ;
+  config.xclk_freq_hz = g_settings.xclk_mhz * 1000000;
+  g_xclk_active_mhz = g_settings.xclk_mhz;
   config.pixel_format = PIXFORMAT_JPEG;
   // Mit größter Auflösung initialisieren, damit später jede Auflösung
   // in den Framebuffer passt; danach auf die gespeicherte umschalten.
@@ -203,6 +240,9 @@ bool startStreamServer() {
   config.lru_purge_enable = true;
   config.core_id = 0;
   config.stack_size = 6144;
+  // Bei schwachem WLAN können einzelne Pakete länger hängen – nicht sofort abbrechen
+  config.send_wait_timeout = 10;
+  config.recv_wait_timeout = 10;
 
   if (httpd_start(&g_httpd, &config) != ESP_OK) {
     log_e("Stream-Server konnte nicht gestartet werden");
@@ -242,6 +282,14 @@ bool applyJson(JsonVariantConst obj, String& err) {
   if (obj["vflip"].is<bool>()) next.vflip = obj["vflip"];
   if (obj["hmirror"].is<bool>()) next.hmirror = obj["hmirror"];
   if (obj["max_fps"].is<int>()) next.max_fps = constrain(obj["max_fps"].as<int>(), 1, 30);
+  if (obj["xclk_mhz"].is<int>()) {
+    int mhz = obj["xclk_mhz"];
+    if (!validXclk(mhz)) {
+      err = "XCLK muss 10, 16 oder 20 MHz sein";
+      return false;
+    }
+    next.xclk_mhz = mhz;
+  }
   if (obj["rotation"].is<int>()) {
     int rot = obj["rotation"];
     if (rot != 0 && rot != 90 && rot != 180 && rot != 270) {
@@ -264,6 +312,8 @@ void toJson(JsonObject obj) {
   obj["hmirror"] = g_settings.hmirror;
   obj["max_fps"] = g_settings.max_fps;
   obj["rotation"] = g_settings.rotation;
+  obj["xclk_mhz"] = g_settings.xclk_mhz;
+  obj["xclk_active_mhz"] = g_xclk_active_mhz;
   obj["clients"] = g_stream_clients.load();
   obj["port"] = STREAM_PORT;
   JsonArray sizes = obj["framesizes"].to<JsonArray>();
@@ -280,6 +330,16 @@ void toJson(JsonObject obj) {
       obj["sensor"] = info ? info->name : "unbekannt";
     }
   }
+}
+
+void statsToJson(JsonObject obj) {
+  int clients = g_stream_clients.load();
+  obj["clients"] = clients;
+  obj["err"] = g_fb_errors.load();
+  if (clients == 0) return;
+  obj["fps"] = roundf(g_stat_fps.load() * 10.0f) / 10.0f;
+  obj["kb"] = (g_stat_avg_bytes.load() + 512) / 1024;
+  obj["kbps"] = g_stat_kbps.load();
 }
 
 }  // namespace camera

@@ -249,10 +249,17 @@ function renderTelemetry() {
     $('imu-roll').textContent = fmtDeg(t.imu.roll) + '°';
     $('horizon-line').style.transform =
       `translateY(${clamp(t.imu.pitch, -45, 45) * 0.9}px) rotate(${-t.imu.roll}deg)`;
+    // Rohwerte zur Kontrolle: flach liegend ist z ≈ +1 g, gekippt wandert 1 g auf x/y
+    if (t.imu.acc) {
+      const a = t.imu.acc.map((v) => (v >= 0 ? '+' : '') + v.toFixed(2)).join(' ');
+      $('imu-raw').textContent = `a = ${a} g · ${t.imu.hz} Hz · ${t.imu.temp} °C · Lesefehler ${t.imu.errors}`;
+    }
   } else {
     $('imu-pitch').textContent = 'kein Sensor';
     $('imu-roll').textContent = '–';
+    $('imu-raw').textContent = t.imu.errors ? `Lesefehler ${t.imu.errors}` : '';
   }
+  renderCamStats(t);
 
   // Kalibrierung
   $('cal-dirty').hidden = !sv.cal_dirty;
@@ -610,17 +617,54 @@ function showTab(name) {
 // -------------------------------------------------------------- Kamera ------
 
 const camBase = () => `${location.protocol}//${location.hostname}:81`;
+let camRetryTimer = null;
+let camRetries = 0;
+
+function renderCamStats(t) {
+  const el = $('cam-stats');
+  const c = t.cam || {};
+  const live = $('cam-img').parentElement.classList.contains('live');
+  if (!live || !c.clients) {
+    el.textContent = '';
+    return;
+  }
+  if (c.fps !== undefined) camRetries = 0;  // Stream läuft wieder
+  const parts = [`${(c.fps || 0).toFixed(1)} fps`, `${c.kb || 0} KB/Bild`, `${((c.kbps || 0) / 1000).toFixed(1)} Mbit/s`];
+  if (t.wifi && t.wifi.rssi !== undefined) parts.push(`WLAN ${t.wifi.rssi} dBm`);
+  if (c.err) parts.push(`Kamera-Aussetzer ${c.err}`);
+  el.textContent = parts.join(' · ');
+}
+
+function scheduleCamRetry() {
+  clearTimeout(camRetryTimer);
+  camRetries += 1;
+  $('cam-placeholder').textContent = `Stream unterbrochen – verbinde neu (Versuch ${camRetries}) …`;
+  camRetryTimer = setTimeout(() => {
+    camRetryTimer = null;
+    const img = $('cam-img');
+    if (S.camWanted && S.tab === 'control' && !document.hidden) {
+      img.src = `${camBase()}/stream?t=${Date.now()}`;
+      img.parentElement.classList.add('live');
+    }
+  }, Math.min(1000 * camRetries, 5000));
+}
 
 function updateStream() {
   const img = $('cam-img');
   const live = S.camWanted && S.tab === 'control' && !document.hidden;
   const view = img.parentElement;
-  if (live && !view.classList.contains('live')) {
+  if (live && !view.classList.contains('live') && !camRetryTimer) {
     img.src = `${camBase()}/stream?t=${Date.now()}`;
     view.classList.add('live');
-  } else if (!live && view.classList.contains('live')) {
-    img.src = 'data:,';  // Verbindung schließen
-    view.classList.remove('live');
+  } else if (!live) {
+    clearTimeout(camRetryTimer);
+    camRetryTimer = null;
+    camRetries = 0;
+    $('cam-placeholder').textContent = 'Stream gestoppt';
+    if (view.classList.contains('live')) {
+      img.src = 'data:,';  // Verbindung schließen
+      view.classList.remove('live');
+    }
   }
   $('cam-toggle').textContent = S.camWanted ? 'Stream stoppen' : 'Stream starten';
 }
@@ -638,6 +682,8 @@ function renderCamera() {
   $('cam-fps').value = c.max_fps;
   $('cam-fps-val').textContent = `${c.max_fps} fps`;
   $('cam-rot').value = c.rotation || 0;
+  $('cam-xclk').value = c.xclk_mhz || 20;
+  $('cam-xclk-note').hidden = !c.xclk_active_mhz || c.xclk_mhz === c.xclk_active_mhz;
   // 90°/270°: Sensor liefert 0°/180°, die Oberfläche dreht um weitere 90°
   $('cam-img').parentElement.classList.toggle('rot90', c.rotation === 90 || c.rotation === 270);
   $('cam-vflip').checked = c.vflip;
@@ -670,13 +716,14 @@ function bindCamera() {
     S.camWanted = !S.camWanted;
     updateStream();
   };
+  // Bricht der Stream ab (WLAN-Aussetzer), automatisch neu verbinden
   $('cam-img').onerror = () => {
-    if ($('cam-img').parentElement.classList.contains('live')) {
-      toast('Stream unterbrochen', true);
-      S.camWanted = false;
-      updateStream();
-    }
+    const view = $('cam-img').parentElement;
+    if (!view.classList.contains('live') || !S.camWanted) return;
+    view.classList.remove('live');
+    scheduleCamRetry();
   };
+  $('cam-xclk').onchange = (e) => setCamera({ xclk_mhz: +e.target.value });
   $('cam-fs').onchange = (e) => setCamera({ framesize: +e.target.value });
   $('cam-q').oninput = (e) => { $('cam-q-val').textContent = e.target.value; };
   $('cam-q').onchange = (e) => setCamera({ quality: +e.target.value });
@@ -728,6 +775,11 @@ async function loadStatus() {
         w.ap.active ? `Access Point „${w.ap.ssid}“ (${w.ap.clients} Geräte)` : '',
       ].filter(Boolean).join(' · ')],
       ['Adresse', `${w.ip} · ${w.host}`],
+      ['Regel-Task', S.tel && S.tel.ctl
+        ? `${S.tel.ctl.hz} Hz (Soll 50), max. ${(S.tel.ctl.max_us / 1000).toFixed(1)} ms Rechenzeit` : '–'],
+      ['MPU6050', S.tel && S.tel.imu
+        ? `WHO_AM_I ${hex(S.tel.imu.who || 0)}` + (S.tel.imu.ok ? `, ${S.tel.imu.hz} Hz` : ', antwortet nicht') +
+          `, Lesefehler ${S.tel.imu.errors || 0}` : '–'],
     ]);
     const dev = $('sys-devices');
     dev.innerHTML = '';
