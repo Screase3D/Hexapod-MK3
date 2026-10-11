@@ -9,7 +9,7 @@ Alle Pins stehen zentral in [`firmware/include/config.h`](../firmware/include/co
 | Baugruppe | Typ | Anmerkung |
 |---|---|---|
 | Controller | ESP32-S3-CAM (ESP32-S3 N16R8) | 16 MB Flash, 8 MB Octal-PSRAM, CH340 an der Buchse „TTL“ |
-| Kamera | OV2640 laut Board-Doku, OV5640 laut Schaltplan | Typ wird von der Firmware automatisch erkannt |
+| Kamera | OV5640 (verbaut), OV2640 laut Board-Doku | Typ wird automatisch erkannt; der OV5640 wird im Dauerbetrieb sehr heiß → Firmware legt ihn ohne Stream schlafen, Kühlkörper/Luft am Modul hilft |
 | Servotreiber | 2× PCA9685 | #1 = 0x40 (linke Seite), #2 = 0x41 (A0 gebrückt, rechte Seite) |
 | Servos | 18× MG90S | Coxa / Femur / Tibia je Bein |
 | Lagesensor | MPU6050 (GY-521) | 0x68 (AD0 an GND), an 3V3 |

@@ -639,11 +639,13 @@ function renderCamStats(t) {
   const c = t.cam || {};
   const live = $('cam-img').parentElement.classList.contains('live');
   if (!live || !c.clients) {
-    el.textContent = '';
+    // Ohne Stream schläft die Kamera nach kurzer Zeit (spart Strom und Wärme)
+    el.textContent = c.awake === undefined ? '' : (c.awake ? 'Kamera aktiv – schläft gleich ohne Stream' : 'Kamera schläft – wacht mit dem Stream auf');
     return;
   }
   if (c.fps !== undefined) camRetries = 0;  // Stream läuft wieder
   const parts = [`${(c.fps || 0).toFixed(1)} fps`, `${c.kb || 0} KB/Bild`, `${((c.kbps || 0) / 1000).toFixed(1)} Mbit/s`];
+  if (c.wake_ms) parts.push(`Start ${c.wake_ms} ms`);
   if (t.wifi && t.wifi.rssi !== undefined) parts.push(`WLAN ${t.wifi.rssi} dBm`);
   if (c.err) parts.push(`Kamera-Aussetzer ${c.err}`);
   el.textContent = parts.join(' · ');

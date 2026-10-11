@@ -5,6 +5,10 @@
 //   http://<ip>:81/stream   MJPEG (multipart/x-mixed-replace)
 //   http://<ip>:81/capture  Einzelbild (JPEG)
 //
+// Ruhemodus: Ohne Stream bzw. /capture schläft die Kamera (Sensor im
+// Software-Power-Down, Takt und Bildaufnahme aus) – sonst wird z. B. der
+// OV5640 sehr heiß. Der erste Abruf weckt sie wieder (ca. 0,5-1 s).
+//
 // Drehung: 180° erledigt der Sensor selbst (Spiegeln in beide Richtungen).
 // 90°/270° kann der Sensor nicht; dafür liefert er 0°/180° und die
 // Oberfläche dreht das Bild zusätzlich um 90° (CSS). Stream und /capture
@@ -22,12 +26,15 @@ struct Settings {
   bool hmirror;
   int max_fps;    // Bildratenbegrenzung des Streams
   int rotation;   // 0/90/180/270 Grad im Uhrzeigersinn (Einbaulage der Kamera)
-  int xclk_mhz;   // Kamera-Takt 10/16/20 MHz (wirkt nach Neustart)
+  int xclk_mhz;   // Kamera-Takt 10/16/20 MHz (wirkt beim nächsten Aufwecken)
 };
 
 bool begin();
-bool ok();
+bool ok();  // Kamera beim Start erkannt (auch wenn sie gerade schläft)
 bool startStreamServer();
+// Legt die Kamera schlafen, wenn sie CAM_IDLE_SLEEP_MS nicht gebraucht wurde.
+// Aus loop() aufrufen.
+void loop();
 
 Settings settings();
 // Übernimmt nur die im JSON vorhandenen Felder; persistiert in NVS.

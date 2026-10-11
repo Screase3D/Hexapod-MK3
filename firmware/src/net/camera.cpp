@@ -5,6 +5,7 @@
 #include <esp_camera.h>
 #include <esp_http_server.h>
 #include <esp_timer.h>
+#include <freertos/semphr.h>
 
 #include "config.h"
 
@@ -18,11 +19,22 @@ constexpr const char* STREAM_PART =
 
 constexpr const char* NVS_NAMESPACE = "camera";
 
-bool g_ok = false;
+bool g_ok = false;  // beim Start erkannt
 httpd_handle_t g_httpd = nullptr;
 std::atomic<int> g_stream_clients{0};
 Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0, CAM_XCLK_HZ / 1000000};
-int g_xclk_active_mhz = 0;  // beim Start tatsächlich verwendeter Takt
+int g_xclk_active_mhz = 0;  // beim letzten Aufwecken tatsächlich verwendeter Takt
+
+// Ruhemodus: g_mutex schützt Treiber-Init/Deinit, g_awake und g_users
+SemaphoreHandle_t g_mutex = nullptr;
+std::atomic<bool> g_awake{false};
+int g_users = 0;                 // laufende Streams + /capture-Abrufe
+uint32_t g_last_use_ms = 0;      // Zeitpunkt, zu dem der letzte Nutzer fertig war
+uint16_t g_pid = 0;              // Sensor-Typ (beim Start ermittelt)
+const char* g_sensor_name = "";  // für die Anzeige, auch während die Kamera schläft
+std::atomic<uint32_t> g_wake_ms{0};      // Dauer des letzten Aufweckens
+std::atomic<uint32_t> g_wake_count{0};
+std::atomic<int> g_skip_frames{0};       // erste Bilder nach dem Aufwecken verwerfen
 
 // Stream-Statistik (über ein 2-s-Fenster gemittelt)
 std::atomic<float> g_stat_fps{0.0f};
@@ -90,6 +102,10 @@ void applyToSensor() {
   s->set_hmirror(s, (g_settings.hmirror != flip180) ? 1 : 0);
 }
 
+bool acquire();
+void release();
+camera_fb_t* getFrame();
+
 esp_err_t sendUnavailable(httpd_req_t* req) {
   httpd_resp_set_status(req, "503 Service Unavailable");
   httpd_resp_set_type(req, "text/plain");
@@ -97,7 +113,7 @@ esp_err_t sendUnavailable(httpd_req_t* req) {
 }
 
 esp_err_t streamHandler(httpd_req_t* req) {
-  if (!g_ok) return sendUnavailable(req);
+  if (!acquire()) return sendUnavailable(req);
 
   httpd_resp_set_type(req, STREAM_CONTENT_TYPE);
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -118,7 +134,7 @@ esp_err_t streamHandler(httpd_req_t* req) {
     if (wait_us > 1000) vTaskDelay(pdMS_TO_TICKS(wait_us / 1000));
     last_frame_us = esp_timer_get_time();
 
-    camera_fb_t* fb = esp_camera_fb_get();
+    camera_fb_t* fb = getFrame();
     if (!fb) {
       // Einzelne Aussetzer tolerieren, erst nach 3 s ohne Bild aufgeben
       ++g_fb_errors;
@@ -158,26 +174,28 @@ esp_err_t streamHandler(httpd_req_t* req) {
     g_stat_fps = 0;
     g_stat_kbps = 0;
   }
+  release();
   return res;
 }
 
 esp_err_t captureHandler(httpd_req_t* req) {
-  if (!g_ok) return sendUnavailable(req);
-  camera_fb_t* fb = esp_camera_fb_get();
-  if (!fb) return sendUnavailable(req);
+  if (!acquire()) return sendUnavailable(req);
+  camera_fb_t* fb = getFrame();
+  if (!fb) {
+    release();
+    return sendUnavailable(req);
+  }
   httpd_resp_set_type(req, "image/jpeg");
   httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=hexapod.jpg");
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
   esp_err_t res = httpd_resp_send(req, (const char*)fb->buf, fb->len);
   esp_camera_fb_return(fb);
+  release();
   return res;
 }
 
-}  // namespace
-
-bool begin() {
-  loadSettings();
-
+// Startet Takt, Sensor und Bildaufnahme (Treiber-Init)
+bool initDriver() {
   camera_config_t config = {};
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -221,15 +239,108 @@ bool begin() {
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     log_e("Kamera-Init fehlgeschlagen: 0x%x", err);
-    g_ok = false;
     return false;
   }
+  return true;
+}
+
+// Software-Power-Down des Sensors (PWDN-Pin ist nicht verdrahtet)
+void sensorStandby(bool standby) {
+  sensor_t* s = esp_camera_sensor_get();
+  if (!s) return;
+  switch (g_pid) {
+    case OV5640_PID:
+    case OV3660_PID:
+      s->set_reg(s, 0x3008, 0x40, standby ? 0x40 : 0x00);  // SYSTEM CTROL0, Bit 6
+      break;
+    case OV2640_PID:
+      s->set_reg(s, 0x109, 0x10, standby ? 0x10 : 0x00);  // COM2 (Sensor-Bank), Bit 4
+      break;
+    default:
+      break;  // nur Takt/Bildaufnahme aus
+  }
+}
+
+// Ab hier g_mutex halten
+bool wakeLocked() {
+  if (g_awake) return true;
+  uint32_t t0 = millis();
+  if (!initDriver()) return false;
+  sensorStandby(false);  // falls der Sensor-Reset das Bit nicht löscht
   applyToSensor();
+  g_awake = true;
+  g_skip_frames = 2;  // die ersten Bilder sind oft unvollständig/zu dunkel
+  g_wake_ms = millis() - t0;
+  ++g_wake_count;
+  log_i("Kamera geweckt (%u ms)", (unsigned)g_wake_ms.load());
+  return true;
+}
+
+void sleepLocked() {
+  if (!g_awake) return;
+  sensorStandby(true);
+  esp_camera_deinit();
+  g_awake = false;
+  log_i("Kamera schläft");
+}
+
+// Kamera für einen Stream/Abruf belegen (weckt sie bei Bedarf)
+bool acquire() {
+  if (!g_ok) return false;
+  xSemaphoreTake(g_mutex, portMAX_DELAY);
+  bool ok = wakeLocked();
+  if (ok) ++g_users;
+  xSemaphoreGive(g_mutex);
+  return ok;
+}
+
+void release() {
+  xSemaphoreTake(g_mutex, portMAX_DELAY);
+  if (g_users > 0) --g_users;
+  g_last_use_ms = millis();
+  xSemaphoreGive(g_mutex);
+}
+
+camera_fb_t* getFrame() {
+  camera_fb_t* fb = esp_camera_fb_get();
+  while (fb && g_skip_frames.load() > 0) {
+    --g_skip_frames;
+    esp_camera_fb_return(fb);
+    fb = esp_camera_fb_get();
+  }
+  return fb;
+}
+
+}  // namespace
+
+bool begin() {
+  loadSettings();
+  g_mutex = xSemaphoreCreateMutex();
+  if (!initDriver()) return false;
+  sensor_t* s = esp_camera_sensor_get();
+  if (s) {
+    g_pid = s->id.PID;
+    camera_sensor_info_t* info = esp_camera_sensor_get_info(&s->id);
+    g_sensor_name = info ? info->name : "unbekannt";
+  }
   g_ok = true;
+  g_awake = true;
+  // Gleich wieder schlafen legen – geweckt wird beim ersten Stream
+  xSemaphoreTake(g_mutex, portMAX_DELAY);
+  sleepLocked();
+  xSemaphoreGive(g_mutex);
   return true;
 }
 
 bool ok() { return g_ok; }
+
+void loop() {
+  if (!g_ok || !g_awake) return;
+  // Nicht blockieren, falls gerade ein Stream die Kamera weckt
+  if (xSemaphoreTake(g_mutex, 0) != pdTRUE) return;
+  if (g_awake && g_users == 0 && millis() - g_last_use_ms >= CAM_IDLE_SLEEP_MS) sleepLocked();
+  xSemaphoreGive(g_mutex);
+}
 
 bool startStreamServer() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -298,8 +409,12 @@ bool applyJson(JsonVariantConst obj, String& err) {
     }
     next.rotation = rot;
   }
+  // Nicht gleichzeitig mit Aufwecken/Schlafenlegen; schläft die Kamera,
+  // gelten die Werte beim nächsten Aufwecken
+  xSemaphoreTake(g_mutex, portMAX_DELAY);
   g_settings = next;
-  if (g_ok) applyToSensor();
+  if (g_awake) applyToSensor();
+  xSemaphoreGive(g_mutex);
   saveSettings();
   return true;
 }
@@ -323,19 +438,18 @@ void toJson(JsonObject obj) {
     o["id"] = (int)f.id;
     o["name"] = f.name;
   }
-  if (g_ok) {
-    sensor_t* s = esp_camera_sensor_get();
-    if (s) {
-      camera_sensor_info_t* info = esp_camera_sensor_get_info(&s->id);
-      obj["sensor"] = info ? info->name : "unbekannt";
-    }
-  }
+  if (g_ok) obj["sensor"] = g_sensor_name;
+  obj["awake"] = g_awake.load();
+  obj["idle_sleep_s"] = CAM_IDLE_SLEEP_MS / 1000;
 }
 
 void statsToJson(JsonObject obj) {
   int clients = g_stream_clients.load();
   obj["clients"] = clients;
   obj["err"] = g_fb_errors.load();
+  obj["awake"] = g_awake.load();
+  obj["wake_ms"] = g_wake_ms.load();
+  obj["wakes"] = g_wake_count.load();
   if (clients == 0) return;
   obj["fps"] = roundf(g_stat_fps.load() * 10.0f) / 10.0f;
   obj["kb"] = (g_stat_avg_bytes.load() + 512) / 1024;

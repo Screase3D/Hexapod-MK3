@@ -54,6 +54,8 @@ constexpr int CAM_PIN_VSYNC = 6;
 constexpr int CAM_PIN_HREF  = 7;
 constexpr int CAM_PIN_PCLK  = 13;
 constexpr int CAM_XCLK_HZ   = 20000000;
+// Kamera schläft, wenn so lange kein Stream/Abruf lief (OV5640 wird sonst sehr heiß)
+constexpr uint32_t CAM_IDLE_SLEEP_MS = 10000;
 
 // ---------------------------------------------------------------------------
 // Akku (2S Li-Ion, OHNE BMS -> Software muss Tiefentladung verhindern!)

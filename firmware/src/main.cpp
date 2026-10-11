@@ -143,7 +143,7 @@ void setup() {
                 battery.enabled() ? "an" : "aus", battery.deepSleepEnabled() ? "an" : "aus");
 
   bool cam_ok = camera::begin();
-  Serial.printf("[Kamera] %s\n", cam_ok ? "OK" : "FEHLT");
+  Serial.printf("[Kamera] %s\n", cam_ok ? "OK (schläft bis zum ersten Stream)" : "FEHLT");
 
   wifi::begin();
   web::begin();
@@ -178,6 +178,7 @@ void loop() {
   }
 
   wifi::loop();
+  camera::loop();  // Kamera ohne Stream schlafen legen
 
   if (commands::rebootRequested()) {
     if (reboot_at == 0) reboot_at = now + 500;  // Antwort noch ausliefern

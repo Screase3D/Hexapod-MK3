@@ -12,6 +12,10 @@ später KI-Module am PC) können sie genauso verwenden. Alle Daten sind JSON.
 Der Stream-Server bedient einen Stream gleichzeitig; ein weiterer Client wartet, bis der erste
 die Verbindung schließt.
 
+Ohne laufenden Stream bzw. Abruf schläft die Kamera nach 10 s (`CAM_IDLE_SLEEP_MS`): Sensor im
+Software-Power-Down, Takt und Bildaufnahme aus – der OV5640 wird im Dauerbetrieb sonst sehr
+heiß. Der nächste Abruf weckt sie (ca. 0,5–1 s bis zum ersten Bild).
+
 Kamera-Drehung: 180° macht der Sensor selbst. Bei 90°/270° liefert der Sensor 0°/180°, und die
 Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90°/270° ebenfalls tun.
 
@@ -22,8 +26,8 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 | `GET /api/status` | – | Firmware, Chip, Speicher, WLAN, Kamera, Geräte, Akku |
 | `GET /api/calibration` | – | `{"version":2,"servos":[…18…],"dirty":bool}`, je Servo u. a. `ref_deg`, `center_us`, `us_per_deg`, `min_deg`, `max_deg` (siehe [kalibrierung.md](kalibrierung.md)) |
 | `POST /api/calibration` | wie GET (ohne `dirty`) | übernimmt alle 18 Servos und **speichert sofort**; Dateien mit `version` 1 (`center_us` = Puls bei 0°) werden umgerechnet |
-| `GET /api/camera` | – | Einstellungen + verfügbare Auflösungen |
-| `POST /api/camera` | `{"framesize","quality","vflip","hmirror","max_fps","rotation"}` (Teilmenge) | neue Einstellungen (persistent); `rotation` 0/90/180/270 |
+| `GET /api/camera` | – | Einstellungen, verfügbare Auflösungen, `sensor`, `awake` (Kamera wach) |
+| `POST /api/camera` | `{"framesize","quality","vflip","hmirror","max_fps","rotation","xclk_mhz"}` (Teilmenge) | neue Einstellungen (persistent); `rotation` 0/90/180/270; `xclk_mhz` 10/16/20 wirkt beim nächsten Aufwecken |
 | `GET /api/wifi` | – | WLAN-Status: `mode` (`ap`/`ap+sta`/`sta`), `ap` {active, ip, clients, off_in_s}, `sta` {state, ssid, ip, rssi, reason}, `saved_ssid` |
 | `POST /api/wifi` | `{"ssid","pass","connect":true}` oder `{"clear":true}` | speichern; im AP-Modus mit `connect` sofort verbinden (Status über `GET /api/wifi` verfolgen), sonst nach Neustart |
 | `POST /api/wifi/scan` | `{}` | Netzsuche starten (asynchron) |
@@ -88,6 +92,8 @@ Beispiel:
   "motion": {"mode": "pose", "pose": {"x": 0, "y": 0, "z": 72, "roll": 0, "pitch": 0, "yaw": 0,
              "stance": 90}, "unreachable": [], "clamped": []},
   "wifi":  {"mode": "sta", "rssi": -58},
+  "cam":   {"clients": 1, "awake": true, "fps": 12.4, "kb": 23, "kbps": 2300, "err": 0,
+            "wake_ms": 640, "wakes": 3},
   "heap": 182000,
   "ws": 1
 }

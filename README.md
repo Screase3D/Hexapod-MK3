@@ -107,7 +107,7 @@ firmware/                            PlatformIO-Projekt
    [Servo] PCA9685 #1 (0x40): OK, #2 (0x41): OK
    [IMU]   MPU6050 (0x68): OK
    [Akku]  0.42 V (Überwachung aus, Tiefschlaf an)
-   [Kamera] OK
+   [Kamera] OK (schläft bis zum ersten Stream)
    [WiFi] Access Point "Hexapod-MK3" aktiv, IP 192.168.4.1
    [Web]   http://192.168.4.1/  bzw.  http://hexapod.local/
    ```
@@ -176,7 +176,7 @@ nach dem Bestücken des Spannungsteilers an GPIO 1 im Tab *System* einschalten, 
 ```
 
 - Kamera-Stream auf eigenem Server (Port 81), damit ein laufender Stream die Steuerung nicht
-  blockiert.
+  blockiert. Ohne Stream schläft die Kamera (der OV5640 wird im Dauerbetrieb sehr heiß).
 - Die Oberfläche hat keine externen Abhängigkeiten und funktioniert daher auch im
   Access-Point-Modus ohne Internet.
 - Alle Einstellungen (Kalibrierung, WLAN, Kamera) liegen im NVS und überleben Firmware-Updates.
