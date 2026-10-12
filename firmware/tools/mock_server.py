@@ -57,10 +57,12 @@ ASSEMBLY = [0.0, 55.4, -33.8]  # Montagestellung je Gelenktyp (robot_geometry.h)
 
 
 def default_cal(i):
+    # wie servo_map.h: linke Seite (Beine 1-3) dreht ohne Kalibrierung andersherum
     ref = ASSEMBLY[i % 3]
+    direction = -1 if i < 9 else 1
     span = 60.0 if i % 3 == 0 else 70.0
     return {"id": i, "leg": i // 3, "joint": i % 3, "board": 1 if i < 9 else 0, "channel": i % 9,
-            "ref_deg": ref, "center_us": 1500.0, "us_per_deg": round(DEFAULT_SLOPE, 3),
+            "ref_deg": ref, "center_us": 1500.0, "us_per_deg": round(direction * DEFAULT_SLOPE, 3),
             "min_deg": ref - span, "max_deg": ref + span}
 
 
@@ -257,7 +259,7 @@ def handle(cmd):
         state["slew"] = float(cmd["deg_per_s"])
     elif c == "cal_get":
         if i is None:
-            out["calibration"] = {"version": 2, "servos": state["cal"], "dirty": state["dirty"]}
+            out["calibration"] = {"version": 3, "servos": state["cal"], "dirty": state["dirty"]}
         else:
             out["cal"] = state["cal"][i]
     elif c == "cal_center":
@@ -346,7 +348,7 @@ async def camera_post(request):
 
 
 async def calibration_get(_):
-    return web.json_response({"version": 1, "servos": state["cal"], "dirty": state["dirty"]})
+    return web.json_response({"version": 3, "servos": state["cal"], "dirty": state["dirty"]})
 
 
 async def calibration_post(request):

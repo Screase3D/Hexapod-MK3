@@ -9,9 +9,10 @@ namespace {
 constexpr const char* NVS_NAMESPACE = "hexapod";
 constexpr const char* NVS_KEY = "cal";
 constexpr uint32_t BLOB_MAGIC = 0x48584331;  // "HXC1"
-// Version 1: center_us = Puls bei 0°; Version 2: Puls in der Montagestellung
-constexpr uint16_t BLOB_VERSION = 2;
-constexpr int JSON_VERSION = 2;
+// Version 1: center_us = Puls bei 0°; Version 2: Puls in der Montagestellung;
+// Version 3: Standard-Drehrichtung je Seite (links umgekehrt)
+constexpr uint16_t BLOB_VERSION = 3;
+constexpr int JSON_VERSION = 3;
 
 struct CalBlob {
   uint32_t magic;
@@ -28,6 +29,16 @@ void migrateV1(int id, ServoCal& c) {
                    fabsf(fabsf(c.us_per_deg) - SERVO_DEFAULT_US_PER_DEG) < 0.01f;
   if (!untouched) c.center_us += Calibration::refDeg(id) * c.us_per_deg;
 }
+
+// Bis Version 2 drehten ohne Kalibrierung alle Servos gleich herum (+11,1 µs/°).
+// Wurde die Richtung eines Servos nie eingestellt (Steigung noch genau der alte
+// Standard), gilt jetzt die Standard-Drehrichtung seiner Seite. Die Montagestellung
+// (center_us) und die Grenzen bleiben dabei erhalten.
+void migrateV2(int id, ServoCal& c) {
+  if (fabsf(c.us_per_deg - SERVO_DEFAULT_US_PER_DEG) < 0.001f) {
+    c.us_per_deg = SERVO_DEFAULT_US_PER_DEG * servoDefaultDir(id);
+  }
+}
 }  // namespace
 
 float Calibration::refDeg(int id) {
@@ -41,7 +52,7 @@ float Calibration::refDeg(int id) {
 ServoCal Calibration::defaultFor(int id) {
   ServoCal c;
   c.center_us = 1500.0f;
-  c.us_per_deg = SERVO_DEFAULT_US_PER_DEG;
+  c.us_per_deg = SERVO_DEFAULT_US_PER_DEG * servoDefaultDir(id);
   // Grenzen um die Montagestellung herum, bis zum Einstellen eher vorsichtig
   float span = servoJoint(id) == JOINT_COXA ? 60.0f : 70.0f;
   c.min_deg = refDeg(id) - span;
@@ -63,13 +74,14 @@ bool Calibration::load() {
   size_t len = prefs.getBytes(NVS_KEY, &blob, sizeof(blob));
   prefs.end();
   if (len != sizeof(blob) || blob.magic != BLOB_MAGIC ||
-      (blob.version != 1 && blob.version != BLOB_VERSION) || blob.count != NUM_SERVOS) {
+      blob.version < 1 || blob.version > BLOB_VERSION || blob.count != NUM_SERVOS) {
     setDefaults();
     return false;
   }
   String err;
   for (int i = 0; i < NUM_SERVOS; ++i) {
-    if (blob.version == 1) migrateV1(i, blob.servos[i]);
+    if (blob.version < 2) migrateV1(i, blob.servos[i]);
+    if (blob.version < 3) migrateV2(i, blob.servos[i]);
     if (!validate(i, blob.servos[i], err)) {
       setDefaults();
       return false;
@@ -163,6 +175,7 @@ bool Calibration::entryFromJson(JsonVariantConst obj, int id, int version, Servo
   out.min_deg = obj["min_deg"].as<float>();
   out.max_deg = obj["max_deg"].as<float>();
   if (version < 2) migrateV1(id, out);
+  if (version < 3) migrateV2(id, out);
   return validate(id, out, err);
 }
 

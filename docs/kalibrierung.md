@@ -87,6 +87,29 @@ Seitenansicht eines Beins – Femur waagerecht, Tibia im rechten Winkel dazu (se
 „Tibia“ meint die Linie von der Kniegelenkachse zur Fußspitze – bei gebogenen Unterschenkeln
 also nicht die Außenkante des Bauteils.
 
+### Standard-Drehrichtung und schneller Richtungstest
+
+Die Beine sind links und rechts **spiegelbildlich** aufgebaut, darum dreht links jedes Gelenk bei
+gleichem Puls andersherum (Femur/Tibia: Servos gespiegelt eingebaut; Coxa: alle Wellen zeigen nach
+oben, „Fuß nach vorne“ ist aber links im und rechts gegen den Uhrzeigersinn). Ohne Kalibrierschritt
+„Richtung“ gilt deshalb rechts +11,1 µs/° und links −11,1 µs/° (`SERVO_DEFAULT_DIR` in
+`src/servo/servo_map.h`).
+
+Prüfen, bevor der Roboter steht oder läuft (Torque an, Roboter aufgebockt): unter
+*Kalibrierung & Justierung* → **Justieren** je Bein den Schieber von der Montagestellung aus ein Stück
+nach **rechts** (größerer Winkel) schieben:
+
+| Gelenk | richtig, wenn … |
+|---|---|
+| Coxa | der Fuß nach **vorne** schwenkt (bei Bein 1 und 4 also Richtung Kamera) |
+| Femur | der Oberschenkel nach **oben** geht |
+| Tibia | die Fußspitze nach **außen** geht |
+
+Bewegt sich ein Gelenk andersherum: unter **Kalibrieren** den Servo wählen,
+**„Drehrichtung umkehren“**, am Ende **Speichern**. Die Montagestellung bleibt dabei erhalten.
+Typisches Bild, wenn eine ganze Seite falsch dreht: Beim Hinsetzen/Aufstehen bewegt sie sich
+spiegelverkehrt, und beim Laufen kommt der Roboter nicht vorwärts.
+
 ## Ablauf
 
 > Vor dem ersten Einschalten: Roboter aufbocken, sodass die Beine frei hängen.

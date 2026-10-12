@@ -41,6 +41,22 @@ inline constexpr int servoLeg(int id) { return id / JOINTS_PER_LEG; }
 inline constexpr int servoJoint(int id) { return id % JOINTS_PER_LEG; }
 inline constexpr bool legIsLeft(int leg) { return leg < 3; }
 
+// Drehrichtung ohne Kalibrierung (+1: steigender Puls -> steigender Gelenkwinkel,
+// Konvention siehe docs/kalibrierung.md). Die Beine sind links und rechts
+// spiegelbildlich aufgebaut, links dreht jedes Gelenk bei gleichem Puls andersherum:
+//  - Femur/Tibia: Servos gespiegelt eingebaut (rechts: Puls hoch = Femur hoch).
+//  - Coxa: alle Servos mit der Welle nach oben (drehen von oben gesehen gleich),
+//    "+ = Fuß nach vorne" ist aber rechts gegen, links im Uhrzeigersinn.
+// Der Kalibrierschritt "Richtung" bzw. "Drehrichtung umkehren" überschreibt das je Servo.
+constexpr int8_t SERVO_DEFAULT_DIR[2][JOINTS_PER_LEG] = {
+    // Coxa, Femur, Tibia
+    {-1, -1, -1},  // links (Beine 1-3)
+    {+1, +1, +1},  // rechts (Beine 4-6)
+};
+inline constexpr int servoDefaultDir(int id) {
+  return SERVO_DEFAULT_DIR[legIsLeft(servoLeg(id)) ? 0 : 1][servoJoint(id)];
+}
+
 inline const char* legName(int leg) {
   static const char* const names[NUM_LEGS] = {
       "vorne links", "Mitte links", "hinten links",
