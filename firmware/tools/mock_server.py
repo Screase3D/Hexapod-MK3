@@ -157,6 +157,15 @@ def gait_status():
     return g
 
 
+def wifi_tel():
+    # wie commands.cpp: rssi nur, wenn mit dem Heimnetz verbunden
+    w = wifi_json()
+    out = {"mode": w["mode"]}
+    if "rssi" in w["sta"]:
+        out["rssi"] = w["sta"]["rssi"]
+    return out
+
+
 def telemetry():
     t = time.time()
     return {
@@ -172,7 +181,7 @@ def telemetry():
         "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3},
         "motion": {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "gait": gait_status(),
                    "unreachable": [], "clamped": []},
-        "wifi": {"mode": wifi_json()["mode"]}, "heap": 182000, "ws": 1,
+        "wifi": wifi_tel(), "heap": 182000, "ws": 1,
     }
 
 

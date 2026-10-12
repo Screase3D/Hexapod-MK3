@@ -138,7 +138,7 @@ Toolchain:
    1. Handy oder PC mit dem WLAN **„Hexapod-MK3“** verbinden (Passwort `hexapod123`).
       Die Oberfläche öffnet sich meist von selbst (Captive Portal), sonst `http://192.168.4.1`
       im Browser aufrufen.
-   2. Auf **„WLAN einrichten“** tippen (Banner oben) bzw. Tab *System* → *WLAN*.
+   2. Auf **„WLAN einrichten“** tippen (Banner oben) bzw. Menü *Einstellungen* → *WLAN*.
    3. **„Netze suchen“**, das Heimnetz antippen, Passwort eingeben, **„Verbinden“**.
       Nur 2,4-GHz-Netze werden unterstützt.
    4. Nach wenigen Sekunden zeigt die Karte die **neue Adresse** im Heimnetz an
@@ -157,7 +157,7 @@ Nach dem Start sind alle Servos **stromlos**, bis in der Oberfläche *Torque* ei
 Not-Aus jederzeit über **STOP** (oder Taste **Esc**).
 
 Die **Akkuüberwachung** (Warnung, Servo-Abschaltung, Tiefschlaf) ist ab Werk **aus**. Erst
-nach dem Bestücken des Spannungsteilers an GPIO 1 im Tab *System* einschalten, siehe
+nach dem Bestücken des Spannungsteilers an GPIO 1 unter *Einstellungen* → *Akku* einschalten, siehe
 [Hinweise zur Schaltung](docs/hardware.md#hinweise-zur-schaltung).
 
 ## Architektur
@@ -180,6 +180,18 @@ nach dem Bestücken des Spannungsteilers an GPIO 1 im Tab *System* einschalten, 
 - Die Oberfläche hat keine externen Abhängigkeiten und funktioniert daher auch im
   Access-Point-Modus ohne Internet.
 - Alle Einstellungen (Kalibrierung, WLAN, Kamera) liegen im NVS und überleben Firmware-Updates.
+
+## Oberfläche
+
+Menü links (am PC einklappbar, am Handy über ☰), Not-Aus **STOP** (oder Taste **Esc**) immer
+oben rechts. Jede Seite hat eine eigene Adresse, z. B. `http://hexapod.local/#kalibrierung`.
+
+| Seite | Inhalt |
+|---|---|
+| **Steuerung** | Kamerastream (Vollbild, Lage als künstlicher Horizont im Bild, Kameraeinstellungen über ⚙), Laufen mit Joysticks bzw. W/A/S/D/Q/E, Aufstehen/Hinsetzen, Körperhaltung (IK), Lagesensor, Torque |
+| **Kalibrierung & Justierung** | *Kalibrieren*: Servo für Servo (Rohmodus, Montagestellung, Referenz, Grenzen, Test); *Justieren*: alle 18 Gelenke auf einen Blick; Speichern, Export/Import |
+| **Systemübersicht** | Kennzahlen (Akku, WLAN, Regelung, Kamera, Speicher, Laufzeit), Komponenten, I²C-Scan, Neustart |
+| **Einstellungen** | WLAN, Servo-Stellgeschwindigkeit, Akkuüberwachung, Farbschema (automatisch/dunkel/hell), Tastenkürzel |
 
 ## Oberfläche ohne Roboter entwickeln
 

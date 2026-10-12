@@ -17,7 +17,8 @@ puls_us = center_us + (winkel_deg − ref_deg) × us_per_deg     (begrenzt auf m
 | `min_deg`, `max_deg` | Software-Endanschläge des Gelenks (Gelenkwinkel) |
 
 Die Werte liegen im NVS des ESP32 (überleben Neustart und Firmware-Update) und lassen sich im
-Tab **System** als JSON exportieren – am besten eine Kopie ins Repository legen.
+Bereich **Kalibrierung & Justierung** mit **Export** als JSON sichern – am besten eine Kopie ins
+Repository legen.
 
 ## Montagestellung
 
@@ -91,8 +92,8 @@ also nicht die Außenkante des Bauteils.
 > Vor dem ersten Einschalten: Roboter aufbocken, sodass die Beine frei hängen.
 > Not-Aus: roter **STOP**-Knopf oder Taste **Esc**.
 
-1. **Hörner aufstecken.** Servohörner abnehmen. Im Tab *Kalibrierung* **Torque** einschalten und
-   **„Alle auf 1500 µs (Montage)“** drücken. Jetzt die Hörner/Beinteile so aufstecken, dass jedes
+1. **Hörner aufstecken.** Servohörner abnehmen. Unter *Kalibrierung & Justierung* **Torque**
+   einschalten und **„Alle auf 1500 µs“** drücken. Jetzt die Hörner/Beinteile so aufstecken, dass jedes
    Bein so nah wie möglich an der Montagestellung steht (Montagelehre). Die Verzahnung erlaubt
    nur Schritte von einem Zahn (≈ 18°) – also den Zahn wählen, bei dem die Abweichung am
    kleinsten ist; den Rest erledigt Schritt 2.
@@ -117,13 +118,15 @@ also nicht die Außenkante des Bauteils.
 6. **Speichern** – erst dann landen die Werte dauerhaft im NVS. „Verwerfen“ lädt den letzten
    gespeicherten Stand, „Standardwerte“ setzt alles zurück (ebenfalls erst mit Speichern
    dauerhaft).
-7. Im Tab *System* **Exportieren** und die JSON-Datei sichern.
+7. Oben auf der Seite **Export** drücken und die JSON-Datei sichern.
 
 ## Hinweise
 
+- Umschalter **Justieren** (gleiche Seite): alle 18 Gelenke kalibriert auf einen Blick, je ein
+  Schieber – praktisch, um nach dem Kalibrieren alle Beine gemeinsam zu prüfen.
 - Der **Rohmodus ignoriert die Grenzen** (nur 500–2500 µs absolut). Langsam fahren, solange die
   Beine montiert sind.
-- Alle Bewegungen laufen über eine Rampe (Standard 240 °/s, einstellbar im Tab *Steuerung*).
+- Alle Bewegungen laufen über eine Rampe (Standard 240 °/s, einstellbar unter *Einstellungen* → *Servos*).
 - Nach dem Einschalten fahren die Servos beim Aktivieren von Torque direkt in die
   Sitzhaltung (Füße weit außen, siehe [kinematik.md](kinematik.md#aufstehen-und-hinsetzen); die
   echte Position ist vorher unbekannt). Für die Montage danach „Alle auf 1500 µs (Montage)“.

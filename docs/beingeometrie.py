@@ -398,7 +398,7 @@ for i, (k, v) in enumerate(rows):
     text(c2, y, k, size=14, anchor="start", color=C_MUTED)
     text(c2 + 190, y, v, size=14, anchor="start")
 text(c2, TY + 192, "Diese Haltung ist die Standardhaltung der IK", size=13, anchor="start", color=C_TEXT)
-text(c2, TY + 210, "(Tab Steuerung → Körperhaltung).", size=13, anchor="start", color=C_TEXT)
+text(c2, TY + 210, "(Steuerung → Körperhaltung).", size=13, anchor="start", color=C_TEXT)
 text(c2, TY + BOX_H - 14, f"Fußspitze {fmt(TIBIA * math.cos(ta))} mm außerhalb des Knies, Bodenfreiheit {fmt(CLEARANCE)} mm",
      size=12, anchor="start", color=C_MUTED)
 

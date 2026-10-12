@@ -121,7 +121,7 @@ die Coxa-Servos schräg eingebaut sind), `angle_deg` in `LEG_MOUNTS` anpassen.
 
 ## Körperhaltung in der Oberfläche
 
-Tab *Steuerung* → **Körperhaltung (IK)** → *aktiv*. Die Füße bleiben auf ihren Standardpunkten
+*Steuerung* → **Körperhaltung** → Schalter *IK*. Die Füße bleiben auf ihren Standardpunkten
 (in Montagerichtung, im Abstand *Fußabstand* von der Coxa-Achse), der Körper bewegt sich
 darüber:
 
@@ -169,7 +169,7 @@ Roboter wieder aufstehen.
 
 ## Laufen
 
-Erst **Aufstehen** (siehe oben). Tab *Steuerung* → Karte **Laufen**: linker Joystick *Fahren* (vor/zurück, seitlich), rechter
+Erst **Aufstehen** (siehe oben). *Steuerung* → Karte **Laufen**: linker Joystick *Fahren* (vor/zurück, seitlich), rechter
 *Drehen*; am PC auch **W/S** (vor/zurück), **A/D** (seitlich), **Q/E** (drehen), **Leertaste**
 (Stopp). Der Joystick schaltet den IK-Modus ein; die Körperhaltung (Höhe, Neigung, …) gilt
 beim Laufen weiter.

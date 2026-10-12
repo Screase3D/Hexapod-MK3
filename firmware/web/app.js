@@ -19,7 +19,10 @@ const S = {
   localUs: null,
   localTime: 0,
   tab: 'control',
+  calView: 'cal',  // Kalibrieren (einzeln) oder Justieren (alle Gelenke)
   camWanted: false,
+  hud: false,
+  status: null,  // letzte Antwort von /api/status
   wifi: null,
   camera: null,
   torqueHintShown: false,
@@ -99,6 +102,34 @@ async function api(path, body) {
   return data;
 }
 
+// Umschalter (Segmente): aktiven Wert anzeigen bzw. Auswahl melden
+function setSeg(id, value) {
+  $(id).querySelectorAll('button').forEach((b) => {
+    const on = b.dataset.value === value;
+    b.classList.toggle('active', on);
+    b.setAttribute(b.getAttribute('role') === 'tab' ? 'aria-selected' : 'aria-checked', on);
+  });
+}
+
+function bindSeg(id, onPick) {
+  $(id).querySelectorAll('button').forEach((b) => {
+    b.onclick = () => {
+      setSeg(id, b.dataset.value);
+      onPick(b.dataset.value);
+    };
+  });
+}
+
+// Zustand immer mit Symbol und Text, nie nur als Farbe
+const STATUS_ICON = { ok: 'i-check', warn: 'i-alert', bad: 'i-x' };
+function statusEl(cls, text) {
+  const span = document.createElement('span');
+  span.className = `status ${cls}`;
+  span.innerHTML = `<svg class="ic"><use href="#${STATUS_ICON[cls]}"/></svg><span></span>`;
+  span.lastChild.textContent = text;
+  return span;
+}
+
 // ------------------------------------------------------------- WebSocket ----
 
 function connect() {
@@ -167,10 +198,16 @@ function onMessage(m) {
 
 // --------------------------------------------------------------- Kopfzeile --
 
+function setPill(id, text, cls = '') {
+  const pill = $(id);
+  pill.querySelector('.ptext').textContent = text;
+  pill.className = 'pill ' + cls;
+}
+
 function renderConnection() {
-  const pill = $('pill-conn');
-  pill.textContent = S.wsOpen ? 'Verbunden' : 'Getrennt';
-  pill.className = 'pill ' + (S.wsOpen ? 'pill-ok' : 'pill-bad');
+  setPill('pill-conn', S.wsOpen ? 'Verbunden' : 'Getrennt', S.wsOpen ? 'pill-ok' : 'pill-bad');
+  $('sb-conn').classList.toggle('on', S.wsOpen);
+  $('sb-conn-text').textContent = S.wsOpen ? `Verbunden · ${location.hostname}` : 'Getrennt';
   renderBanner();
 }
 
@@ -198,10 +235,10 @@ function renderBanner() {
     cls = 'danger';
   } else if (t && t.bat.state === 'warn') {
     msg = `Akku schwach (${t.bat.v.toFixed(2)} V) – bald laden`;
-  } else if (t && t.wifi && t.wifi.mode === 'ap' && S.tab !== 'system') {
+  } else if (t && t.wifi && t.wifi.mode === 'ap' && S.tab !== 'settings') {
     msg = 'Access-Point-Modus – noch nicht mit dem Heimnetz verbunden';
     cls = 'info';
-    act = { label: 'WLAN einrichten', fn: () => showTab('system') };
+    act = { label: 'WLAN einrichten', fn: () => showTab('settings') };
   }
 
   banner.hidden = !msg;
@@ -219,30 +256,17 @@ function renderTelemetry() {
   const sv = t.servo;
 
   // Akku
-  const bat = $('pill-bat');
-  if (t.bat.state === 'off') {
-    bat.textContent = 'Akku: aus';
-    bat.className = 'pill';
-  } else if (t.bat.state === 'usb') {
-    bat.textContent = 'USB';
-    bat.className = 'pill';
-  } else {
-    bat.textContent = `${t.bat.v.toFixed(2)} V · ${t.bat.pct}%`;
-    bat.className = 'pill ' + ({ ok: 'pill-ok', warn: 'pill-warn', critical: 'pill-bad' }[t.bat.state] || '');
+  if (t.bat.state === 'off') setPill('pill-bat', 'Akku aus', 'pill-idle');
+  else if (t.bat.state === 'usb') setPill('pill-bat', 'USB', 'pill-idle');
+  else {
+    setPill('pill-bat', `${t.bat.v.toFixed(2)} V · ${t.bat.pct}%`,
+      { ok: 'pill-ok', warn: 'pill-warn', critical: 'pill-bad' }[t.bat.state] || '');
   }
 
   // Servos
-  const tp = $('pill-torque');
-  if (sv.estop) {
-    tp.textContent = 'NOT-AUS';
-    tp.className = 'pill pill-bad';
-  } else if (sv.torque) {
-    tp.textContent = sv.active < NUM_SERVOS ? `Servos ${sv.active}/${NUM_SERVOS}` : 'Servos an';
-    tp.className = 'pill pill-on';
-  } else {
-    tp.textContent = 'Servos aus';
-    tp.className = 'pill';
-  }
+  if (sv.estop) setPill('pill-torque', 'NOT-AUS', 'pill-bad');
+  else if (sv.torque) setPill('pill-torque', sv.active < NUM_SERVOS ? `Servos ${sv.active}/${NUM_SERVOS}` : 'Servos an', 'pill-on');
+  else setPill('pill-torque', 'Servos aus');
   $('ctl-torque').checked = sv.torque;
   $('cal-torque').checked = sv.torque;
 
@@ -253,6 +277,7 @@ function renderTelemetry() {
   }
 
   // IMU
+  renderHud(t.imu);
   if (t.imu.ok) {
     $('imu-pitch').textContent = fmtDeg(t.imu.pitch) + '°';
     $('imu-roll').textContent = fmtDeg(t.imu.roll) + '°';
@@ -272,7 +297,9 @@ function renderTelemetry() {
 
   // Kalibrierung
   $('cal-dirty').hidden = !sv.cal_dirty;
+  $('nav-cal-dot').hidden = !sv.cal_dirty;
   $('cal-save').classList.toggle('attention', sv.cal_dirty);
+  if (S.tab === 'system') renderTiles();
 
   renderLegValues();
   renderEditorLive();
@@ -591,7 +618,7 @@ function renderWalk(m) {
     if (val === undefined || document.activeElement === el || now - (W.touched[key] || 0) < GAIT_TOUCH_MS) return;
     el.value = val;
   };
-  sync('gait-type', 'type', g.type);
+  if (g.type !== undefined && now - (W.touched.type || 0) >= GAIT_TOUCH_MS) setSeg('gait-type', g.type);
   sync('gait-swing', 'swing_s', g.swing_s);
   sync('gait-height', 'step_height', g.step_height);
   renderGaitLabels();
@@ -631,10 +658,10 @@ function bindWalk() {
     try { localStorage.setItem('walkScale', W.scale); } catch (err) { /* egal */ }
     if (W.timer) walkTick();
   };
-  $('gait-type').onchange = (e) => {
+  bindSeg('gait-type', (type) => {
     W.touched.type = Date.now();
-    send('gait', { type: e.target.value });
-  };
+    send('gait', { type });
+  });
   $('gait-swing').oninput = (e) => {
     W.touched.swing_s = Date.now();
     renderGaitLabels();
@@ -663,6 +690,8 @@ function buildManual() {
   for (let leg = 0; leg < 6; ++leg) {
     const box = document.createElement('div');
     box.className = 'manual-leg';
+    box.style.gridColumn = leg < 3 ? 1 : 2;
+    box.style.gridRow = (leg % 3) + 2;  // Zeile 1: „VORNE“
     box.innerHTML = `<div class="leg-title">Bein ${leg + 1} <small>${LEGS[leg]}</small></div>`;
     for (let j = 0; j < 3; ++j) {
       const id = leg * 3 + j;
@@ -696,7 +725,7 @@ function renderManualLimits() {
 }
 
 function renderManualValues() {
-  if (!S.tel || !$('manual').open) return;
+  if (!S.tel || S.tab !== 'cal' || S.calView !== 'adjust') return;
   for (let id = 0; id < NUM_SERVOS; ++id) {
     if (Date.now() - manualTouched[id] < LOCAL_PRIORITY_MS) continue;
     const deg = S.tel.servo.deg[id];
@@ -861,7 +890,7 @@ function bindGlobal() {
       e.preventDefault();
       return;
     }
-    if (S.tab !== 'cal') return;
+    if (S.tab !== 'cal' || S.calView !== 'cal') return;
     const tag = (document.activeElement && document.activeElement.tagName) || '';
     if (tag === 'INPUT' && document.activeElement.type !== 'range') return;
     if (tag === 'SELECT' || tag === 'TEXTAREA') return;
@@ -875,20 +904,95 @@ function bindGlobal() {
   });
 }
 
-// ---------------------------------------------------------------- Tabs ------
+// -------------------------------------------------------- Seiten & Menü -----
+
+// Seite -> Adresse (#steuerung …), damit Neuladen und Zurück-Taste funktionieren
+const PAGES = { control: 'steuerung', cal: 'kalibrierung', system: 'system', settings: 'einstellungen' };
+const pageFromHash = () => Object.keys(PAGES).find((k) => location.hash === `#${PAGES[k]}`) || 'control';
 
 function showTab(name) {
+  if (!PAGES[name]) name = 'control';
   if (name !== 'control' && (W.timer || W.keys.size)) walkStopAll();
   S.tab = name;
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
-  document.querySelectorAll('.tab-page').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
+  if (location.hash !== `#${PAGES[name]}`) history.replaceState(null, '', `#${PAGES[name]}`);
+  document.querySelectorAll('.nav-item[data-page]').forEach((a) => {
+    const on = a.dataset.page === name;
+    a.classList.toggle('active', on);
+    if (on) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  });
+  let page = null;
+  document.querySelectorAll('.page').forEach((p) => {
+    const on = p.id === `page-${name}`;
+    p.classList.toggle('active', on);
+    if (on) page = p;
+  });
+  // langer Titel, auf dem Handy die Kurzform
+  const full = document.createElement('span');
+  full.className = 't-full';
+  full.textContent = page.dataset.title;
+  const short = document.createElement('span');
+  short.className = 't-short';
+  short.textContent = page.dataset.short || page.dataset.title;
+  $('page-title').replaceChildren(full, short);
+  document.title = `${page.dataset.title} · Hexapod MK3`;
+  setNavOpen(false);
   updateStream();
   clearInterval(S.statusTimer);
   renderBanner();
-  if (name === 'system') {
+  if (name === 'system' || name === 'settings') {
     loadStatus();
     S.statusTimer = setInterval(loadStatus, 5000);
   }
+  if (name === 'system') renderTiles();
+  if (name === 'cal') renderManualValues();
+}
+
+function showCalView(view) {
+  S.calView = view;
+  setSeg('cal-view', view);
+  $('cal-panel-cal').hidden = view !== 'cal';
+  $('cal-panel-adjust').hidden = view !== 'adjust';
+  renderManualValues();
+}
+
+const setNavOpen = (open) => document.documentElement.classList.toggle('nav-open', open);
+
+function bindNav() {
+  $('menu-btn').onclick = () => setNavOpen(!document.documentElement.classList.contains('nav-open'));
+  $('sb-backdrop').onclick = () => setNavOpen(false);
+  const collapseTitle = () => {
+    $('sb-collapse').title = document.documentElement.classList.contains('nav-collapsed')
+      ? 'Menü ausklappen' : 'Menü einklappen';
+  };
+  $('sb-collapse').onclick = () => {
+    const c = document.documentElement.classList.toggle('nav-collapsed');
+    try { localStorage.setItem('navCollapsed', c ? '1' : '0'); } catch (e) { /* egal */ }
+    collapseTitle();
+  };
+  collapseTitle();
+  window.addEventListener('hashchange', () => showTab(pageFromHash()));
+  bindSeg('cal-view', showCalView);
+}
+
+// Farbschema: automatisch (System), dunkel oder hell
+function applyTheme(pref) {
+  const root = document.documentElement;
+  if (pref === 'light' || pref === 'dark') root.dataset.theme = pref;
+  else delete root.dataset.theme;
+  setSeg('theme-seg', pref === 'light' || pref === 'dark' ? pref : 'auto');
+  const dark = pref === 'dark' || (pref !== 'light' && !matchMedia('(prefers-color-scheme: light)').matches);
+  document.querySelector('meta[name="theme-color"]').content = dark ? '#0d1217' : '#f2f4f7';
+}
+
+function bindTheme() {
+  let pref = 'auto';
+  try { pref = localStorage.getItem('theme') || 'auto'; } catch (e) { /* kein Speicher */ }
+  applyTheme(pref);
+  bindSeg('theme-seg', (v) => {
+    try { localStorage.setItem('theme', v); } catch (e) { /* egal */ }
+    applyTheme(v);
+  });
 }
 
 // -------------------------------------------------------------- Kamera ------
@@ -901,6 +1005,7 @@ function renderCamStats(t) {
   const el = $('cam-stats');
   const c = t.cam || {};
   const live = $('cam-img').parentElement.classList.contains('live');
+  $('cam-live').hidden = !live || !c.clients;
   if (!live || !c.clients) {
     // Ohne Stream schläft die Kamera nach kurzer Zeit (spart Strom und Wärme)
     el.textContent = c.awake === undefined ? '' : (c.awake ? 'Kamera aktiv – schläft gleich ohne Stream' : 'Kamera schläft – wacht mit dem Stream auf');
@@ -917,7 +1022,7 @@ function renderCamStats(t) {
 function scheduleCamRetry() {
   clearTimeout(camRetryTimer);
   camRetries += 1;
-  $('cam-placeholder').textContent = `Stream unterbrochen – verbinde neu (Versuch ${camRetries}) …`;
+  $('cam-ph-text').textContent = `Stream unterbrochen – verbinde neu (Versuch ${camRetries}) …`;
   camRetryTimer = setTimeout(() => {
     camRetryTimer = null;
     const img = $('cam-img');
@@ -939,13 +1044,27 @@ function updateStream() {
     clearTimeout(camRetryTimer);
     camRetryTimer = null;
     camRetries = 0;
-    $('cam-placeholder').textContent = 'Stream gestoppt';
+    $('cam-ph-text').textContent = 'Stream gestoppt';
     if (view.classList.contains('live')) {
       img.src = 'data:,';  // Verbindung schließen
       view.classList.remove('live');
     }
   }
-  $('cam-toggle').textContent = S.camWanted ? 'Stream stoppen' : 'Stream starten';
+  if (!live) $('cam-live').hidden = true;
+  $('cam-toggle-text').textContent = S.camWanted ? 'Stream stoppen' : 'Stream starten';
+  $('cam-toggle-ic').setAttribute('href', S.camWanted ? '#i-stop' : '#i-play');
+  $('cam-toggle').classList.toggle('btn-primary', !S.camWanted);
+}
+
+// Künstlicher Horizont über dem Kamerabild (Lage aus dem MPU6050)
+function renderHud(imu) {
+  const hud = $('hud');
+  hud.hidden = !S.hud || !imu || !imu.ok;
+  if (hud.hidden) return;
+  // + Nick = Nase hoch -> Horizont wandert im Bild nach unten (ca. 1,5 % der Bildhöhe je Grad)
+  $('hud-sky').style.transform = `translateY(${clamp(imu.pitch, -30, 30) * 1.5}cqh) rotate(${-imu.roll}deg)`;
+  $('hud-pitch').textContent = fmtDeg(imu.pitch) + '°';
+  $('hud-roll').textContent = fmtDeg(imu.roll) + '°';
 }
 
 function renderCamera() {
@@ -995,6 +1114,25 @@ function bindCamera() {
     S.camWanted = !S.camWanted;
     updateStream();
   };
+  try { S.hud = localStorage.getItem('camHud') === '1'; } catch (e) { /* kein Speicher */ }
+  $('cam-hud').setAttribute('aria-pressed', S.hud);
+  $('cam-hud').onclick = () => {
+    S.hud = !S.hud;
+    $('cam-hud').setAttribute('aria-pressed', S.hud);
+    try { localStorage.setItem('camHud', S.hud ? '1' : '0'); } catch (e) { /* egal */ }
+    if (S.tel) renderHud(S.tel.imu);
+  };
+  const view = $('cam-view');
+  $('cam-full').hidden = !document.fullscreenEnabled || !view.requestFullscreen;
+  $('cam-full').onclick = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else view.requestFullscreen().catch(() => toast('Vollbild nicht möglich', true));
+  };
+  $('cam-gear').onclick = () => {
+    const open = $('cam-settings').hidden;
+    $('cam-settings').hidden = !open;
+    $('cam-gear').setAttribute('aria-expanded', open);
+  };
   // Bricht der Stream ab (WLAN-Aussetzer), automatisch neu verbinden
   $('cam-img').onerror = () => {
     const view = $('cam-img').parentElement;
@@ -1022,6 +1160,7 @@ function fmtBytes(b) {
 }
 
 function fmtUptime(s) {
+  if (s < 60) return `${s} s`;
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -1039,14 +1178,83 @@ function fillKv(el, rows) {
   }
 }
 
+const BAT_TEXT = { off: 'Überwachung aus', usb: 'kein Akku (USB)', ok: 'OK', warn: 'schwach', critical: 'leer!' };
+const BAT_CLS = { ok: 'ok', warn: 'warn', critical: 'bad' };
+
+function wifiQuality(rssi) {
+  if (rssi >= -55) return ['ok', 'sehr gut'];
+  if (rssi >= -67) return ['ok', 'gut'];
+  if (rssi >= -75) return ['warn', 'mäßig'];
+  return ['bad', 'schwach'];
+}
+
+function setTile(key, value, sub) {
+  $(`tile-${key}-val`).textContent = value;
+  const el = $(`tile-${key}-sub`);
+  if (sub instanceof Node) el.replaceChildren(sub);
+  else el.textContent = sub || '';
+}
+
+// Kennzahlen der Systemübersicht (Telemetrie live, Rest aus /api/status)
+function renderTiles() {
+  const t = S.tel;
+  const s = S.status;
+
+  const b = (t && t.bat) || (s && s.bat);
+  const meter = $('tile-bat-meter');
+  if (!b) setTile('bat', '–');
+  else if (b.state === 'off' || b.state === 'usb') {
+    meter.hidden = true;
+    setTile('bat', b.state === 'usb' ? 'USB' : 'aus', b.state === 'usb' ? 'kein Akku erkannt' : 'Überwachung aus');
+  } else {
+    meter.hidden = false;
+    meter.className = 'meter ' + (BAT_CLS[b.state] || '');
+    meter.firstElementChild.style.width = `${clamp(b.pct, 0, 100)}%`;
+    setTile('bat', `${b.v.toFixed(2)} V`, statusEl(BAT_CLS[b.state] || 'warn', `${b.pct} % · ${BAT_TEXT[b.state] || b.state}`));
+  }
+
+  const w = s && s.wifi;
+  let rssi = t && t.wifi ? t.wifi.rssi : undefined;
+  if (rssi === undefined && w && w.sta.state === 'connected') rssi = w.sta.rssi;
+  if (rssi !== undefined) {
+    const [cls, text] = wifiQuality(rssi);
+    setTile('wifi', `${rssi} dBm`, statusEl(cls, text + (w && w.sta.ssid ? ` · ${w.sta.ssid}` : '')));
+  } else if (w && w.ap.active) {
+    setTile('wifi', 'Access Point', `„${w.ap.ssid}“ · ${w.ap.clients} Gerät(e)`);
+  } else setTile('wifi', '–');
+
+  if (t && t.ctl) {
+    const ok = t.ctl.hz >= 45;
+    setTile('ctl', `${Math.round(t.ctl.hz)} Hz`, statusEl(ok ? 'ok' : 'warn',
+      `Soll 50 · max. ${(t.ctl.max_us / 1000).toFixed(1)} ms`));
+  }
+
+  const c = t && t.cam;
+  if (s && s.camera && !s.camera.ok) setTile('cam', 'fehlt', statusEl('bad', 'keine Kamera erkannt'));
+  else if (c && c.clients && c.fps !== undefined) {
+    setTile('cam', `${c.fps.toFixed(1)} fps`, `${c.kb} KB/Bild · ${(c.kbps / 1000).toFixed(1)} Mbit/s`);
+  } else if (c && c.awake !== undefined) {
+    setTile('cam', c.awake ? 'aktiv' : 'schläft', c.awake ? 'ohne Stream gleich im Schlaf' : 'wacht mit dem Stream auf');
+  }
+
+  const heap = t && t.heap !== undefined ? t.heap : s && s.mem.heap_free;
+  if (heap != null) {
+    setTile('mem', fmtBytes(heap), s ? `Heap · min. ${fmtBytes(s.mem.heap_min)}` : 'Heap');
+  }
+
+  const up = t && t.uptime !== undefined ? t.uptime : s && s.uptime;
+  if (up != null) setTile('up', fmtUptime(up), s ? `Firmware ${s.fw}` : '');
+}
+
 async function loadStatus() {
   try {
     const s = await api('/api/status');
+    S.status = s;
+    if (S.tab === 'system') renderTiles();
     const w = s.wifi;
     fillKv($('sys-info'), [
       ['Firmware', `${s.fw} (${s.build})`],
       ['Chip', `${s.chip.model} rev ${s.chip.rev}, ${s.chip.cores} Kerne, ${s.chip.mhz} MHz`],
-      ['Laufzeit', fmtUptime(s.uptime)],
       ['Heap frei', `${fmtBytes(s.mem.heap_free)} (min. ${fmtBytes(s.mem.heap_min)})`],
       ['PSRAM frei', s.mem.psram ? `${fmtBytes(s.mem.psram_free)} von ${fmtBytes(s.mem.psram)}` : 'kein PSRAM'],
       ['WLAN', [
@@ -1066,7 +1274,7 @@ async function loadStatus() {
     for (const [key, label] of Object.entries(names)) {
       const li = document.createElement('li');
       const ok = s.devices[key];
-      li.innerHTML = `<span></span><span class="${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'FEHLT'}</span>`;
+      li.append(document.createElement('span'), statusEl(ok ? 'ok' : 'bad', ok ? 'OK' : 'fehlt'));
       li.firstChild.textContent = label;
       dev.appendChild(li);
     }
@@ -1088,15 +1296,14 @@ function renderI2c(i2c) {
   list.innerHTML = '';
   const add = (addr, name, cls, status) => {
     const li = document.createElement('li');
-    li.innerHTML = '<span><span class="mono"></span> <span></span></span><span></span>';
+    li.innerHTML = '<span><span class="mono"></span> <span></span></span>';
     li.querySelector('.mono').textContent = hex(addr);
     li.firstChild.lastChild.textContent = name;
-    li.lastChild.className = cls;
-    li.lastChild.textContent = status;
+    li.appendChild(statusEl(cls, status));
     list.appendChild(li);
   };
   for (const d of i2c.devices) add(d.addr, d.name, d.expected ? 'ok' : 'warn', d.expected ? 'OK' : 'unerwartet');
-  for (const d of i2c.missing) add(d.addr, d.name, 'bad', 'FEHLT');
+  for (const d of i2c.missing) add(d.addr, d.name, 'bad', 'fehlt');
   if (i2c.scanned && !i2c.devices.length && !i2c.missing.length) add(0, 'keine Geräte gefunden', 'bad', '–');
 }
 
@@ -1118,13 +1325,10 @@ function renderBatterySettings(b) {
   $('bat-enabled').checked = b.enabled;
   $('bat-sleep').checked = b.deep_sleep;
   $('bat-sleep').disabled = !b.enabled;
-  const stateText = {
-    off: 'Überwachung aus', usb: 'kein Akku (USB)', ok: 'OK', warn: 'schwach', critical: 'leer!',
-  };
   fillKv($('sys-bat'), [
     [b.enabled ? 'Spannung' : 'Messwert (ungeprüft)', `${b.v.toFixed(2)} V`],
     ['Ladestand', b.enabled ? `${b.pct} %` : '–'],
-    ['Zustand', stateText[b.state] || b.state],
+    ['Zustand', BAT_TEXT[b.state] || b.state],
   ]);
 }
 
@@ -1365,7 +1569,8 @@ function bindSystem() {
 // ---------------------------------------------------------------- Start -----
 
 function init() {
-  document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
+  bindNav();
+  bindTheme();
   buildLegs();
   buildManual();
   bindPose();
@@ -1375,6 +1580,8 @@ function init() {
   bindCamera();
   bindSystem();
   selectServo(0);
+  showCalView('cal');
+  showTab(pageFromHash());
   renderConnection();
   loadCamera();
   loadKinematics();

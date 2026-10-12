@@ -61,7 +61,7 @@ Weicht die Verkabelung ab, nur die Tabelle `SERVO_MAP` in
   Warnung unter 6,8 V, Servos aus unter 6,4 V (nach 5 s), Tiefschlaf des ESP32 unter 6,0 V
   (nach 10 s). UBECs und Buck ziehen auch dann noch Ruhestrom – einen leeren Akku also
   trotzdem zeitnah abstecken. Schwellen in `config.h` (`BAT_*`).
-- **Akkuüberwachung schalten:** Im Tab *System* gibt es zwei Schalter, gespeichert im NVS:
+- **Akkuüberwachung schalten:** Unter *Einstellungen* → *Akku* gibt es zwei Schalter, gespeichert im NVS:
   *Akkuüberwachung* (Warnung + Servo-Abschaltung) und *Tiefschlaf bei Tiefentladung*
   (wirkt nur bei eingeschalteter Überwachung). **Ab Werk ist die Überwachung aus**, weil
   GPIO 1 ohne bestückten Spannungsteiler offen ist und Zufallswerte liefert. Gemessen und
