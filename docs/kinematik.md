@@ -135,9 +135,20 @@ darüber:
 | Gieren | + = nach links drehen |
 
 Die Haltung folgt den Reglern mit begrenzter Geschwindigkeit (80 mm/s bzw. 45 °/s,
-`POSE_SPEED_*` in `robot_geometry.h`), zusätzlich begrenzen die Servo-Rampen. Kann ein Bein
-einen Punkt nicht erreichen oder stößt ein Gelenk an seine Kalibriergrenze, zeigt die Oberfläche
-eine Warnung; das Bein behält dann seine letzte gültige Stellung.
+`POSE_SPEED_*` in `robot_geometry.h`), zusätzlich begrenzen die Servo-Rampen.
+
+**Unerreichbare Haltung:** Die Firmware prüft jede neue Haltung, bevor sie gilt
+([`kin::checkPose`](../firmware/src/kinematics/kinematics.cpp)): Erreichen alle Füße den Boden, und
+bleiben alle Gelenke innerhalb ihrer Kalibriergrenzen? Wenn nicht, nimmt sie die nächste zulässige
+Haltung auf dem Weg von der bisherigen zur gewünschten (Bisektion) und meldet genau, was begrenzt
+wurde, z. B. *„Haltung begrenzt: Höhe auf 82 mm (gewünscht 100) – Beine 1, 3, 4, 6 erreichen den Boden
+nicht“*. Die Oberfläche zeigt das als Hinweis in der Karte Körperhaltung und der Regler springt auf
+den tatsächlichen Wert zurück. So bleibt der Roboter immer beweglich, statt in einer Haltung zu
+„hängen“, aus der er nicht mehr laufen kann.
+
+Engt die Haltung die Schrittlänge stark ein (Körper sehr hoch oder tief, Füße sehr weit innen oder
+außen), meldet die Karte *Bewegung*: *„Beinreichweite begrenzt das Tempo: vorwärts 34 %,
+seitwärts 20 %“*, bzw. dass in dieser Haltung gar nicht gelaufen werden kann.
 
 Haltung, Gangparameter, Lageausgleich und Stellgeschwindigkeit werden gespeichert (NVS, 2 s nach
 der letzten Änderung) und gelten auch nach einem Neustart; **Zurücksetzen** stellt die
@@ -166,7 +177,7 @@ Beim Einschalten von Torque fahren die Beine in die **Sitzhaltung**: Körper lie
 dem Boden im gleichen Abstand wie im Stand (100 mm, `SIT_STANCE`). So drücken die Beine einen auf
 dem Bauch liegenden Roboter nicht ruckartig hoch.
 
-Karte **Laufen** → **Aufstehen** ([`posture.cpp`](../firmware/src/kinematics/posture.cpp)):
+Karte **Bewegung** → **Aufstehen** ([`posture.cpp`](../firmware/src/kinematics/posture.cpp)):
 
 1. Körper ruckfrei auf die eingestellte Höhe heben (1,5 s, Füße bleiben stehen),
 2. weicht der Fußabstand im Stand von dem im Sitzen ab, die Füße mit Schritten umsetzen – nicht
@@ -186,7 +197,7 @@ Roboter wieder aufstehen.
 
 ## Laufen
 
-Erst **Aufstehen** (siehe oben). *Steuerung* → Karte **Laufen**: linker Joystick *Fahren* (vor/zurück, seitlich), rechter
+Erst **Aufstehen** (siehe oben). *Steuerung* → Karte **Bewegung** → **Laufen**: linker Joystick *Fahren* (vor/zurück, seitlich), rechter
 *Drehen*; am PC auch **W/S** (vor/zurück), **A/D** (seitlich), **Q/E** (drehen), **Leertaste**
 (Stopp). Der Joystick schaltet den IK-Modus ein; die Körperhaltung (Höhe, Neigung, …) gilt
 beim Laufen weiter.
@@ -237,6 +248,14 @@ Fahren und Drehen gleichzeitig wird so begrenzt, dass kein Fuß schneller als er
 Oberfläche zeigt das aktuell mögliche Höchsttempo unter den Joysticks. Ein Wechsel der Gangart wirkt
 erst im Stillstand.
 
+**Schrittfrequenz passt sich an:** Langsam laufen heißt nicht mehr „gleich viele, nur kürzere
+Schritte“. Wäre ein Schritt kürzer als die Hälfte der vollen Schrittlänge, verlängert die Gangart
+stattdessen die Schrittdauer (bis zum Doppelten der eingestellten), gleitend mit höchstens einer
+Verdopplung pro Sekunde. Bei 20 % Tempo macht der Roboter so halb so viele Schritte (in 5 s 18 statt
+36) – das sieht natürlicher aus, spart Strom und schont die Servos. Volles Tempo ist dabei sofort
+verfügbar: Das zulässige Tempo folgt der aktuellen Schrittdauer, beim Beschleunigen werden die
+Schritte also erst schneller, dann länger. Die Oberfläche zeigt die aktuelle Schrittdauer an.
+
 | Einstellung | Bereich | Standard | Hinweis |
 |---|---|---|---|
 | Tempo | 10–100 % | 80 % | skaliert Joystick und Tasten (nur in der Oberfläche) |
@@ -255,6 +274,51 @@ nach vorne. Zu sehen sein sollte: abwechselnd drei Beine heben (vorne links, hin
 rechts und umgekehrt), die Füße am Boden wandern gleichmäßig nach hinten. Danach auf dem Boden,
 zuerst langsam.
 
+## Körper bewegen und Gesten
+
+Karte **Bewegung** → **Körper**: Die Füße bleiben stehen, die Joysticks bewegen nur den Körper –
+links verschieben (vor/zurück, seitlich, bis ±30 mm: Schwerpunkt verlagern), rechts neigen
+(Nicken/Rollen bis ±12°); am PC **W/A/S/D** verschieben, **Q/E** drehen (Gieren ±15°). Loslassen
+federt in die eingestellte Haltung zurück. Was die Beine nicht erreichen, wird zurückgenommen
+(Hinweis *„An der Reichweitengrenze“*).
+
+**Gesten** (nur im Stand, kurz, weich ein- und ausgeblendet,
+[`gestures.cpp`](../firmware/src/kinematics/gestures.cpp)):
+
+| Geste | Bewegung | Dauer |
+|---|---|---|
+| Kreisen | Körper kreist zweimal (±20 mm) | 6 s |
+| Ja | dreimal nicken (±9°) | 3,4 s |
+| Nein | dreimal den Kopf schütteln (Gieren ±12°) | 3,4 s |
+| Liegestütz | dreimal 22 mm tief und wieder hoch | 5,6 s |
+| Tanzen | Hüften schwingen, wippen und drehen | 6,4 s |
+
+*Stopp*, Laufen oder Hinsetzen blenden eine Geste aus dem aktuellen Ausschlag weich aus. Der
+Lageausgleich regelt nicht gegen die Geste.
+
+## Vorderbeine
+
+Karte **Bewegung** → **Vorderbeine** → **Vorderbeine heben**
+([`arms.cpp`](../firmware/src/kinematics/arms.cpp)). Damit der Roboter dabei nicht nach vorne kippt,
+läuft das statisch stabil in Schritten ab:
+
+1. **Gewicht verlagern** (1 s): Körper 35 mm nach hinten, die Mittelbeine setzen mit Schritten 25 mm
+   nach vorne. Damit steht der Schwerpunkt sicher im Viereck aus Mittel- und Hinterbeinen.
+2. **Heben** (1 s): Die Vorderfüße lösen sich und schwingen in die Bereitstellung 50 mm über dem
+   Boden.
+3. **Steuern:** Je ein Joystick pro Bein – ↑/↓ hoch/runter (20–80 mm über dem Boden), →/← vor
+   (30 mm) und zurück (15 mm). Mit *Beide folgen dem linken Joystick* bewegen sich beide gleich.
+   **Winken** lässt das rechte Bein 3 s winken.
+4. **Absetzen** geht umgekehrt: Füße auf den Boden, dann Gewicht zurück.
+
+Solange die Vorderbeine oben sind, ist Laufen gesperrt (die Oberfläche sagt das); **Hinsetzen**
+setzt sie vorher automatisch ab. Vor dem Heben prüft die Firmware, ob die Gewichtsverlagerung in der
+aktuellen Haltung erreichbar ist. Im Test bleibt der Schwerpunkt während des ganzen Ablaufs mindestens
+60 mm innerhalb der Standfläche.
+
+**Erster Test:** aufgebockt, dann am Boden mit der Hand in der Nähe – die Werte für Gewichtsverlagerung
+und Bereitstellung stehen in `arms::Config`.
+
 ## Tests
 
 Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet, auch in der CI bei jedem Push:
@@ -271,6 +335,9 @@ Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet, auch in der
 - [`attitude_test.cpp`](../firmware/test_host/attitude_test.cpp): Lagesensor-Einbaulagen und
   Vorzeichen, Komplementärfilter, Lageausgleich (gleicht Schräglagen aus, erkennt falsche
   Sensorrichtung)
+- [`moves_test.cpp`](../firmware/test_host/moves_test.cpp): Vorderbeine heben, steuern, winken und
+  absetzen (auch Abbruch mittendrin) – Schwerpunkt immer sicher in der Standfläche, alle Stellungen
+  erreichbar, keine Sprünge; Gesten weich, erreichbar und sauber abbrechbar
 
 ```
 cd firmware/test_host
@@ -282,4 +349,6 @@ g++ -std=c++17 -I../src -I../include posture_test.cpp ../src/kinematics/posture.
 ./posture_test
 g++ -std=c++17 -I../src -I../include attitude_test.cpp ../src/sensors/attitude.cpp ../src/kinematics/leveling.cpp -o attitude_test
 ./attitude_test
+g++ -std=c++17 -I../src -I../include moves_test.cpp ../src/kinematics/arms.cpp ../src/kinematics/gestures.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o moves_test
+./moves_test
 ```

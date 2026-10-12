@@ -46,6 +46,7 @@ const Cmd CMDS[] = {
     {1, 0, 0, "vor"},      {-1, 0, 0, "zurück"},  {0, 1, 0, "links"},
     {0, 0, 1, "drehen"},   {0, 0, -1, "drehen rechts"}, {0.7f, -0.7f, 0, "schräg"},
     {1, 0, 1, "Kurve"},    {-0.5f, 0.5f, -0.8f, "gemischt"},
+    {0.25f, 0, 0, "langsam"}, {0, 0, 0.3f, "langsam drehen"},
 };
 
 static void neutralFeet(Vec3 out[6], float stance) {
@@ -309,6 +310,41 @@ static void testStartExcursion() {
   }
 }
 
+// Schrittfrequenz: langsam -> ruhigere, längere Schritte; schnell -> eingestellte Schrittdauer
+static void testCadence() {
+  Vec3 n[6];
+  neutralFeet(n, POSE_LIMITS.stance_default);
+  auto run = [&](float vx, int& swings, float& cadence, float& speed) {
+    gait::Gait g = makeGait(gait::Type::Tripod, n);
+    g.setCommand(vx, 0, 0);
+    for (int k = 0; k < 150; ++k) g.update(DT, n);  // einschwingen (3 s)
+    swings = 0;
+    uint8_t prev = g.swingMask();
+    for (int k = 0; k < 250; ++k) {  // 5 s zählen
+      g.update(DT, n);
+      uint8_t m = g.swingMask();
+      swings += __builtin_popcount(m & ~prev);  // neu abgehobene Beine
+      prev = m;
+    }
+    cadence = g.cadence();
+    speed = g.speedX();
+  };
+  int sw_fast, sw_slow;
+  float cad_fast, cad_slow, v_fast, v_slow;
+  run(1.0f, sw_fast, cad_fast, v_fast);
+  run(0.2f, sw_slow, cad_slow, v_slow);
+  CHECK_NEAR(cad_fast, 1.0, 1e-3);
+  CHECK_NEAR(cad_slow, 2.0, 1e-3);
+  CHECK_NEAR(v_slow, 0.2 * v_fast, 0.5);              // Tempo bleibt wie befohlen
+  CHECK(sw_slow * 10 < sw_fast * 6);                  // deutlich weniger Schritte
+  // Schrittlänge langsam = 0.2 * 125 mm/s * Standphase 0,8 s = 20 mm statt 10 mm
+  const float stance_slow = gait::dutyFactor(gait::Type::Tripod) *
+                            gait::cycleTime(gait::Type::Tripod, GAIT_LIMITS.swing_default * cad_slow);
+  CHECK(v_slow * stance_slow > 0.35f * GAIT_LIMITS.stride_max);
+  std::printf("Info: Schritte in 5 s: schnell %d, langsam (20 %%) %d, Schrittdauer langsam %.2f s\n", sw_fast,
+              sw_slow, GAIT_LIMITS.swing_default * cad_slow);
+}
+
 int main() {
   testProfiles();
   testIdle();
@@ -317,6 +353,7 @@ int main() {
   testStop();
   testStartAndSwitch();
   testStartExcursion();
+  testCadence();
   std::printf("%d Prüfungen, %d Fehler\n", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

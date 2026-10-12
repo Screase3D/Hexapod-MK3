@@ -56,6 +56,14 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     motion::walk(in["vx"] | 0.0f, in["vy"] | 0.0f, in["turn"] | 0.0f);
     return;
   }
+  if (strcmp(cmd, "body") == 0) {  // Körper-Joystick, wie walk ohne Antwort
+    motion::body(in["x"] | 0.0f, in["y"] | 0.0f, in["roll"] | 0.0f, in["pitch"] | 0.0f, in["yaw"] | 0.0f);
+    return;
+  }
+  if (strcmp(cmd, "arm") == 0) {  // Vorderfüße steuern, ohne Antwort
+    motion::armControl(in["lx"] | 0.0f, in["lz"] | 0.0f, in["rx"] | 0.0f, in["rz"] | 0.0f);
+    return;
+  }
 
   out["type"] = "ack";
   out["cmd"] = cmd;
@@ -87,8 +95,9 @@ void handle(JsonVariantConst in, JsonDocument& out) {
       result(out, false, "mode muss 'pose' oder 'manual' sein");
     }
   } else if (strcmp(cmd, "pose") == 0) {
-    motion::applyPoseJson(in);
-    result(out, true);
+    String note;
+    if (motion::applyPoseJson(in, note)) out["limited"] = true;
+    result(out, true, note);
   } else if (strcmp(cmd, "pose_reset") == 0) {
     motion::resetPose();
     result(out, true, "Haltung zurückgesetzt");
@@ -107,6 +116,13 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     result(out, true);
   } else if (strcmp(cmd, "gait") == 0) {
     result(out, motion::applyGaitJson(in, err), err);
+  } else if (strcmp(cmd, "arms") == 0) {
+    bool up = in["up"] | false;
+    result(out, motion::setArms(up, err), err.isEmpty() ? String(up ? "Vorderbeine heben" : "Vorderbeine absetzen") : err);
+  } else if (strcmp(cmd, "wave") == 0) {
+    result(out, motion::wave(err), err);
+  } else if (strcmp(cmd, "gesture") == 0) {
+    result(out, motion::gesture(in["name"] | "", err), err);
   } else if (strcmp(cmd, "leveling") == 0) {
     bool on = in["on"] | false;
     motion::setLeveling(on);

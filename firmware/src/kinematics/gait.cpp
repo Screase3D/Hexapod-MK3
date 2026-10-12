@@ -18,6 +18,13 @@ constexpr float MAX_DT = 0.05f;        // größere Zeitschritte (Hänger) begre
 // 25 % (ebenso beim Anlaufen mit der Anlauf-Rampe). Die Reichweitengrenze hält
 // diese Reserve frei.
 constexpr float ACCEL_MARGIN = 1.25f;
+// Schrittfrequenz passt sich dem Tempo an: Langsam werden die Schritte nicht
+// beliebig kurz und hektisch, sondern die Beine schwingen ruhiger (bis zur
+// doppelten Schrittdauer) und halten mindestens die halbe Schrittlänge – weniger
+// Schritte je Strecke, natürlicher und sparsamer.
+constexpr float CADENCE_MAX = 2.0f;      // längste Schrittdauer = 2 * swing_s
+constexpr float STRIDE_KEEP = 0.5f;      // Mindest-Schrittlänge (Anteil von max_stride)
+constexpr float CADENCE_RATE = 1.0f;     // Änderung je Sekunde
 
 // Beginn der Schwungphase je Bein als Anteil des Zyklus.
 // Beine: 0 vorne links, 1 Mitte links, 2 hinten links, 3 vorne rechts, 4 Mitte rechts, 5 hinten rechts
@@ -132,6 +139,7 @@ void Gait::reset(const kin::Vec3 neutral[NUM_LEGS]) {
   for (int k = 0; k < 3; ++k) cmd_[k] = cmd_ramped_[k] = 0.0f;
   vx_ = vy_ = wz_ = 0.0f;
   reach_k_ = 1.0f;
+  cadence_ = 1.0f;
   phase_ = 0.0f;
   idle_ = true;
   starting_ = true;
@@ -177,13 +185,14 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   // Standphase), wird im ersten Zyklus langsamer beschleunigt:
   // Rampe >= 2 * spätester Schwungbeginn - Standphase (+20 % Reserve).
   const int t = static_cast<int>(active_type_);
-  const float stance_s = dutyFactor(active_type_) * cycleTime(active_type_, params_.swing_s);
+  const float stance_nom = dutyFactor(active_type_) * cycleTime(active_type_, params_.swing_s);
+  const float stance_s = stance_nom * cadence_;  // mit der aktuellen Schrittfrequenz
   float ramp_up = std::fmax(params_.ramp_s, stance_s);
   if (starting_) {
     float last = 0.0f;
     for (int i = 0; i < NUM_LEGS; ++i) last = std::fmax(last, SWING_START[t][i]);
     ramp_up = std::fmax(ramp_up, 1.2f * (2.0f * last - (1.0f - SWING_FRACTION[t])) *
-                                     cycleTime(active_type_, params_.swing_s));
+                                     cycleTime(active_type_, params_.swing_s * cadence_));
   }
   for (int k = 0; k < 3; ++k) {
     bool accel = cmd_[k] * cmd_ramped_[k] >= 0.0f && std::fabs(cmd_[k]) > std::fabs(cmd_ramped_[k]);
@@ -191,8 +200,8 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   }
 
   // Höchstgeschwindigkeit: in einer Standphase darf ein Fuß höchstens
-  // max_stride zurücklegen
-  const float foot_max = params_.max_stride / stance_s;
+  // max_stride zurücklegen (Befehl 1 = Tempo bei der eingestellten Schrittdauer)
+  const float foot_max = params_.max_stride / stance_nom;
   float r_max = 1.0f;
   for (int i = 0; i < NUM_LEGS; ++i) {
     float r = std::hypot(neutral[i].x, neutral[i].y);
@@ -202,15 +211,19 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
 
   // Befehl -> Geschwindigkeit; Fahren + Drehen gleichzeitig: schnellsten Fuß auf
   // foot_max begrenzen
-  auto toVelocity = [&](const float c[3], float v[3]) {
-    v[0] = c[0] * foot_max;
-    v[1] = c[1] * foot_max;
-    v[2] = c[2] * turn_max;
+  auto fastestFoot = [&](const float v[3]) {
     float fastest = 0.0f;
     for (int i = 0; i < NUM_LEGS; ++i) {
       float f = std::hypot(v[0] - v[2] * neutral[i].y, v[1] + v[2] * neutral[i].x);
       if (f > fastest) fastest = f;
     }
+    return fastest;
+  };
+  auto toVelocity = [&](const float c[3], float v[3]) {
+    v[0] = c[0] * foot_max;
+    v[1] = c[1] * foot_max;
+    v[2] = c[2] * turn_max;
+    float fastest = fastestFoot(v);
     if (fastest > foot_max) {
       for (int a = 0; a < 3; ++a) v[a] *= foot_max / fastest;
     }
@@ -218,6 +231,23 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   float v_cur[3], v_goal[3];
   toVelocity(cmd_ramped_, v_cur);
   toVelocity(cmd_, v_goal);
+
+  // Schrittfrequenz: ruhiger, je langsamer (beim Anhalten unverändert lassen)
+  const bool commanded = std::fabs(cmd_[0]) > MOVING_EPS || std::fabs(cmd_[1]) > MOVING_EPS ||
+                         std::fabs(cmd_[2]) > MOVING_EPS;
+  if (commanded) {
+    const float ratio = fastestFoot(v_cur) / foot_max;
+    float target = ratio > 1e-3f ? STRIDE_KEEP / ratio : CADENCE_MAX;
+    target = target < 1.0f ? 1.0f : (target > CADENCE_MAX ? CADENCE_MAX : target);
+    cadence_ = approach(cadence_, target, CADENCE_RATE * dt);
+  }
+  // Bei der aktuellen Schrittfrequenz höchstens max_stride je Standphase
+  // (folgt die Frequenz einer Tempoänderung noch, wird kurz gebremst)
+  const float foot_max_now = params_.max_stride / stance_s;
+  const float fastest_now = fastestFoot(v_cur);
+  if (fastest_now > foot_max_now) {
+    for (int a = 0; a < 3; ++a) v_cur[a] *= foot_max_now / fastest_now;
+  }
 
   // Reichweite: kein Fuß kommt der Coxa-Achse zu nahe. Ein Fuß pendelt um ±v*half
   // um seinen Neutralpunkt; er steht bis zu einen Regelschritt länger als die
@@ -232,9 +262,13 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   vx_ = v_cur[0] * reach_k_;
   vy_ = v_cur[1] * reach_k_;
   wz_ = v_cur[2] * reach_k_;
-  // Anzeige: Höchsttempo geradeaus bzw. Drehrate auf der Stelle
-  max_speed_ = foot_max * reachScale(foot_max, 0.0f, 0.0f, half, neutral);
-  max_turn_ = turn_max * reachScale(0.0f, 0.0f, turn_max, half, neutral);
+  // Anzeige: Höchsttempo geradeaus, seitwärts bzw. Drehrate auf der Stelle
+  // (bei voller Geschwindigkeit läuft die eingestellte Schrittfrequenz)
+  const float half_nom = (0.5f * stance_nom + dt) * ACCEL_MARGIN;
+  max_speed_ = foot_max * reachScale(foot_max, 0.0f, 0.0f, half_nom, neutral);
+  max_side_ = foot_max * reachScale(0.0f, foot_max, 0.0f, half_nom, neutral);
+  max_turn_ = turn_max * reachScale(0.0f, 0.0f, turn_max, half_nom, neutral);
+  nominal_speed_ = foot_max;
 }
 
 float Gait::reachScale(float vx, float vy, float wz, float half_stance_s,
@@ -302,7 +336,7 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
     l.pos = {c * x - s * y, s * x + c * y, 0.0f};
   }
 
-  const float cycle = cycleTime(active_type_, params_.swing_s);
+  const float cycle = cycleTime(active_type_, params_.swing_s * cadence_);
   const float next_phase = phase_ + dt / cycle;
   if (next_phase >= 1.0f) starting_ = false;  // jedes Bein hatte sein Schwungfenster
   phase_ = frac(next_phase);

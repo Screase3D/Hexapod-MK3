@@ -191,6 +191,10 @@ function onMessage(m) {
     renderManualLimits();
     if (m.cal.id === S.sel) renderEditorCal();
   }
+  if (m.cmd === 'pose') {  // kommt beim Ziehen im 60-ms-Takt
+    if (m.msg) showPoseNote(m.msg);
+    return;
+  }
   if (m.ok === false) toast(m.msg || 'Fehler', true);
   else if (m.msg) toast(m.msg);
   if (['cal_save', 'cal_reload', 'cal_reset'].includes(m.cmd)) send('cal_get');
@@ -446,10 +450,27 @@ function renderPose(m) {
   }
   renderLevel(m.level);
   const warn = [];
-  if (m.unreachable && m.unreachable.length) warn.push(`nicht erreichbar: Bein ${m.unreachable.map((l) => l + 1).join(', ')}`);
-  if (m.clamped && m.clamped.length) warn.push(`an Gelenkgrenze: Bein ${m.clamped.map((l) => l + 1).join(', ')}`);
+  if (Date.now() < poseNote.until) warn.push(poseNote.text);
+  const legs = (a) => `Bein${a.length > 1 ? 'e' : ''} ${a.map((l) => l + 1).join(', ')}`;
+  if (m.unreachable && m.unreachable.length) {
+    warn.push(`${legs(m.unreachable)} ${m.unreachable.length > 1 ? 'erreichen' : 'erreicht'} den Boden nicht`);
+  }
+  if (m.clamped && m.clamped.length) warn.push(`${legs(m.clamped)} an der Gelenkgrenze`);
   $('pose-warn').hidden = !warn.length;
   $('pose-warn').textContent = warn.join(' · ');
+}
+
+// Firmware hat die gewünschte Haltung begrenzt: Hinweis im Kasten, Toast höchstens alle 4 s
+const poseNote = { text: '', until: 0, toastAt: 0 };
+function showPoseNote(text) {
+  const now = Date.now();
+  if (now - poseNote.toastAt > 4000) {
+    toast(text, true);
+    poseNote.toastAt = now;
+  }
+  poseNote.text = text;
+  poseNote.until = now + 6000;
+  if (S.tel) renderPose(S.tel.motion);
 }
 
 let levelTouched = 0;
@@ -547,6 +568,8 @@ function walkChanged() {
     const m = S.tel && S.tel.motion;
     if (m && m.mode === 'pose' && m.posture && m.posture !== 'standing') {
       toast('Erst aufstehen – im Sitzen läuft der Roboter nicht.');
+    } else if (m && m.arms && m.arms !== 'down') {
+      toast('Vorderbeine sind oben – erst absetzen, dann laufen.');
     }
   }
 }
@@ -571,14 +594,15 @@ function joyShape(v) {
   return Math.sign(v) * Math.pow(Math.min(1, (a - dead) / (1 - dead)), 1.5);
 }
 
-function makeJoystick(el, horizontal, onChange) {
+// Form zur Laufzeit: .joy-h = waagerechter Schieber (nur x), sonst rund (x, y)
+function makeJoystick(el, onChange) {
   const knob = el.querySelector('.joy-knob');
   let pid = null;
   const move = (e) => {
+    const horizontal = el.classList.contains('joy-h');
     const r = el.getBoundingClientRect();
     const k = knob.offsetWidth / 2;
     const maxX = r.width / 2 - k - 4;
-    const maxY = horizontal ? 0 : r.height / 2 - k - 4;
     let dx = e.clientX - (r.left + r.width / 2);
     let dy = horizontal ? 0 : e.clientY - (r.top + r.height / 2);
     if (horizontal) {
@@ -591,7 +615,7 @@ function makeJoystick(el, horizontal, onChange) {
       }
     }
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    onChange(joyShape(dx / maxX), horizontal ? 0 : joyShape(dy / maxY));
+    onChange(joyShape(dx / maxX), horizontal ? 0 : joyShape(dy / maxX));
   };
   const end = (e) => {
     if (e.pointerId !== pid) return;
@@ -623,6 +647,131 @@ function nudgeHeight(dir) {
   input.dispatchEvent(new Event('input'));
 }
 
+// ------------------------------------------------- Körper / Vorderbeine -----
+
+const MOVE = {
+  mode: 'walk',                 // walk | body | arms
+  stickL: [0, 0], stickR: [0, 0],  // Joysticks (x rechts, y runter), normiert
+  keys: new Set(),
+  timer: null,
+  sent: '',                     // zuletzt gesendeter Befehl (für das Null-Telegramm)
+  mirror: false,
+};
+const BODY_KEYS = { KeyW: [1, 0, 0], KeyS: [-1, 0, 0], KeyA: [0, 1, 0], KeyD: [0, -1, 0], KeyQ: [0, 0, 1], KeyE: [0, 0, -1] };
+const MOVE_LABELS = {
+  walk: ['Fahren', '↶ Drehen ↷'],
+  body: ['Verschieben', 'Neigen'],
+  arms: ['linkes Bein', 'rechtes Bein'],
+};
+
+// aktueller Befehl im Körper- bzw. Vorderbein-Modus
+function moveCommand() {
+  const [lx, ly] = MOVE.stickL;
+  const [rx, ry] = MOVE.stickR;
+  if (MOVE.mode === 'body') {
+    let x = -ly, y = -lx, yaw = 0;
+    for (const code of MOVE.keys) {
+      const k = BODY_KEYS[code];
+      x += k[0];
+      y += k[1];
+      yaw += k[2];
+    }
+    // rechts: nach rechts = rechte Seite runter (Rollen +), nach oben = Nase hoch
+    return ['body', { x: clamp(x, -1, 1), y: clamp(y, -1, 1), roll: rx, pitch: -ry, yaw: clamp(yaw, -1, 1) }];
+  }
+  // Vorderbeine: nach rechts = Fuß vor, nach oben = Fuß hoch
+  const l = [lx, -ly];
+  const r = MOVE.mirror ? l : [rx, -ry];
+  return ['arm', { lx: l[0], lz: l[1], rx: r[0], rz: r[1] }];
+}
+
+function moveTick() {
+  const [cmd, params] = moveCommand();
+  const active = Object.values(params).some((v) => Math.abs(v) > 1e-3);
+  for (const k of Object.keys(params)) params[k] = +params[k].toFixed(3);
+  sendQuiet(cmd, params);
+  MOVE.sent = cmd;
+  if (!active) {
+    clearInterval(MOVE.timer);
+    MOVE.timer = null;
+  }
+}
+
+function moveChanged() {
+  moveTick();
+  if (!MOVE.timer && Object.values(moveCommand()[1]).some((v) => Math.abs(v) > 1e-3)) {
+    MOVE.timer = setInterval(moveTick, WALK_SEND_MS);
+  }
+}
+
+function moveStopAll() {
+  MOVE.stickL = [0, 0];
+  MOVE.stickR = [0, 0];
+  MOVE.keys.clear();
+  clearInterval(MOVE.timer);
+  MOVE.timer = null;
+  if (MOVE.sent) sendQuiet(MOVE.sent, MOVE.sent === 'body' ? { x: 0, y: 0, roll: 0, pitch: 0, yaw: 0 } : { lx: 0, lz: 0, rx: 0, rz: 0 });
+  MOVE.sent = '';
+}
+
+function onStick(which, x, y) {
+  if (MOVE.mode === 'walk') {
+    if (which === 'L') W.joyMove = [-y, -x];  // hoch = vor, links = +y
+    else W.joyTurn = -x;                      // links = Drehen gegen den Uhrzeigersinn
+    walkChanged();
+    return;
+  }
+  if (which === 'L') MOVE.stickL = [x, y];
+  else MOVE.stickR = [x, y];
+  moveChanged();
+}
+
+function setMoveMode(mode) {
+  if (!MOVE_LABELS[mode]) mode = 'walk';
+  if (W.timer || W.keys.size) walkStopAll();
+  moveStopAll();
+  document.querySelectorAll('.joy').forEach((j) => {
+    j.classList.remove('active');
+    j.querySelector('.joy-knob').style.transform = '';
+  });
+  MOVE.mode = mode;
+  setSeg('move-mode', mode);
+  $('joy-turn').classList.toggle('joy-h', mode === 'walk');
+  $('joy-move-label').textContent = MOVE_LABELS[mode][0];
+  $('joy-turn-label').textContent = MOVE_LABELS[mode][1];
+  $('joy-move').setAttribute('aria-label', MOVE_LABELS[mode][0]);
+  $('joy-turn').setAttribute('aria-label', MOVE_LABELS[mode][1]);
+  $('walk-settings').hidden = mode !== 'walk';
+  $('body-settings').hidden = mode !== 'body';
+  $('arms-settings').hidden = mode !== 'arms';
+  $('arms-buttons').hidden = mode !== 'arms';
+  $('posture-buttons').hidden = mode === 'arms';
+  try { localStorage.setItem('moveMode', mode); } catch (e) { /* egal */ }
+  if (S.tel) renderWalk(S.tel.motion);
+}
+
+function bindMove() {
+  bindSeg('move-mode', setMoveMode);
+  makeJoystick($('joy-move'), (x, y) => onStick('L', x, y));
+  makeJoystick($('joy-turn'), (x, y) => onStick('R', x, y));
+  $('arms-toggle').onclick = () => {
+    const m = S.tel && S.tel.motion;
+    const up = !(m && m.arms && m.arms !== 'down');
+    send('arms', { up });
+  };
+  $('arms-wave').onclick = () => send('wave');
+  $('arms-mirror').onchange = (e) => {
+    MOVE.mirror = e.target.checked;
+    moveChanged();
+  };
+  document.querySelectorAll('[data-gesture]').forEach((b) => {
+    b.onclick = () => send('gesture', { name: b.dataset.gesture });
+  });
+  let mode = 'walk';
+  try { mode = localStorage.getItem('moveMode') || 'walk'; } catch (e) { /* kein Speicher */ }
+  setMoveMode(mode);
+}
+
 function walkKey(e, down) {
   const height = e.code === 'KeyR' || e.code === 'KeyF';
   if (S.tab !== 'control' || !(e.code in WALK_KEYS || e.code === 'Space' || height)) return false;
@@ -632,6 +781,18 @@ function walkKey(e, down) {
     if (down) nudgeHeight(e.code === 'KeyR' ? 1 : -1);
     return true;
   }
+  if (MOVE.mode === 'body') {
+    if (!(e.code in BODY_KEYS)) return false;
+    if (down) {
+      if (MOVE.keys.has(e.code)) return true;
+      MOVE.keys.add(e.code);
+    } else {
+      MOVE.keys.delete(e.code);
+    }
+    moveChanged();
+    return true;
+  }
+  if (MOVE.mode === 'arms') return false;
   if (e.code === 'Space') {
     if (down) walkStopAll();
   } else if (down) {
@@ -664,6 +825,12 @@ function renderGaitLabels() {
   $('walk-scale-val').textContent = `${Math.round(W.scale * 100)} %`;
 }
 
+const ARMS_TEXT = {
+  shift_back: 'verlagert Gewicht …', raise: 'hebt Vorderbeine …', up: 'Vorderbeine oben',
+  lower: 'senkt Vorderbeine …', shift_forward: 'verlagert Gewicht …',
+};
+const GESTURE_TEXT = { circle: 'kreist', nod: 'nickt', shake: 'schüttelt', pushup: 'Liegestütz', dance: 'tanzt' };
+
 function renderWalk(m) {
   if (!m) return;
   const g = m.gait || {};
@@ -671,12 +838,19 @@ function renderWalk(m) {
   const posture = m.mode === 'pose' ? m.posture : null;
   const busy = posture === 'standing_up' || posture === 'sitting_down';
   const POSTURE_TEXT = { sitting: 'sitzt', standing_up: 'steht auf …', sitting_down: 'setzt sich …' };
+  const arms = m.mode === 'pose' && m.arms ? m.arms : 'down';
   if (m.mode !== 'pose') {
     st.textContent = 'IK aus';
     st.className = 'badge badge-muted';
+  } else if (arms !== 'down') {
+    st.textContent = ARMS_TEXT[arms] || arms;
+    st.className = arms === 'up' ? 'badge badge-on' : 'badge badge-warn';
   } else if (posture && posture !== 'standing') {
     st.textContent = POSTURE_TEXT[posture] || posture;
     st.className = busy ? 'badge badge-warn' : 'badge badge-muted';
+  } else if (m.gesture) {
+    st.textContent = GESTURE_TEXT[m.gesture] || m.gesture;
+    st.className = 'badge badge-on';
   } else if (g.walking) {
     st.textContent = 'läuft';
     st.className = 'badge badge-on';
@@ -688,6 +862,42 @@ function renderWalk(m) {
   $('walk-stand').disabled = !powered || busy || posture === 'standing';
   $('walk-stand').title = powered ? '' : 'Erst Torque einschalten';
   $('walk-sit').disabled = !powered || busy || m.mode !== 'pose' || posture === 'sitting';
+  const standing = powered && m.mode === 'pose' && posture === 'standing';
+
+  // Vorderbeine: heben nur im Stand ohne Laufen, absetzen jederzeit
+  const raising = arms === 'shift_back' || arms === 'raise' || arms === 'up';
+  $('arms-toggle').textContent = raising ? 'Vorderbeine absetzen' : 'Vorderbeine heben';
+  $('arms-toggle').disabled = raising ? false : (arms !== 'down' || !standing || !!g.walking);
+  $('arms-toggle').title = standing ? '' : 'Erst aufstehen';
+  $('arms-wave').disabled = arms !== 'up';
+
+  // Gesten: nur im Stand, Vorderbeine unten
+  document.querySelectorAll('[data-gesture]').forEach((b) => {
+    const name = b.dataset.gesture;
+    b.classList.toggle('running', m.gesture === name);
+    b.disabled = name === 'stop' ? !m.gesture : (!standing || arms !== 'down');
+  });
+  $('body-info').textContent = m.offset_limited ? 'An der Reichweitengrenze – Körper lässt sich nicht weiter bewegen' : '';
+
+  // Tempo durch die Beinreichweite begrenzt?
+  let limit = '';
+  if (m.mode === 'pose' && posture === 'standing' && MOVE.mode === 'walk') {
+    if (arms !== 'down') {
+      limit = 'Vorderbeine sind oben – Laufen ist gesperrt.';
+    } else if (g.nominal > 0) {
+      const fwd = (g.max_speed || 0) / g.nominal;
+      const side = (g.max_side || 0) / g.nominal;
+      if (g.max_speed === 0 && g.max_side === 0) {
+        limit = 'In dieser Haltung kann er nicht laufen – die Beine haben keinen Spielraum für Schritte. Höhe oder Standbreite näher an die Grundstellung bringen.';
+      } else if (fwd < 0.6 || side < 0.6) {
+        limit = `Beinreichweite begrenzt das Tempo: vorwärts ${Math.round(fwd * 100)} %, seitwärts ${Math.round(side * 100)} % – `
+          + 'Höhe oder Standbreite näher an die Grundstellung bringen.';
+      }
+    }
+  }
+  $('walk-limit').hidden = !limit;
+  $('walk-limit').textContent = limit;
+
   const swing = g.swing || 0;
   document.querySelectorAll('#walk-legs [data-leg]').forEach((d) => {
     d.classList.toggle('up', !!(swing & (1 << +d.dataset.leg)));
@@ -705,8 +915,11 @@ function renderWalk(m) {
   renderGaitLabels();
 
   const info = [];
-  if (m.mode === 'pose' && g.max_speed !== undefined) {
-    if (g.walking) info.push(`${g.vx} / ${g.vy} mm/s · ${g.wz} °/s`);
+  if (m.mode === 'pose' && g.max_speed !== undefined && MOVE.mode === 'walk') {
+    if (g.walking) {
+      info.push(`${g.vx} / ${g.vy} mm/s · ${g.wz} °/s`);
+      if (g.cadence) info.push(`Schritt ${(g.swing_s * g.cadence).toFixed(2).replace('.', ',')} s`);
+    }
     info.push(`max. ${g.max_speed} mm/s · ${g.max_turn} °/s`);
     if (g.active && g.active !== g.type) info.push('Gangart wechselt nach dem Anhalten');
   }
@@ -725,14 +938,6 @@ function bindWalk() {
     walkStopAll();
     send('sit');
   };
-  makeJoystick($('joy-move'), false, (x, y) => {
-    W.joyMove = [-y, -x];  // hoch = vor, links = +y
-    walkChanged();
-  });
-  makeJoystick($('joy-turn'), true, (x) => {
-    W.joyTurn = -x;  // links = Drehen gegen den Uhrzeigersinn
-    walkChanged();
-  });
   $('walk-scale').oninput = (e) => {
     W.scale = +e.target.value / 100;
     renderGaitLabels();
@@ -755,7 +960,10 @@ function bindWalk() {
   };
   document.addEventListener('keyup', (e) => { if (walkKey(e, false)) e.preventDefault(); });
   // Fenster verliert den Fokus / Tab im Hintergrund: sofort anhalten
-  window.addEventListener('blur', () => { if (W.timer || W.keys.size) walkStopAll(); });
+  window.addEventListener('blur', () => {
+    if (W.timer || W.keys.size) walkStopAll();
+    if (MOVE.timer || MOVE.keys.size) moveStopAll();
+  });
   document.addEventListener('visibilitychange', () => { if (document.hidden && W.timer) walkStopAll(); });
   renderGaitLabels();
 }
@@ -1656,6 +1864,7 @@ function init() {
   buildManual();
   bindPose();
   bindWalk();
+  bindMove();
   bindGlobal();
   bindEditor();
   bindCamera();

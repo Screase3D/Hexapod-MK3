@@ -22,8 +22,11 @@ void setMode(Mode m);
 Mode mode();
 
 // Übernimmt die im JSON vorhandenen Felder als neue Zielhaltung:
-// x, y, z (Höhe), roll, pitch, yaw, stance. Werte werden begrenzt.
-void applyPoseJson(JsonVariantConst obj);
+// x, y, z (Höhe), roll, pitch, yaw, stance. Werte werden auf die Reglergrenzen
+// begrenzt; erreichen die Beine die Haltung nicht (oder stoßen an Gelenkgrenzen
+// der Kalibrierung), wird sie auf den nächsten zulässigen Wert zurückgenommen:
+// Rückgabe true, note erklärt was und warum.
+bool applyPoseJson(JsonVariantConst obj, String& note);
 void resetPose();
 
 // Aufstehen / Hinsetzen (schalten in den IK-Modus). Ohne Torque oder bei
@@ -38,6 +41,22 @@ void walk(float vx, float vy, float turn);
 void stopWalking();
 // Gangparameter: type ("tripod"/"ripple"/"wave"), swing_s, step_height
 bool applyGaitJson(JsonVariantConst obj, String& err);
+
+// Körper-Joystick: Versatz normiert -1..1 (x vor, y links, roll, pitch, yaw), wird
+// zur Haltung addiert (nur im Stehen). Ohne neuen Befehl für WALK_TIMEOUT_MS
+// federt der Körper zurück. Nicht erreichbare Anteile werden zurückgenommen.
+void body(float x, float y, float roll, float pitch, float yaw);
+
+// Vorderbeine: heben (Gewicht nach hinten, Mittelbeine vor, Vorderbeine hoch) bzw.
+// absetzen. Heben nur im Stehen und Stillstand; solange sie oben sind, wird
+// nicht gelaufen. armControl: je Vorderfuß vor(+)/zurück und hoch(+)/runter,
+// normiert -1..1, federt ohne neue Befehle in die Bereitstellung zurück.
+bool setArms(bool up, String& err);
+void armControl(float lx, float lz, float rx, float rz);
+bool wave(String& err);  // rechtes Vorderbein winkt (nur wenn oben)
+
+// Gesten im Stand: "circle", "nod", "shake", "pushup", "dance"; "stop" beendet
+bool gesture(const char* name, String& err);
 
 // Lageausgleich: hält den Körper mit dem Lagesensor waagerecht (bzw. auf der
 // eingestellten Neigung). Schaltet sich bei falscher Sensorrichtung selbst ab.

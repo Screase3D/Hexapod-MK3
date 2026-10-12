@@ -189,7 +189,29 @@ static void testDefaultPose() {
   std::printf("Info: %d von %d Extremstellungen (Höhe/Fußabstand) nicht erreichbar\n", unreachable, total);
 }
 
+// Haltungsprüfung: Standardhaltung ok, zu hoch -> unerreichbar, enge Grenzen -> begrenzt
+static void testCheckPose() {
+  float lo[18], hi[18];
+  for (int i = 0; i < 18; ++i) {
+    lo[i] = -135;
+    hi[i] = 135;
+  }
+  Vec3 feet[6];
+  for (int i = 0; i < 6; ++i) feet[i] = stanceFoot(LEG_MOUNTS[i], POSE_LIMITS.stance_default);
+  BodyPose pose{0, 0, POSE_LIMITS.height_default, 0, 0, 0};
+  CHECK(checkPose(LEG_GEOMETRY, LEG_MOUNTS, 6, pose, feet, lo, hi).ok());
+  BodyPose high{0, 0, 140, 0, 0, 0};  // länger als Femur + Tibia
+  PoseCheck r = checkPose(LEG_GEOMETRY, LEG_MOUNTS, 6, high, feet, lo, hi);
+  CHECK(r.unreachable == 0x3F);
+  // Femur von Bein 2 nur bis 50° erlaubt (Standardhaltung braucht 55,4°)
+  hi[1 * 3 + 1] = 50;
+  r = checkPose(LEG_GEOMETRY, LEG_MOUNTS, 6, pose, feet, lo, hi);
+  CHECK(r.unreachable == 0);
+  CHECK(r.limited == (1u << 1));
+}
+
 int main() {
+  testCheckPose();
   testNeutralPose();
   testFkOfZero();
   testRoundTripAngles();

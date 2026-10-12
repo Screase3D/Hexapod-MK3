@@ -96,4 +96,21 @@ Vec3 coxaWorld(const BodyPose& pose, const LegMount& m) {
   return {pose.x + c * m.x - sn * m.y, pose.y + sn * m.x + c * m.y, 0.0f};
 }
 
+PoseCheck checkPose(const LegGeometry& g, const LegMount* mounts, int legs, const BodyPose& pose,
+                    const Vec3* feet, const float* lo, const float* hi) {
+  PoseCheck r;
+  for (int leg = 0; leg < legs; ++leg) {
+    JointAngles a;
+    if (!legIk(g, mounts[leg], bodyToLeg(mounts[leg], worldToBody(pose, feet[leg])), a)) {
+      r.unreachable |= 1u << leg;
+      continue;
+    }
+    const float v[3] = {a.coxa, a.femur, a.tibia};
+    for (int j = 0; j < 3; ++j) {
+      if (v[j] < lo[leg * 3 + j] || v[j] > hi[leg * 3 + j]) r.limited |= 1u << leg;
+    }
+  }
+  return r;
+}
+
 }  // namespace kin

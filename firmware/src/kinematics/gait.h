@@ -85,8 +85,12 @@ class Gait {
   float speedY() const { return vy_; }      // mm/s
   float turnRate() const { return wz_; }    // rad/s
   // Höchstwerte bei den aktuellen Parametern (für die Anzeige)
-  float maxSpeed() const { return max_speed_; }  // mm/s
+  float maxSpeed() const { return max_speed_; }  // mm/s geradeaus (mit Reichweitengrenze)
+  float maxSide() const { return max_side_; }    // mm/s seitwärts (mit Reichweitengrenze)
   float maxTurn() const { return max_turn_; }    // rad/s
+  float nominalSpeed() const { return nominal_speed_; }  // mm/s ohne Reichweitengrenze
+  // aktuelle Schrittfrequenz: 1 = eingestellte Schrittdauer, 2 = doppelt so lang
+  float cadence() const { return cadence_; }
 
  private:
   struct Leg {
@@ -106,7 +110,8 @@ class Gait {
   float cmd_[3] = {0, 0, 0};       // Vorgabe (normiert)
   float cmd_ramped_[3] = {0, 0, 0};
   float vx_ = 0, vy_ = 0, wz_ = 0;
-  float max_speed_ = 0, max_turn_ = 0;
+  float max_speed_ = 0, max_side_ = 0, max_turn_ = 0, nominal_speed_ = 0;
+  float cadence_ = 1.0f;
   float phase_ = 0;
   bool idle_ = true;
   bool starting_ = true;  // erster Zyklus nach dem Stillstand: langsamer beschleunigen

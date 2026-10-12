@@ -58,12 +58,17 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `estop` | – | Not-Aus: alle Ausgänge sofort aus, Torque gesperrt |
 | `estop_clear` | – | Not-Aus freigeben (Servos bleiben aus) |
 | `mode` | `mode`: `"pose"` / `"manual"` | Körperhaltung per IK an/aus |
-| `pose` | `x`, `y`, `z`, `roll`, `pitch`, `yaw`, `stance` (Teilmenge) | Zielhaltung (mm/Grad, wird begrenzt), siehe [kinematik.md](kinematik.md) |
+| `pose` | `x`, `y`, `z`, `roll`, `pitch`, `yaw`, `stance` (Teilmenge) | Zielhaltung (mm/Grad, wird begrenzt), siehe [kinematik.md](kinematik.md). Ist sie nicht erreichbar, gilt die nächste erreichbare; die Antwort enthält dann `"limited": true` und in `msg`, was begrenzt wurde |
 | `pose_reset` | – | Standardhaltung |
 | `walk` | `vx`, `vy`, `turn` (je −1…1) | Fahrbefehl: vor/zurück, links/rechts, drehen (+ = links). Schaltet in den IK-Modus. **Ohne Antwort**; ohne neuen Befehl für 0,6 s hält der Roboter an – also während der Fahrt etwa alle 100 ms senden |
 | `stop` | – | Fahrbefehl auf 0 (Roboter läuft noch in die Neutralstellung) |
 | `stand` | – | aufstehen (aus dem Sitzen; braucht Torque), schaltet in den IK-Modus |
-| `sit` | – | hinsetzen |
+| `sit` | – | hinsetzen (setzt erhobene Vorderbeine vorher ab) |
+| `body` | `x`, `y`, `roll`, `pitch`, `yaw` (je −1…1) | Körper-Joystick: Körper verschieben (±30 mm) und neigen (±12°, Gieren ±15°), Füße bleiben stehen. **Ohne Antwort**, wie `walk` etwa alle 100 ms senden; ohne neuen Befehl federt der Körper nach 0,6 s zurück |
+| `gesture` | `name`: `circle`/`nod`/`shake`/`pushup`/`dance`/`stop` | Geste abspielen bzw. weich beenden (nur im Stand, Vorderbeine unten), siehe [kinematik.md](kinematik.md#körper-bewegen-und-gesten) |
+| `arms` | `up` (bool) | Vorderbeine heben (Gewicht nach hinten, dann heben; nur im Stillstand) bzw. absetzen, siehe [kinematik.md](kinematik.md#vorderbeine) |
+| `arm` | `lx`, `lz`, `rx`, `rz` (je −1…1) | Vorderfüße steuern (x = vor, z = hoch; l = Bein 1, r = Bein 4), nur wenn oben. **Ohne Antwort**, etwa alle 100 ms senden; ohne Befehl kehren sie nach 0,6 s in die Bereitstellung zurück |
+| `wave` | – | rechtes Vorderbein winkt (nur wenn oben) |
 | `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wirkt im Stillstand |
 | `leveling` | `on` (bool) | Lageausgleich an/aus, siehe [kinematik.md](kinematik.md#lageausgleich) |
 | `imu_cal` | `level` (bool) | Lagesensor kalibrieren (2 s ruhig halten): Gyro-Nullpunkt, mit `level` zusätzlich aktuelle Lage = waagerecht. Fortschritt/Ergebnis in der Telemetrie |
@@ -107,7 +112,8 @@ Beispiel:
              "level": {"on": true, "active": true, "roll": -3.2, "pitch": 1.1},
              "gait": {"type": "tripod", "swing_s": 0.4, "step_height": 15, "active": "tripod",
                       "walking": true, "swing": 21, "vx": 100, "vy": 0, "wz": 0,
-                      "max_speed": 125, "max_turn": 39},
+                      "max_speed": 125, "max_side": 95, "max_turn": 39, "nominal": 125, "cadence": 1.0},
+             "arms": "down", "gesture": "nod", "body": true, "offset_limited": true,
              "unreachable": [], "clamped": []},
   "wifi":  {"mode": "sta", "rssi": -58},
   "cam":   {"clients": 1, "awake": true, "fps": 12.4, "kb": 23, "kbps": 2300, "err": 0,
@@ -125,7 +131,12 @@ Fußpunkt nicht erreichen bzw. an eine Gelenkgrenze stoßen. `motion.posture` (n
 `motion.gait`: `type` = gewählte,
 `active` = laufende Gangart, `swing` = Bitmaske der Beine in der Luft (Bit 0 = Bein 1),
 `vx`/`vy` in mm/s, `wz` in °/s, `max_*` = Höchstwerte bei den aktuellen Parametern (geradeaus
-bzw. Drehen auf der Stelle, mit Reichweitengrenze). `motion.level`: Lageausgleich `on`, `active`
+bzw. seitwärts bzw. Drehen auf der Stelle, mit Reichweitengrenze), `nominal` = Tempo ohne
+Reichweitengrenze (ist `max_speed` deutlich kleiner, schränkt die Haltung das Laufen ein),
+`cadence` = aktuelle Schrittdauer / eingestellte (1–2, langsam = längere Schritte). `motion.arms`:
+`down`, `shift_back`, `raise`, `up`, `lower`, `shift_forward`; `motion.gesture` nur während einer
+Geste; `motion.body` solange der Körper-Joystick wirkt, `offset_limited` wenn er an der
+Reichweitengrenze ist. `motion.level`: Lageausgleich `on`, `active`
 (wirkt gerade), aktuelle Korrektur `roll`/`pitch` in Grad, `fault: true` = wegen falscher
 Sensorrichtung abgeschaltet. `imu`: `pitch`/`roll` nach Abzug des Nullpunkts `level`
 ([Roll, Nick] der schief eingebauten Platine), `acc` im Körpersystem, `mount`/`flip` =

@@ -480,6 +480,21 @@ details.fold[open] summary { margin-bottom: 4px; }
 .walk-legs span[data-leg="2"] { grid-column: 1; grid-row: 3; }
 .walk-legs span[data-leg="5"] { grid-column: 3; grid-row: 3; }
 .walk-info { margin: 26px 0 0; min-height: 1.2em; text-align: center; }
+.seg-mode { margin-bottom: 12px; }
+.joy-h .joy-cross { display: none; }
+.gesture-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 6px 0 4px; }
+.gesture-grid .btn { min-height: 36px; padding: 6px 8px; }
+.gesture-grid .btn.running { border-color: var(--accent); background: var(--accent-soft); }
+.check-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; font-weight: 600; cursor: pointer; }
+/* Hinweis, der auffallen soll: Symbolfarbe + Text, nicht nur Farbe */
+.alert {
+  margin: 10px 0 4px; padding: 9px 12px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 12%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
+  color: var(--text);
+}
+.alert::before { content: "⚠ "; color: var(--warn-text); font-weight: 700; }
+.warn-note { color: var(--warn-text); margin: 4px 0 8px; }
+.warn-note:empty { display: none; }
 @media (hover: none) { .o-walk .hint { display: none; } }  /* Tastatur-Hinweise nur am PC */
 
 #pose-sliders .slider-row { margin: 6px 0; }

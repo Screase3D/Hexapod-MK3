@@ -35,6 +35,10 @@ state = {
     "posture_t": 0,
     "walk_t": 0,
     "gait": {"type": "tripod", "swing_s": 0.4, "step_height": 15},
+    # Vorderbeine (wie arms.cpp): Ablauf aus (Zustand, Dauer); Gesten (wie gestures.cpp)
+    "arms_seq": [("down", 0)], "arms_t": 0.0,
+    "gesture": None, "gesture_t": 0.0,
+    "body": [0.0] * 5, "body_t": 0.0,
     # Lagesensor (wie imu.cpp) und Lageausgleich (wie motion.cpp)
     "imu_mount": "vorne", "imu_flip": False, "imu_level": [0.0, 0.0],
     "imu_cal": None, "imu_cal_t": 0.0, "imu_cal_level": False, "imu_cal_msg": "",
@@ -144,23 +148,77 @@ def posture():
     return state["posture"]
 
 
+ARMS_UP = [("shift_back", 1.2), ("raise", 1.0), ("up", 0)]
+ARMS_DOWN = [("lower", 1.0), ("shift_forward", 1.2), ("down", 0)]
+GESTURES = {"circle": 6.0, "nod": 3.4, "shake": 3.4, "pushup": 5.6, "dance": 6.4}
+
+
+def arms():
+    # aktueller Zustand im Ablauf; ohne Torque sofort unten
+    if not state["torque"] or state["estop"] or state["mode"] != "pose":
+        state["arms_seq"] = [("down", 0)]
+    el = time.time() - state["arms_t"]
+    for name, dur in state["arms_seq"]:
+        if dur == 0 or el < dur:
+            return name
+        el -= dur
+    return state["arms_seq"][-1][0]
+
+
+def gesture():
+    g = state["gesture"]
+    if g and (time.time() - state["gesture_t"] > GESTURES[g] or posture() != "standing"):
+        state["gesture"] = g = None
+    return g
+
+
+def z_max(stance):
+    # grobe Reichweite: je breiter der Stand, desto weniger hoch
+    return 150 - 0.5 * stance
+
+
+def legs_text(legs):
+    return ("Bein " if len(legs) == 1 else "Beine ") + ", ".join(str(l + 1) for l in legs)
+
+
 def gait_status():
     g = dict(state["gait"])
     fresh = (time.time() - state["walk_t"] < 0.6 and state["torque"] and state["mode"] == "pose"
-             and posture() == "standing")
+             and posture() == "standing" and arms() == "down")
     cmd = state["walk"] if fresh else [0, 0, 0]
     sigma = SWING_FRACTION[g["type"]]
-    cycle = g["swing_s"] / sigma
-    max_speed = 50 / ((1 - sigma) * cycle)
-    walking = any(abs(v) > 1e-3 for v in cmd)
-    g.update(active=g["type"], walking=walking, max_speed=round(max_speed),
-             max_turn=round(max_speed / 181 * 57.3), vx=0, vy=0, wz=0, swing=0)
+    nominal = 50 / ((1 - sigma) * g["swing_s"] / sigma)
+    # wie gait.cpp: hoch gestellt reicht das Bein nicht weit -> Tempo sinkt
+    z = state["pose"]["z"]
+    reach = 1.0 if z <= 85 else max(0.0, 1 - (z - 85) / 15)
+    max_speed = nominal * reach
+    walking = any(abs(v) > 1e-3 for v in cmd) and max_speed > 0
+    # langsam = längere Schritte statt kürzerer (Schrittfrequenz passt sich an)
+    mag = max((abs(v) for v in cmd), default=0)
+    cadence = min(2.0, max(1.0, 0.5 / mag)) if walking and mag > 0 else 1.0
+    cycle = g["swing_s"] * cadence / sigma
+    g.update(active=g["type"], walking=walking, max_speed=round(max_speed), max_side=round(max_speed * 0.76),
+             max_turn=round(max_speed / 181 * 57.3), nominal=round(nominal), cadence=round(cadence, 2),
+             vx=0, vy=0, wz=0, swing=0)
     if walking:
         phase = (time.time() / cycle) % 1
         g["swing"] = sum(1 << i for i, s in enumerate(SWING_START[g["type"]]) if (phase - s) % 1 < sigma)
         g.update(vx=round(cmd[0] * max_speed), vy=round(cmd[1] * max_speed),
                  wz=round(cmd[2] * max_speed / 181 * 57.3))
     return g
+
+
+def motion_tel():
+    m = {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "gait": gait_status(),
+         "level": level_tel(time.time()), "arms": arms(), "unreachable": [], "clamped": []}
+    if gesture():
+        m["gesture"] = gesture()
+    body_on = time.time() - state["body_t"] < 0.6 and any(abs(v) > 1e-3 for v in state["body"])
+    if body_on:
+        m["body"] = True
+        if max(abs(v) for v in state["body"]) > 0.9:
+            m["offset_limited"] = True
+    return m
 
 
 def wifi_tel():
@@ -184,8 +242,7 @@ def telemetry():
         "imu": imu_tel(t),
         "ctl": {"hz": 50.0, "max_us": 1830},
         "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3},
-        "motion": {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "gait": gait_status(),
-                   "level": level_tel(t), "unreachable": [], "clamped": []},
+        "motion": motion_tel(),
         "wifi": wifi_tel(), "heap": 182000, "ws": 1,
     }
 
@@ -233,6 +290,12 @@ def handle(cmd):
         state["walk"] = [float(cmd.get(k, 0)) for k in ("vx", "vy", "turn")]
         state["walk_t"] = time.time()
         return None
+    if c == "body":  # Körper-Joystick, ohne Antwort
+        state["body"] = [float(cmd.get(k, 0)) for k in ("x", "y", "roll", "pitch", "yaw")]
+        state["body_t"] = time.time()
+        return None
+    if c == "arm":  # Vorderfüße, ohne Antwort
+        return None
     out = {"type": "ack", "cmd": c, "ok": True}
     i = cmd.get("id")
     if c == "torque":
@@ -254,6 +317,50 @@ def handle(cmd):
         for k in ("x", "y", "z", "roll", "pitch", "yaw", "stance"):
             if k in cmd:
                 state["pose"][k] = cmd[k]
+        # wie motion.cpp: unerreichbare Haltung auf die nächste zulässige begrenzen
+        zm = z_max(state["pose"]["stance"])
+        if state["pose"]["z"] > zm:
+            want = state["pose"]["z"]
+            state["pose"]["z"] = round(zm)
+            out["limited"] = True
+            out["msg"] = (f"Haltung begrenzt: Höhe auf {round(zm)} mm (gewünscht {round(want)}) – "
+                          f"{legs_text(range(6))} erreichen den Boden nicht")
+    elif c == "arms":
+        cur = arms()
+        if cmd.get("up"):
+            if cur in ("shift_back", "raise", "up"):
+                pass
+            elif cur != "down":
+                return {**out, "ok": False, "msg": "Vorderbeine senken sich gerade"}
+            elif not state["torque"] or posture() != "standing":
+                return {**out, "ok": False, "msg": "Erst aufstehen"}
+            elif gait_status()["walking"]:
+                return {**out, "ok": False, "msg": "Erst anhalten"}
+            else:
+                state["gesture"] = None
+                state["arms_seq"], state["arms_t"] = ARMS_UP, time.time()
+            out["msg"] = "Vorderbeine heben"
+        else:
+            if cur == "shift_back":
+                state["arms_seq"], state["arms_t"] = ARMS_DOWN[1:], time.time()
+            elif cur in ("raise", "up"):
+                state["arms_seq"], state["arms_t"] = ARMS_DOWN, time.time()
+            out["msg"] = "Vorderbeine absetzen"
+    elif c == "wave":
+        if arms() != "up":
+            return {**out, "ok": False, "msg": "Erst die Vorderbeine heben"}
+    elif c == "gesture":
+        name = cmd.get("name", "")
+        if name == "stop":
+            state["gesture"] = None
+        elif name not in GESTURES:
+            return {**out, "ok": False, "msg": "unbekannte Geste (circle, nod, shake, pushup, dance, stop)"}
+        elif not state["torque"] or posture() != "standing":
+            return {**out, "ok": False, "msg": "Erst aufstehen"}
+        elif arms() != "down":
+            return {**out, "ok": False, "msg": "Erst die Vorderbeine absetzen"}
+        else:
+            state["gesture"], state["gesture_t"] = name, time.time()
     elif c == "stop":
         state["walk"] = [0, 0, 0]
     elif c == "stand":
@@ -266,8 +373,13 @@ def handle(cmd):
         out["msg"] = "Steht auf"
     elif c == "sit":
         state["mode"] = "pose"
+        state["gesture"] = None
+        delay = 0.0
+        if arms() in ("shift_back", "raise", "up"):  # wie motion.cpp: erst Vorderbeine absetzen
+            state["arms_seq"], state["arms_t"] = ARMS_DOWN, time.time()
+            delay = 2.2
         if posture() == "standing":
-            state["posture"], state["posture_t"] = "sitting_down", time.time()
+            state["posture"], state["posture_t"] = "sitting_down", time.time() + delay
         state["walk"] = [0, 0, 0]
         out["msg"] = "Setzt sich"
     elif c == "gait":

@@ -14,6 +14,8 @@
 //   Femur 0° = waagerecht, + = nach oben
 //   Tibia 0° = 90° zum Femur, + = Fuß nach außen (Knie öffnet sich)
 
+#include <stdint.h>
+
 namespace kin {
 
 struct Vec3 {
@@ -67,5 +69,16 @@ Vec3 stanceFoot(const LegMount& m, float stance);
 // Coxa-Achse in Weltkoordinaten (auf den Boden projiziert) bei verschobenem und
 // gedrehtem Körper; Rollen/Nicken bleiben unberücksichtigt.
 Vec3 coxaWorld(const BodyPose& pose, const LegMount& m);
+
+// Haltungsprüfung: Erreichen alle Beine ihre Fußpunkte feet[] (Weltkoordinaten)
+// bei Körperlage pose, und bleiben alle Gelenke in den Grenzen lo/hi (Grad, je
+// Gelenk in der Reihenfolge Bein*3 + Gelenk)?
+struct PoseCheck {
+  uint8_t unreachable = 0;  // Bitmaske Beine: Punkt außer Reichweite
+  uint8_t limited = 0;      // Bitmaske Beine: Gelenk außerhalb der Grenzen
+  bool ok() const { return unreachable == 0 && limited == 0; }
+};
+PoseCheck checkPose(const LegGeometry& g, const LegMount* mounts, int legs, const BodyPose& pose,
+                    const Vec3* feet, const float* lo, const float* hi);
 
 }  // namespace kin
