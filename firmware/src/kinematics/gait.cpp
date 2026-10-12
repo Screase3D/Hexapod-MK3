@@ -13,6 +13,11 @@ constexpr float REPOSITION_MIN = 10.0f;
 constexpr float MOVING_EPS = 1e-3f;    // normierter Befehl, ab dem gelaufen wird
 constexpr float LATE_START = 0.25f;    // Schwungfenster erst so spät erreicht -> aussetzen
 constexpr float MAX_DT = 0.05f;        // größere Zeitschritte (Hänger) begrenzen
+// Ändert sich das Tempo, während ein Fuß steht, wandert er weiter als ±v*half um
+// seinen Neutralpunkt: Dauert das Beschleunigen mindestens eine Standphase, höchstens
+// 25 % (ebenso beim Anlaufen mit der Anlauf-Rampe). Die Reichweitengrenze hält
+// diese Reserve frei.
+constexpr float ACCEL_MARGIN = 1.25f;
 
 // Beginn der Schwungphase je Bein als Anteil des Zyklus.
 // Beine: 0 vorne links, 1 Mitte links, 2 hinten links, 3 vorne rechts, 4 Mitte rechts, 5 hinten rechts
@@ -79,6 +84,46 @@ float liftProfile(float u) {
   return 16.0f * a * a;
 }
 
+namespace {
+// Kleinster Kniewinkel (Grad) eines Schritts genau radial von stance-e nach
+// stance+e mit den Schwungprofilen; < 0: Punkt unterwegs nicht erreichbar
+float minKneeRadialStep(const kin::LegGeometry& g, float stance, float e, float height, float lift) {
+  constexpr int N = 32;
+  const float F = g.femur, T = g.tibia;
+  float best = 1e9f;
+  for (int i = 0; i <= N; ++i) {
+    const float u = static_cast<float>(i) / N;
+    const float rf = stance - e + 2.0f * e * smoothStep5(u) - g.coxa;  // ab Femur-Achse
+    const float z = height - lift * liftProfile(u);
+    const float d2 = rf * rf + z * z;
+    const float c = (F * F + T * T - d2) / (2.0f * F * T);
+    if (c >= 1.0f) return -1.0f;  // Knie ganz zusammengeklappt
+    if (c <= -1.0f) continue;     // gestreckt: begrenzt maxFootRadius
+    const float knee = std::acos(c) * 57.2957795f;
+    if (knee < best) best = knee;
+  }
+  return best;
+}
+}  // namespace
+
+float minFootRadius(const kin::LegGeometry& g, float stance, float height, float step_height,
+                    float knee_min_deg) {
+  if (minKneeRadialStep(g, stance, 0.0f, height, step_height) < knee_min_deg) return stance;
+  float lo = 0.0f, hi = stance - g.coxa;  // Auslenkung nach innen
+  if (minKneeRadialStep(g, stance, hi, height, step_height) >= knee_min_deg) return stance - hi;
+  for (int it = 0; it < 18; ++it) {
+    const float mid = 0.5f * (lo + hi);
+    if (minKneeRadialStep(g, stance, mid, height, step_height) >= knee_min_deg) lo = mid;
+    else hi = mid;
+  }
+  return stance - lo;
+}
+
+float maxFootRadius(const kin::LegGeometry& g, float height) {
+  const float reach = 0.97f * (g.femur + g.tibia);
+  return g.coxa + (reach > height ? std::sqrt(reach * reach - height * height) : 0.0f);
+}
+
 void Gait::reset(const kin::Vec3 neutral[NUM_LEGS]) {
   for (int i = 0; i < NUM_LEGS; ++i) {
     legs_[i] = Leg();
@@ -86,6 +131,7 @@ void Gait::reset(const kin::Vec3 neutral[NUM_LEGS]) {
   }
   for (int k = 0; k < 3; ++k) cmd_[k] = cmd_ramped_[k] = 0.0f;
   vx_ = vy_ = wz_ = 0.0f;
+  reach_k_ = 1.0f;
   phase_ = 0.0f;
   idle_ = true;
   starting_ = true;
@@ -99,6 +145,12 @@ void Gait::setParams(const Params& p) {
   if (params_.max_stride < 1.0f) params_.max_stride = 1.0f;
   if (params_.ramp_s < 0.05f) params_.ramp_s = 0.05f;
   if (idle_) active_type_ = params_.type;
+}
+
+void Gait::setReach(const kin::Vec3 coxa[NUM_LEGS], float min_radius, float max_radius) {
+  for (int i = 0; i < NUM_LEGS; ++i) coxa_[i] = coxa[i];
+  min_radius_ = min_radius;
+  max_radius_ = max_radius;
 }
 
 void Gait::setCommand(float vx, float vy, float turn) {
@@ -118,17 +170,19 @@ uint8_t Gait::swingMask() const {
 
 void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   // Befehl rampen -> weiches Anfahren und Anhalten.
+  // Beschleunigen dauert mindestens eine Standphase (siehe ACCEL_MARGIN).
   // Beim Anlaufen stehen alle Füße in der Neutralstellung; das Bein mit dem
   // spätesten Schwungfenster wandert bis zu seinem ersten Schritt mit dem Körper
   // mit. Damit es dabei nicht weiter kommt als im eingeschwungenen Lauf (halbe
   // Standphase), wird im ersten Zyklus langsamer beschleunigt:
-  // Rampe >= 2 * spätester Schwungbeginn - Standphase (Dreifuß 0,5 s, Welle 2,5 s).
+  // Rampe >= 2 * spätester Schwungbeginn - Standphase (+20 % Reserve).
   const int t = static_cast<int>(active_type_);
-  float ramp_up = params_.ramp_s;
+  const float stance_s = dutyFactor(active_type_) * cycleTime(active_type_, params_.swing_s);
+  float ramp_up = std::fmax(params_.ramp_s, stance_s);
   if (starting_) {
     float last = 0.0f;
     for (int i = 0; i < NUM_LEGS; ++i) last = std::fmax(last, SWING_START[t][i]);
-    ramp_up = std::fmax(ramp_up, (2.0f * last - (1.0f - SWING_FRACTION[t])) *
+    ramp_up = std::fmax(ramp_up, 1.2f * (2.0f * last - (1.0f - SWING_FRACTION[t])) *
                                      cycleTime(active_type_, params_.swing_s));
   }
   for (int k = 0; k < 3; ++k) {
@@ -138,32 +192,79 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
 
   // Höchstgeschwindigkeit: in einer Standphase darf ein Fuß höchstens
   // max_stride zurücklegen
-  float stance_s = dutyFactor(active_type_) * cycleTime(active_type_, params_.swing_s);
-  float foot_max = params_.max_stride / stance_s;
+  const float foot_max = params_.max_stride / stance_s;
   float r_max = 1.0f;
   for (int i = 0; i < NUM_LEGS; ++i) {
     float r = std::hypot(neutral[i].x, neutral[i].y);
     if (r > r_max) r_max = r;
   }
-  max_speed_ = foot_max;
-  max_turn_ = foot_max / r_max;
+  const float turn_max = foot_max / r_max;
 
-  float vx = cmd_ramped_[0] * max_speed_;
-  float vy = cmd_ramped_[1] * max_speed_;
-  float wz = cmd_ramped_[2] * max_turn_;
+  // Befehl -> Geschwindigkeit; Fahren + Drehen gleichzeitig: schnellsten Fuß auf
+  // foot_max begrenzen
+  auto toVelocity = [&](const float c[3], float v[3]) {
+    v[0] = c[0] * foot_max;
+    v[1] = c[1] * foot_max;
+    v[2] = c[2] * turn_max;
+    float fastest = 0.0f;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+      float f = std::hypot(v[0] - v[2] * neutral[i].y, v[1] + v[2] * neutral[i].x);
+      if (f > fastest) fastest = f;
+    }
+    if (fastest > foot_max) {
+      for (int a = 0; a < 3; ++a) v[a] *= foot_max / fastest;
+    }
+  };
+  float v_cur[3], v_goal[3];
+  toVelocity(cmd_ramped_, v_cur);
+  toVelocity(cmd_, v_goal);
 
-  // Fahren + Drehen gleichzeitig: schnellsten Fuß auf foot_max begrenzen
-  float fastest = 0.0f;
+  // Reichweite: kein Fuß kommt der Coxa-Achse zu nahe. Ein Fuß pendelt um ±v*half
+  // um seinen Neutralpunkt; er steht bis zu einen Regelschritt länger als die
+  // Standphase, beim Beschleunigen etwas weiter (ACCEL_MARGIN). Die Grenze gilt
+  // schon für das Fahrziel, damit die Rampe gleichmäßig bis zum erlaubten Tempo
+  // beschleunigt (sonst wäre das Beschleunigen früher zu Ende als geplant).
+  const float half = (0.5f * stance_s + dt) * ACCEL_MARGIN;
+  const float target = std::fmin(reachScale(v_goal[0], v_goal[1], v_goal[2], half, neutral),
+                                 reachScale(v_cur[0], v_cur[1], v_cur[2], half, neutral));
+  // sinken sofort, steigen nur mit der Rampe (kein Tempo-Sprung)
+  reach_k_ = target < reach_k_ ? target : std::fmin(target, reach_k_ + dt / ramp_up);
+  vx_ = v_cur[0] * reach_k_;
+  vy_ = v_cur[1] * reach_k_;
+  wz_ = v_cur[2] * reach_k_;
+  // Anzeige: Höchsttempo geradeaus bzw. Drehrate auf der Stelle
+  max_speed_ = foot_max * reachScale(foot_max, 0.0f, 0.0f, half, neutral);
+  max_turn_ = turn_max * reachScale(0.0f, 0.0f, turn_max, half, neutral);
+}
+
+float Gait::reachScale(float vx, float vy, float wz, float half_stance_s,
+                       const kin::Vec3 neutral[NUM_LEGS]) const {
+  if (min_radius_ < 0.0f) return 1.0f;
+  float s = 1.0f;
   for (int i = 0; i < NUM_LEGS; ++i) {
-    float fx = vx - wz * neutral[i].y;
-    float fy = vy + wz * neutral[i].x;
-    float f = std::hypot(fx, fy);
-    if (f > fastest) fastest = f;
+    // Fuß pendelt in der Standphase um den Neutralpunkt n: n ± t*d
+    const float dx = (vx - wz * neutral[i].y) * half_stance_s;
+    const float dy = (vy + wz * neutral[i].x) * half_stance_s;
+    const float rx = neutral[i].x - coxa_[i].x;
+    const float ry = neutral[i].y - coxa_[i].y;
+    const float r2 = rx * rx + ry * ry;
+    const float m2 = min_radius_ * min_radius_;
+    const float M2 = max_radius_ * max_radius_;
+    if (r2 <= m2 || r2 >= M2) return 0.0f;  // steht schon am Rand der Reichweite
+    const float dd = dx * dx + dy * dy;
+    if (dd < 1e-9f) continue;
+    const float rd = std::fabs(rx * dx + ry * dy);
+    // innen: |r - t*d|² >= m²  <=>  dd*t² - 2*rd*t + (r² - m²) >= 0
+    const float disc = rd * rd - dd * (r2 - m2);
+    if (disc > 0.0f) {
+      const float t = (rd - std::sqrt(disc)) / dd;
+      if (t < s) s = t;
+    }
+    // außen: |r + t*d|² <= M²  <=>  dd*t² + 2*rd*t - (M² - r²) <= 0
+    const float t_out = (-rd + std::sqrt(rd * rd + dd * (M2 - r2))) / dd;
+    if (t_out < s) s = t_out;
   }
-  float k = fastest > foot_max ? foot_max / fastest : 1.0f;
-  vx_ = vx * k;
-  vy_ = vy * k;
-  wz_ = wz * k;
+  return s < 0.0f ? 0.0f : s;
 }
 
 void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {

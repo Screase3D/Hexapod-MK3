@@ -139,9 +139,26 @@ Die Haltung folgt den Reglern mit begrenzter Geschwindigkeit (80 mm/s bzw. 45 °
 einen Punkt nicht erreichen oder stößt ein Gelenk an seine Kalibriergrenze, zeigt die Oberfläche
 eine Warnung; das Bein behält dann seine letzte gültige Stellung.
 
+Haltung, Gangparameter, Lageausgleich und Stellgeschwindigkeit werden gespeichert (NVS, 2 s nach
+der letzten Änderung) und gelten auch nach einem Neustart; **Zurücksetzen** stellt die
+Standardhaltung wieder her. Am PC heben/senken **R**/**F** den Körper in 5-mm-Schritten.
+
 **Erster Test:** Roboter aufbocken (Füße frei), Torque an, IK aktivieren und Höhe langsam
 ändern. Alle Füße sollten sich gleichmäßig senkrecht bewegen. Bewegt sich ein Bein falsch herum,
 stimmt dessen Kalibrierung (Drehrichtung) oder Montagewinkel nicht.
+
+### Lageausgleich
+
+Schalter **Lageausgleich** in der Karte Körperhaltung: Der Körper bleibt mithilfe des Lagesensors
+waagerecht – bzw. auf der mit *Rollen*/*Nicken* eingestellten Neigung –, auch auf schrägem
+Untergrund ([`leveling.cpp`](../firmware/src/kinematics/leveling.cpp)). Ein langsamer Regler
+(Zeitkonstante ca. 1 s, Totzone 0,5°) addiert je Achse bis zu ±15° zur befohlenen Neigung. Er wirkt
+nur im Stehen und Laufen; beim Aufstehen/Hinsetzen baut sich die Korrektur ab.
+
+Voraussetzung: Einbaulage und Nullpunkt des Lagesensors stimmen (siehe
+[kalibrierung.md](kalibrierung.md#lagesensor)). Dreht der Sensor falsch herum, würde der Regler
+die Schräglage verstärken – erkennt er das (Korrektur am Anschlag, Abweichung bleibt groß), schaltet
+er sich nach ca. 2 s ab und die Oberfläche meldet es.
 
 ## Aufstehen und Hinsetzen
 
@@ -185,40 +202,53 @@ phasengesteuert:
   setzt wieder auf. Höhe und Vorschwung folgen Profilen, deren Geschwindigkeit am Anfang und Ende
   null ist (kein Ruck, kein Aufschlagen). Der Aufsetzpunkt liegt so, dass die folgende
   Standphase symmetrisch um die Neutralstellung verläuft.
-- **Anfahren/Anhalten:** Der Fahrbefehl wird über 0,5 s gerampt. Beim Anlaufen aus dem
-  Stillstand wandert das Bein mit dem spätesten Schwungfenster bis zu seinem ersten Schritt mit
-  dem Körper mit; damit es dabei nicht viel weiter nach innen kommt als im normalen Lauf (sonst
-  knickt das Knie zu weit ein), beschleunigt der Gang im ersten Zyklus langsamer: Dreifuß 0,5 s,
-  Ripple 1,5 s, Welle 2,5 s. Bremsen geht immer in 0,5 s. Nach dem Loslassen machen die
+- **Anfahren/Anhalten:** Beschleunigen dauert mindestens 0,5 s bzw. eine Standphase (ändert
+  sich das Tempo schneller, wandert ein gerade aufgesetzter Fuß weiter als geplant). Beim Anlaufen
+  aus dem Stillstand wandert das Bein mit dem spätesten Schwungfenster bis zu seinem ersten Schritt
+  mit dem Körper mit; damit es dabei nicht viel weiter nach innen kommt als im normalen Lauf
+  (sonst knickt das Knie zu weit ein), beschleunigt der Gang im ersten Zyklus langsamer
+  (Dreifuß 0,5 s, Ripple ca. 1,4 s, Welle ca. 2,4 s). Bremsen geht immer in 0,5 s. Nach dem Loslassen machen die
   Beine noch einen Schritt in die Neutralstellung, dann steht der Roboter; Beine, die schon dort
   stehen, heben nicht ab.
 - **Sicherheit:** Ohne neuen Fahrbefehl für 0,6 s (`WALK_TIMEOUT_MS`, z. B. WLAN weg, Handy
   gesperrt), ohne Torque oder bei Not-Aus hält der Roboter an. Die Oberfläche hält auch an,
   wenn das Fenster den Fokus verliert.
 
-| Gangart | gleichzeitig in der Luft | Zyklus (bei 0,5 s Schrittdauer) | max. Tempo |
-|---|---|---|---|
-| Dreifuß (`tripod`) | 3 (vl, hl, mr ↔ ml, vr, hr) | 1,0 s | 70 mm/s |
-| Ripple (`ripple`) | 2 (je Seite eins) | 1,5 s | 35 mm/s |
-| Welle (`wave`) | 1 | 3,0 s | 14 mm/s |
+| Gangart | gleichzeitig in der Luft | Zyklus (bei 0,4 s Schrittdauer) | Tempo vorwärts | seitwärts |
+|---|---|---|---|---|
+| Dreifuß (`tripod`) | 3 (vl, hl, mr ↔ ml, vr, hr) | 0,8 s | 125 mm/s | 95 mm/s |
+| Ripple (`ripple`) | 2 (je Seite eins) | 1,2 s | 62 mm/s | 50 mm/s |
+| Welle (`wave`) | 1 | 2,4 s | 25 mm/s | 21 mm/s |
 
-Das Tempo ergibt sich aus dem größten Fußweg je Standphase (35 mm, `GAIT_LIMITS.stride_max`) und
-der Dauer der Standphase. Fahren und Drehen gleichzeitig wird so begrenzt, dass kein Fuß
-schneller als erlaubt wandert. Ein Wechsel der Gangart wirkt erst im Stillstand.
+(Höchstwerte bei 100 % Tempo, Standardhaltung, 15 mm Fußhub.) Das Tempo begrenzen zwei Dinge:
+
+1. **Fußweg je Standphase** (50 mm, `GAIT_LIMITS.stride_max`) geteilt durch die Dauer der
+   Standphase. Kürzere Schrittdauer = schneller.
+2. **Reichweite** ([`gait::minFootRadius`](../firmware/src/kinematics/gait.cpp)): Kommt ein Fuß der
+   Coxa-Achse zu nahe, muss das Knie zum Anheben weit einknicken. Die Gangart rechnet deshalb aus
+   Körperhöhe, Fußabstand und Fußhub, wie weit ein Fuß nach innen darf, ohne dass der Kniewinkel
+   unter `KNEE_MIN_DEG` (25°) fällt, und begrenzt das Tempo **richtungsabhängig**: Vorwärts
+   schwingen die Mittelbeine quer zum Bein und die Ecken schräg – dort reicht die Schrittlänge;
+   seitwärts bewegen sich die Mittelbeine genau zum Körper hin und begrenzen. Bei tiefem Körper
+   oder hohem Fußhub wird es entsprechend langsamer (z. B. Höhe 35 mm: seitwärts nur ca. 35 mm/s).
+   25 % Reserve decken das Beschleunigen ab.
+
+Fahren und Drehen gleichzeitig wird so begrenzt, dass kein Fuß schneller als erlaubt wandert. Die
+Oberfläche zeigt das aktuell mögliche Höchsttempo unter den Joysticks. Ein Wechsel der Gangart wirkt
+erst im Stillstand.
 
 | Einstellung | Bereich | Standard | Hinweis |
 |---|---|---|---|
-| Tempo | 10–100 % | 60 % | skaliert den Joystick (nur in der Oberfläche) |
-| Schrittdauer | 0,3–1,2 s | 0,5 s | Dauer eines Fußschwungs; kürzer = schneller, aber hektischer |
-| Fußhub | 5–20 mm | 15 mm | mehr: Knie knickt am inneren Ende des Schritts zu weit ein |
+| Tempo | 10–100 % | 80 % | skaliert Joystick und Tasten (nur in der Oberfläche) |
+| Schrittdauer | 0,3–1,2 s | 0,4 s | Dauer eines Fußschwungs; kürzer = schneller, aber hektischer |
+| Fußhub | 5–25 mm | 15 mm | höher = langsamer quer zum Körper (Knie) |
 
-Mit dem kurzen Femur muss das Bein zum Fußheben den Femur kräftig drehen und am inneren Ende des
-Schritts (Fuß nah an der Coxa) das Knie weit einknicken. Bei den Standardwerten bleiben die
-Gelenke im Schwung unter ca. 200 °/s, beim Tragen unter ca. 80 °/s, das Knie bleibt über ca. 27°
-(20 mm Fußhub: 23°). Schrittlänge 40 mm und 25 mm Hub würden das Knie bis 12° zuklappen.
-Damit die Servo-Rampe die glatten Schrittbahnen nicht ausbremst, gilt im IK-Betrieb
-mindestens `GAIT_SERVO_SLEW_DEG_PER_S` (450 °/s) – erst, nachdem der Übergang in die Haltung mit
-der normalen Rampe abgeschlossen ist.
+Die *Stellgeschwindigkeit* unter Einstellungen wirkt nur bei Einzelbefehlen (Kalibrierung,
+Justierung), nicht beim Laufen: Damit die Servo-Rampe die glatten Schrittbahnen nicht ausbremst, gilt
+im IK-Betrieb mindestens `GAIT_SERVO_SLEW_DEG_PER_S` (600 °/s, etwa das, was ein MG90S ohne Last
+schafft) – erst, nachdem der Übergang in die Haltung mit der normalen Rampe abgeschlossen ist. Bei
+den Standardwerten bleiben die Gelenke im Schwung unter ca. 280 °/s, beim Tragen unter ca. 120 °/s;
+das Knie bleibt über 25° (bei 25 mm Hub beim Anlaufen in Kurven kurz bis ca. 21°).
 
 **Erster Test:** Roboter aufbocken (Füße frei), Torque an, Aufstehen, Tempo auf 20–30 %, Dreifuß, langsam
 nach vorne. Zu sehen sein sollte: abwechselnd drei Beine heben (vorne links, hinten links, Mitte
@@ -233,11 +263,14 @@ Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet, auch in der
   Körperhaltung, Standardhaltung = Montagestellung
 - [`gait_test.cpp`](../firmware/test_host/gait_test.cpp): Standbeine rutschen nicht, höchstens 3/2/1
   Beine gleichzeitig in der Luft, keine Sprünge, alle Fußpunkte erreichbar und innerhalb der
-  Standardgrenzen (auch bei Extremwerten), Gelenkgeschwindigkeiten, Anhalten und Anfahren,
-  Auslenkung der Füße beim Anlaufen
+  Standardgrenzen (auch bei Extremwerten), Kniewinkel nicht unter `KNEE_MIN_DEG`,
+  Gelenkgeschwindigkeiten, Anhalten und Anfahren, Auslenkung der Füße beim Anlaufen
 - [`posture_test.cpp`](../firmware/test_host/posture_test.cpp): Sitzhaltung erreichbar,
   Aufstehen und Hinsetzen komplett durchgerechnet (Füße bleiben beim Heben stehen, alle Stellungen
   erreichbar und innerhalb der Grenzen)
+- [`attitude_test.cpp`](../firmware/test_host/attitude_test.cpp): Lagesensor-Einbaulagen und
+  Vorzeichen, Komplementärfilter, Lageausgleich (gleicht Schräglagen aus, erkennt falsche
+  Sensorrichtung)
 
 ```
 cd firmware/test_host
@@ -247,4 +280,6 @@ g++ -std=c++17 -I../src -I../include gait_test.cpp ../src/kinematics/gait.cpp ..
 ./gait_test
 g++ -std=c++17 -I../src -I../include posture_test.cpp ../src/kinematics/posture.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o posture_test
 ./posture_test
+g++ -std=c++17 -I../src -I../include attitude_test.cpp ../src/sensors/attitude.cpp ../src/kinematics/leveling.cpp -o attitude_test
+./attitude_test
 ```

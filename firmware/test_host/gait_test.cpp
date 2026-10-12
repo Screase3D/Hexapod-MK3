@@ -62,9 +62,20 @@ static gait::Params firmwareParams(gait::Type t) {
   return p;
 }
 
+// Reichweite wie in motion.cpp (Körper in der Standardhaltung)
+static void setReach(gait::Gait& g, float step_height) {
+  const float h = POSE_LIMITS.height_default;
+  BodyPose pose{0, 0, h, 0, 0, 0};
+  Vec3 coxa[6];
+  for (int i = 0; i < 6; ++i) coxa[i] = coxaWorld(pose, LEG_MOUNTS[i]);
+  g.setReach(coxa, gait::minFootRadius(LEG_GEOMETRY, POSE_LIMITS.stance_default, h, step_height, KNEE_MIN_DEG),
+             gait::maxFootRadius(LEG_GEOMETRY, h));
+}
+
 static gait::Gait makeGait(gait::Type t, const Vec3 neutral[6], const gait::Params* params = nullptr) {
   gait::Gait g;
   g.setParams(params ? *params : firmwareParams(t));
+  setReach(g, g.params().step_height);
   g.reset(neutral);
   return g;
 }
@@ -124,6 +135,7 @@ static void testWalking(bool extreme) {
   BodyPose pose{0, 0, POSE_LIMITS.height_default, 0, 0, 0};
   int ik_fail = 0, limit_hits = 0;
   float max_jump = 0, max_slip = 0, max_rate_swing = 0, max_rate_stance = 0;
+  float knee_min = 1e9f, speed_fwd = 0;
   float jmin[3] = {1e9f, 1e9f, 1e9f}, jmax[3] = {-1e9f, -1e9f, -1e9f};
 
   for (int ti = 0; ti < 3; ++ti) {
@@ -178,6 +190,7 @@ static void testWalking(bool extreme) {
             ++ik_fail;
             continue;
           }
+          if (90.0f + a.tibia < knee_min) knee_min = 90.0f + a.tibia;
           float v[3] = {a.coxa, a.femur, a.tibia};
           for (int j = 0; j < 3; ++j) {
             if (v[j] < jmin[j]) jmin[j] = v[j];
@@ -201,12 +214,17 @@ static void testWalking(bool extreme) {
       CHECK(!g.idle());
       // Ziel-Geschwindigkeit wird erreicht (nach der Rampe)
       if (c.turn == 0 && c.vx == 1) CHECK_NEAR(g.speedX(), g.maxSpeed(), 1e-3);
+      if (c.turn == 0 && c.vx == 1 && ti == 0) speed_fwd = g.speedX();
     }
   }
   std::printf("Info (%s): Gang max. Sprung %.2f mm/Schritt, Rutschen %.3f mm, Gelenk max. %.0f °/s "
-              "(Stand) / %.0f °/s (Schwung), coxa %.0f..%.0f, femur %.0f..%.0f, tibia %.0f..%.0f\n",
+              "(Stand) / %.0f °/s (Schwung), coxa %.0f..%.0f, femur %.0f..%.0f, tibia %.0f..%.0f, "
+              "Knie min. %.1f°, Dreifuß vorwärts %.0f mm/s\n",
               extreme ? "Extremwerte" : "Standard", max_jump, max_slip, max_rate_stance, max_rate_swing,
-              jmin[0], jmax[0], jmin[1], jmax[1], jmin[2], jmax[2]);
+              jmin[0], jmax[0], jmin[1], jmax[1], jmin[2], jmax[2], knee_min, speed_fwd);
+  // Kniewinkel: die Reichweitengrenze rechnet mit einem Schritt genau zum Körper
+  // hin; beim Anlaufen in Kurven (Welle, 25 mm Hub) geht es kurz etwas darunter
+  CHECK(knee_min > KNEE_MIN_DEG - (extreme ? 5.0f : 1.0f));
   CHECK(ik_fail == 0);
   CHECK(limit_hits == 0);
   CHECK(max_slip < 0.05f);

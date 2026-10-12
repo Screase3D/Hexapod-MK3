@@ -48,6 +48,8 @@ Fehler: HTTP 4xx/5xx mit `{"ok":false,"msg":"…"}`.
 
 Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantwortet. Die Befehle
 `servo_us`, `servo_deg`, `all_us`, `all_deg` und `all_assembly` schalten den Pose-Modus ab.
+`pose`, `pose_reset`, `gait`, `leveling` und `slew` werden gespeichert (NVS, 2 s nach der letzten
+Änderung) und gelten nach einem Neustart weiter.
 
 | `cmd` | Parameter | Wirkung |
 |---|---|---|
@@ -63,12 +65,16 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `stand` | – | aufstehen (aus dem Sitzen; braucht Torque), schaltet in den IK-Modus |
 | `sit` | – | hinsetzen |
 | `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wirkt im Stillstand |
+| `leveling` | `on` (bool) | Lageausgleich an/aus, siehe [kinematik.md](kinematik.md#lageausgleich) |
+| `imu_cal` | `level` (bool) | Lagesensor kalibrieren (2 s ruhig halten): Gyro-Nullpunkt, mit `level` zusätzlich aktuelle Lage = waagerecht. Fortschritt/Ergebnis in der Telemetrie |
+| `imu_level_reset` | – | Nullpunkt (waagerecht) löschen |
+| `imu_mount` | `x` (`vorne`/`links`/`hinten`/`rechts`), `upside_down` (bool) | Einbaulage des Lagesensors (löscht den Nullpunkt) |
 | `servo_us` | `id`, `us` | Rohmodus: Pulsbreite 500–2500 µs |
 | `servo_deg` | `id`, `deg` | kalibrierter Gelenkwinkel (auf Grenzen begrenzt) |
 | `all_us` | `us` | alle Servos auf eine Pulsbreite (Montage: 1500) |
 | `all_deg` | `deg` | alle Gelenke auf denselben Gelenkwinkel |
 | `all_assembly` | – | alle Gelenke in die Montagestellung (= Standardhaltung) |
-| `slew` | `deg_per_s` | Rampengeschwindigkeit (10–1000 °/s) |
+| `slew` | `deg_per_s` | Rampengeschwindigkeit bei Einzelbefehlen (10–1000 °/s, wird gespeichert) |
 | `cal_get` | `id`? | einzelner Servo → `cal`, ohne `id` → `calibration` |
 | `cal_set` | `id`, `center_us`?, `us_per_deg`?, `min_deg`?, `max_deg`? | Werte setzen (geprüft) |
 | `cal_center` | `id` | aktuelle Stellung als Montagestellung übernehmen (`center_us`) |
@@ -93,12 +99,15 @@ Beispiel:
   "bat":   {"v": 7.62, "pct": 63, "state": "ok", "enabled": true, "deep_sleep": true},
   "servo": {"torque": true, "active": 18, "estop": false, "inhibit": "", "slew": 240,
             "cal_dirty": false, "us": [1500, …18…], "deg": [0.0, …18…], "boards": [true, true]},
-  "imu":   {"ok": true, "pitch": 1.2, "roll": -0.4},
+  "imu":   {"ok": true, "pitch": 1.2, "roll": -0.4, "acc": [0.02, -0.01, 1.0], "hz": 50, "temp": 31.2,
+            "mount": "vorne", "flip": false, "level": [-2.0, 1.5], "bias_src": "beim Start gemessen",
+            "cal": "running", "cal_pct": 40},
   "motion": {"mode": "pose", "posture": "standing", "pose": {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0,
              "stance": 100},
-             "gait": {"type": "tripod", "swing_s": 0.5, "step_height": 15, "active": "tripod",
-                      "walking": true, "swing": 21, "vx": 48, "vy": 0, "wz": 0,
-                      "max_speed": 70, "max_turn": 22},
+             "level": {"on": true, "active": true, "roll": -3.2, "pitch": 1.1},
+             "gait": {"type": "tripod", "swing_s": 0.4, "step_height": 15, "active": "tripod",
+                      "walking": true, "swing": 21, "vx": 100, "vy": 0, "wz": 0,
+                      "max_speed": 125, "max_turn": 39},
              "unreachable": [], "clamped": []},
   "wifi":  {"mode": "sta", "rssi": -58},
   "cam":   {"clients": 1, "awake": true, "fps": 12.4, "kb": 23, "kbps": 2300, "err": 0,
@@ -115,4 +124,10 @@ Fußpunkt nicht erreichen bzw. an eine Gelenkgrenze stoßen. `motion.posture` (n
 `sitting`, `standing_up`, `standing`, `sitting_down` – gelaufen wird nur in `standing`.
 `motion.gait`: `type` = gewählte,
 `active` = laufende Gangart, `swing` = Bitmaske der Beine in der Luft (Bit 0 = Bein 1),
-`vx`/`vy` in mm/s, `wz` in °/s, `max_*` = Höchstwerte bei den aktuellen Parametern.
+`vx`/`vy` in mm/s, `wz` in °/s, `max_*` = Höchstwerte bei den aktuellen Parametern (geradeaus
+bzw. Drehen auf der Stelle, mit Reichweitengrenze). `motion.level`: Lageausgleich `on`, `active`
+(wirkt gerade), aktuelle Korrektur `roll`/`pitch` in Grad, `fault: true` = wegen falscher
+Sensorrichtung abgeschaltet. `imu`: `pitch`/`roll` nach Abzug des Nullpunkts `level`
+([Roll, Nick] der schief eingebauten Platine), `acc` im Körpersystem, `mount`/`flip` =
+Einbaulage; `cal` (`running`/`ok`/`failed`) mit `cal_pct` bzw. `cal_msg` nur während bzw. kurz nach
+einer Kalibrierung.

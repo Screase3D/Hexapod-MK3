@@ -38,7 +38,7 @@ jobs:
       - name: Weboberfläche prüfen (JS-Syntax)
         run: node --check firmware/web/app.js
 
-      - name: Kinematik- und Gang-Tests (PC)
+      - name: Kinematik-, Gang- und Lage-Tests (PC)
         working-directory: firmware/test_host
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include \
@@ -50,6 +50,9 @@ jobs:
           g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include posture_test.cpp \
             ../src/kinematics/posture.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o posture_test
           ./posture_test
+          g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include attitude_test.cpp \
+            ../src/sensors/attitude.cpp ../src/kinematics/leveling.cpp -o attitude_test
+          ./attitude_test
 
       - name: Firmware bauen
         run: pio run -d firmware

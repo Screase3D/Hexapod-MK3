@@ -179,6 +179,8 @@ void loop() {
 
   wifi::loop();
   camera::loop();  // Kamera ohne Stream schlafen legen
+  imu.loop();      // geänderte Lagesensor-Kalibrierung speichern
+  motion::loop();  // geänderte Haltung/Gang verzögert speichern
 
   if (commands::rebootRequested()) {
     if (reboot_at == 0) reboot_at = now + 500;  // Antwort noch ausliefern

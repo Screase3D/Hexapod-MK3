@@ -90,4 +90,10 @@ Vec3 stanceFoot(const LegMount& m, float stance) {
   return {m.x + stance * std::cos(a), m.y + stance * std::sin(a), 0.0f};
 }
 
+Vec3 coxaWorld(const BodyPose& pose, const LegMount& m) {
+  const float yaw = pose.yaw_deg * kDeg2Rad;
+  const float c = std::cos(yaw), sn = std::sin(yaw);
+  return {pose.x + c * m.x - sn * m.y, pose.y + sn * m.x + c * m.y, 0.0f};
+}
+
 }  // namespace kin

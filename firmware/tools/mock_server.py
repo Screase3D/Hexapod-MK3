@@ -34,7 +34,11 @@ state = {
     "posture": "sitting",
     "posture_t": 0,
     "walk_t": 0,
-    "gait": {"type": "tripod", "swing_s": 0.5, "step_height": 15},
+    "gait": {"type": "tripod", "swing_s": 0.4, "step_height": 15},
+    # Lagesensor (wie imu.cpp) und Lageausgleich (wie motion.cpp)
+    "imu_mount": "vorne", "imu_flip": False, "imu_level": [0.0, 0.0],
+    "imu_cal": None, "imu_cal_t": 0.0, "imu_cal_level": False, "imu_cal_msg": "",
+    "leveling": False,
     # WLAN: startet im Access-Point-Modus (MOCK_WIFI=sta für Heimnetz-Betrieb)
     "wifi_ap": os.environ.get("MOCK_WIFI", "ap") == "ap",
     "wifi_sta": "idle" if os.environ.get("MOCK_WIFI", "ap") == "ap" else "connected",
@@ -147,7 +151,7 @@ def gait_status():
     cmd = state["walk"] if fresh else [0, 0, 0]
     sigma = SWING_FRACTION[g["type"]]
     cycle = g["swing_s"] / sigma
-    max_speed = 35 / ((1 - sigma) * cycle)
+    max_speed = 50 / ((1 - sigma) * cycle)
     walking = any(abs(v) > 1e-3 for v in cmd)
     g.update(active=g["type"], walking=walking, max_speed=round(max_speed),
              max_turn=round(max_speed / 181 * 57.3), vx=0, vy=0, wz=0, swing=0)
@@ -177,14 +181,47 @@ def telemetry():
                   "estop": state["estop"], "inhibit": "", "slew": state["slew"],
                   "cal_dirty": state["dirty"], "us": [round(u) for u in state["us"]],
                   "deg": [deg_of(i) for i in range(18)], "boards": [True, True]},
-        "imu": {"ok": True, "who": 0x68, "errors": 0, "pitch": round(3 * math.sin(t / 3), 1),
-                "roll": round(5 * math.sin(t / 2), 1), "acc": [0.05, -0.09, 0.99], "hz": 50, "temp": 28.4},
+        "imu": imu_tel(t),
         "ctl": {"hz": 50.0, "max_us": 1830},
         "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3},
         "motion": {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "gait": gait_status(),
-                   "unreachable": [], "clamped": []},
+                   "level": level_tel(t), "unreachable": [], "clamped": []},
         "wifi": wifi_tel(), "heap": 182000, "ws": 1,
     }
+
+
+def imu_tel(t):
+    # Lage schwingt etwas; der Nullpunkt wird abgezogen
+    lr, lp = state["imu_level"]
+    out = {"ok": True, "who": 0x68, "errors": 0, "pitch": round(1.5 + 3 * math.sin(t / 3) - lp, 1),
+           "roll": round(-2.0 + 5 * math.sin(t / 2) - lr, 1), "acc": [0.05, -0.09, 0.99], "hz": 50,
+           "temp": 28.4, "mount": state["imu_mount"], "flip": state["imu_flip"],
+           "level": [round(lr, 1), round(lp, 1)], "bias_src": "beim Start gemessen"}
+    cal = state["imu_cal"]
+    if cal == "running":
+        pct = int((t - state["imu_cal_t"]) / 2.0 * 100)
+        if pct >= 100:
+            if state["imu_cal_level"]:
+                state["imu_level"] = [-2.0, 1.5]
+                state["imu_cal_msg"] = "Nullpunkt gesetzt (Sensor um Roll -2.0°, Nick +1.5° geneigt)"
+            else:
+                state["imu_cal_msg"] = "Gyro-Nullpunkt neu gemessen"
+            state["imu_cal"], state["imu_cal_t"] = "ok", t
+        else:
+            out["cal"], out["cal_pct"] = "running", pct
+    if state["imu_cal"] == "ok":
+        if t - state["imu_cal_t"] > 10:
+            state["imu_cal"] = None
+        else:
+            out["cal"], out["cal_msg"] = "ok", state["imu_cal_msg"]
+    return out
+
+
+def level_tel(t):
+    active = state["leveling"] and state["mode"] == "pose" and posture() == "standing"
+    return {"on": state["leveling"], "active": active,
+            "roll": round(2.0 * math.sin(t / 4), 1) if active else 0.0,
+            "pitch": round(-1.0 * math.sin(t / 5), 1) if active else 0.0}
 
 
 def handle(cmd):
@@ -240,6 +277,22 @@ def handle(cmd):
             state["gait"]["type"] = cmd["type"]
         if "swing_s" in cmd:
             state["gait"]["swing_s"] = max(0.3, min(1.2, float(cmd["swing_s"])))
+    elif c == "leveling":
+        state["leveling"] = bool(cmd.get("on"))
+        out["msg"] = "Lageausgleich an" if state["leveling"] else "Lageausgleich aus"
+    elif c == "imu_cal":
+        state["imu_cal"], state["imu_cal_t"] = "running", time.time()
+        state["imu_cal_level"] = bool(cmd.get("level"))
+        out["msg"] = "Nullpunkt wird gemessen – Roboter 2 s ruhig und waagerecht halten"
+    elif c == "imu_level_reset":
+        state["imu_level"] = [0.0, 0.0]
+        out["msg"] = "Nullpunkt zurückgesetzt"
+    elif c == "imu_mount":
+        if cmd.get("x") not in ("vorne", "links", "hinten", "rechts"):
+            return {**out, "ok": False, "msg": "x muss vorne, links, hinten oder rechts sein"}
+        state["imu_mount"], state["imu_flip"] = cmd["x"], bool(cmd.get("upside_down"))
+        state["imu_level"] = [0.0, 0.0]
+        out["msg"] = "Einbaulage gespeichert – Nullpunkt neu setzen"
         if "step_height" in cmd:
             state["gait"]["step_height"] = max(5, min(25, float(cmd["step_height"])))
     elif c == "pose_reset":
@@ -414,8 +467,9 @@ async def kinematics(_):
         "limits": {"height_min": 35, "height_max": 100, "height_default": 52,
                    "stance_min": 75, "stance_max": 135, "stance_default": 100,
                    "shift_max": 40, "tilt_max": 20, "yaw_max": 25},
-        "gait_limits": {"swing_min": 0.3, "swing_max": 1.2, "swing_default": 0.5, "height_min": 5,
-                        "height_max": 20, "height_default": 15, "stride_max": 35}})
+        "gait_limits": {"swing_min": 0.3, "swing_max": 1.2, "swing_default": 0.4, "height_min": 5,
+                        "height_max": 25, "height_default": 15, "stride_max": 50},
+        "knee_min": 25})
 
 
 async def i2c_get(_):

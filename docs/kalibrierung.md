@@ -159,3 +159,23 @@ spiegelverkehrt, und beim Laufen kommt der Roboter nicht vorwärts.
   Standardsteigung) bleiben Standardwerte. Nach dem Umstecken der Hörner trotzdem neu kalibrieren.
 - Wird `ASSEMBLY_POSE` in `robot_geometry.h` geändert, müssen die Hörner neu ausgerichtet und
   Schritt 2 wiederholt werden.
+
+## Lagesensor
+
+Der MPU6050 liefert Nick und Roll mit denselben Vorzeichen wie die Körperhaltung:
+**Nick + = Nase hoch**, **Roll + = rechte Seite runter**. Die Einstellungen liegen im NVS.
+
+1. **Einbaulage** (*Einstellungen* → *Lagesensor*): Richtung des X-Pfeils auf der GY-521-Platine
+   (vorne/links/hinten/rechts) und Bauteilseite (oben/unten). Prüfen unter *Steuerung* → *Lage*:
+   Nase anheben → Nick wird positiv, rechte Seite absenken → Roll wird positiv. Sonst Einbaulage
+   ändern. (Eine Änderung löscht den Nullpunkt.)
+2. **Nullpunkt:** Roboter auf eine waagerechte Fläche stellen (stehend oder aufgebockt) und
+   **„Als waagerecht übernehmen“** drücken, ca. 2 s nicht berühren. Damit wird eine schief
+   eingebaute Platine ausgeglichen; die Anzeige zeigt danach 0°/0°.
+3. **Gyro-Nullpunkt:** wird bei jedem Start gemessen – aber nur übernommen, wenn der Roboter dabei
+   still stand. Bewegt er sich (z. B. in der Hand), gilt der zuletzt bei einer Kalibrierung
+   gespeicherte Wert. Im Stillstand wird er außerdem langsam nachgeführt (Temperaturdrift).
+   „Gyro neu messen“ misst ihn sofort neu (2 s ruhig halten).
+
+Wackelt der Roboter während der Messung, bricht sie mit einer Meldung ab – einfach wiederholen.
+Ein falscher Gyro-Nullpunkt äußert sich als fester Winkelfehler von etwa 1° je 1 °/s.

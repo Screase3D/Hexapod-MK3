@@ -283,7 +283,7 @@ function renderTelemetry() {
     $('imu-roll').textContent = fmtDeg(t.imu.roll) + '°';
     $('horizon-line').style.transform =
       `translateY(${clamp(t.imu.pitch, -45, 45) * 0.9}px) rotate(${-t.imu.roll}deg)`;
-    // Rohwerte zur Kontrolle: flach liegend ist z ≈ +1 g, gekippt wandert 1 g auf x/y
+    // Rohwerte zur Kontrolle (Körperachsen): waagerecht ist z ≈ +1 g, Nase hoch -> x > 0
     if (t.imu.acc) {
       const a = t.imu.acc.map((v) => (v >= 0 ? '+' : '') + v.toFixed(2)).join(' ');
       $('imu-raw').textContent = `a = ${a} g · ${t.imu.hz} Hz · ${t.imu.temp} °C · Lesefehler ${t.imu.errors}`;
@@ -293,6 +293,7 @@ function renderTelemetry() {
     $('imu-roll').textContent = '–';
     $('imu-raw').textContent = t.imu.errors ? `Lesefehler ${t.imu.errors}` : '';
   }
+  renderImuSettings(t.imu);
   renderCamStats(t);
 
   // Kalibrierung
@@ -307,6 +308,51 @@ function renderTelemetry() {
   renderPose(t.motion);
   renderWalk(t.motion);
   renderBanner();
+}
+
+// ----------------------------------------------------------- Lagesensor -----
+
+function renderImuSettings(imu) {
+  // Kalibrierung: Fortschritt bzw. Ergebnis (in der Lage-Karte und den Einstellungen)
+  let text = '';
+  let cls = '';
+  if (imu.cal === 'running') text = `Messe … ${imu.cal_pct || 0} % – Roboter ruhig halten`;
+  else if (imu.cal) {
+    text = imu.cal_msg || '';
+    cls = imu.cal;
+  }
+  for (const id of ['imu-cal', 'imu-cal2']) {
+    const el = $(id);
+    el.hidden = !text;
+    el.textContent = text;
+    el.className = `small imu-cal ${cls}`;
+  }
+  const busy = imu.cal === 'running';
+  for (const id of ['imu-level', 'imu-level2', 'imu-gyro']) $(id).disabled = busy || !imu.ok;
+
+  // Einbaulage (nicht überschreiben, während ausgewählt wird)
+  if (imu.mount && document.activeElement !== $('imu-xdir')) $('imu-xdir').value = imu.mount;
+  if (imu.flip !== undefined && document.activeElement !== $('imu-flip')) $('imu-flip').value = imu.flip ? '1' : '0';
+  if (S.tab === 'settings' && imu.level) {
+    const [r, p] = imu.level;
+    fillKv($('imu-info'), [
+      ['Nullpunkt', r || p ? `Sensor um Roll ${fmtDeg(r)}°, Nick ${fmtDeg(p)}° geneigt` : 'nicht gesetzt'],
+      ['Gyro-Nullpunkt', imu.bias_src || '–'],
+    ]);
+  }
+}
+
+function bindImu() {
+  const level = () => send('imu_cal', { level: true });
+  $('imu-level').onclick = level;
+  $('imu-level2').onclick = level;
+  $('imu-gyro').onclick = () => send('imu_cal', { level: false });
+  $('imu-level-reset').onclick = () => {
+    if (confirm('Nullpunkt des Lagesensors löschen?')) send('imu_level_reset');
+  };
+  const mount = () => send('imu_mount', { x: $('imu-xdir').value, upside_down: $('imu-flip').value === '1' });
+  $('imu-xdir').onchange = mount;
+  $('imu-flip').onchange = mount;
 }
 
 // -------------------------------------------------------------- Beine -------
@@ -398,11 +444,27 @@ function renderPose(m) {
     input.value = Math.round(m.pose[key]);
     $(`pose-${key}-val`).textContent = `${Math.round(m.pose[key])} ${unit}`;
   }
+  renderLevel(m.level);
   const warn = [];
   if (m.unreachable && m.unreachable.length) warn.push(`nicht erreichbar: Bein ${m.unreachable.map((l) => l + 1).join(', ')}`);
   if (m.clamped && m.clamped.length) warn.push(`an Gelenkgrenze: Bein ${m.clamped.map((l) => l + 1).join(', ')}`);
   $('pose-warn').hidden = !warn.length;
   $('pose-warn').textContent = warn.join(' · ');
+}
+
+let levelTouched = 0;
+let levelFaultShown = false;
+
+function renderLevel(l) {
+  if (!l) return;
+  if (Date.now() - levelTouched > LOCAL_PRIORITY_MS) $('level-on').checked = l.on;
+  let info = '';
+  if (l.active) info = `Roll ${fmtDeg(l.roll)}° · Nick ${fmtDeg(l.pitch)}°`;
+  else if (l.on) info = 'wirkt im Stehen';
+  $('level-info').textContent = info;
+  $('level-fault').hidden = !l.fault;
+  if (l.fault && !levelFaultShown) toast('Lageausgleich abgeschaltet – Einbaulage des Lagesensors prüfen', true);
+  levelFaultShown = !!l.fault;
 }
 
 async function loadKinematics() {
@@ -417,6 +479,11 @@ function bindPose() {
     const on = e.target.checked;
     if (!send('mode', { mode: on ? 'pose' : 'manual' })) e.target.checked = !on;
     else if (on) torqueHint();
+  };
+  $('level-on').onchange = (e) => {
+    levelTouched = Date.now();
+    const on = e.target.checked;
+    if (!send('leveling', { on })) e.target.checked = !on;
   };
   $('pose-reset').onclick = () => {
     for (const k of Object.keys(poseTouched)) delete poseTouched[k];
@@ -437,7 +504,7 @@ const W = {
   keys: new Set(),
   timer: null,
   last: [0, 0, 0],
-  scale: 0.6,
+  scale: 0.8,
   touched: {},
 };
 
@@ -547,10 +614,24 @@ function makeJoystick(el, horizontal, onChange) {
   el.addEventListener('lostpointercapture', end);
 }
 
+// R/F: Körper in 5-mm-Schritten höher/tiefer (wie der Schieber „Höhe“)
+function nudgeHeight(dir) {
+  const input = $('pose-z');
+  if (!input) return;
+  const z = clamp(+input.value + 5 * dir, +input.min, +input.max);
+  input.value = z;
+  input.dispatchEvent(new Event('input'));
+}
+
 function walkKey(e, down) {
-  if (S.tab !== 'control' || !(e.code in WALK_KEYS || e.code === 'Space')) return false;
+  const height = e.code === 'KeyR' || e.code === 'KeyF';
+  if (S.tab !== 'control' || !(e.code in WALK_KEYS || e.code === 'Space' || height)) return false;
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return false;
+  if (height) {
+    if (down) nudgeHeight(e.code === 'KeyR' ? 1 : -1);
+    return true;
+  }
   if (e.code === 'Space') {
     if (down) walkStopAll();
   } else if (down) {
@@ -1579,6 +1660,7 @@ function init() {
   bindEditor();
   bindCamera();
   bindSystem();
+  bindImu();
   selectServo(0);
   showCalView('cal');
   showTab(pageFromHash());

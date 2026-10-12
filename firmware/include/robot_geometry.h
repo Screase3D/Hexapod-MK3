@@ -89,15 +89,21 @@ struct GaitLimits {
   float height_min, height_max, height_default;  // Fußhub (mm)
   float stride_max;                              // größter Fußweg je Standphase (mm)
 };
-// Am inneren Ende des Schritts (Fuß nah an der Coxa) muss das Knie zum Anheben
-// weit einknicken. Mit 100 mm Fußabstand, 35 mm Schrittlänge und höchstens 20 mm
-// Fußhub bleibt der Kniewinkel über ca. 23° (Standard 15 mm: 27°; mit 40 / 25 mm
-// wären es 12°). Je höher der Hub und je kürzer der Schritt, desto schneller muss
-// der Femur drehen (15 mm / 0,5 s: max. ca. 200 °/s im Schwung, siehe
-// test_host/gait_test.cpp).
-constexpr GaitLimits GAIT_LIMITS = {0.3f, 1.2f, 0.5f, 5.0f, 20.0f, 15.0f, 35.0f};
+// Kleinster erlaubter Kniewinkel (zwischen Femur-Linie und Linie Knie -> Fußspitze).
+// Am inneren Ende eines Schritts (Fuß nah an der Coxa) muss das Knie zum Anheben
+// weit einknicken; die Gangart begrenzt Schritte zum Körper hin deshalb so, dass
+// dieser Winkel nicht unterschritten wird (gait::minFootRadius). Größer = mehr
+// Abstand zum mechanischen Anschlag, aber kürzere Schritte quer zum Körper.
+constexpr float KNEE_MIN_DEG = 25.0f;
+
+// stride_max begrenzt den Fußweg je Standphase (Tempo geradeaus); quer zum Körper
+// und bei tiefem Körper oder hohem Fußhub begrenzt zusätzlich KNEE_MIN_DEG.
+// Standard 15 mm Hub / 0,4 s: Dreifuß bis 125 mm/s, Gelenke im Schwung unter ca.
+// 300 °/s; kürzeste Schrittdauer 0,3 s, schneller schafft ein MG90S den Schwung
+// nicht (siehe test_host/gait_test.cpp).
+constexpr GaitLimits GAIT_LIMITS = {0.3f, 1.2f, 0.4f, 5.0f, 25.0f, 15.0f, 50.0f};
 
 // Servo-Rampe, solange die IK die Sollwerte vorgibt: Die Bahnen sind dort schon
 // glatt, eine langsamere Rampe würde die Füße nur hinterherhinken lassen.
 // (Beim Wechsel in den IK-Modus gilt zunächst die normale Rampe.)
-constexpr float GAIT_SERVO_SLEW_DEG_PER_S = 450.0f;
+constexpr float GAIT_SERVO_SLEW_DEG_PER_S = 600.0f;  // MG90S: ca. 600 °/s ohne Last

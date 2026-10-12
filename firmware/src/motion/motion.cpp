@@ -1,18 +1,25 @@
 #include "motion.h"
 
+#include <Preferences.h>
 #include <freertos/FreeRTOS.h>
 
 #include "config.h"
 #include "kinematics/gait.h"
 #include "kinematics/kinematics.h"
+#include "kinematics/leveling.h"
 #include "kinematics/posture.h"
 #include "robot_geometry.h"
+#include "sensors/imu.h"
 #include "servo/servo_controller.h"
 
 namespace motion {
 namespace {
 
 constexpr float RAD2DEG = 57.2957795f;
+// Einstellungen erst speichern, wenn sich eine Weile nichts mehr geändert hat
+// (Schieber erzeugen viele Änderungen, der Flash soll nicht unnötig altern)
+constexpr uint32_t SAVE_DELAY_MS = 2000;
+constexpr float LEVEL_TILT_MAX = 25.0f;  // Nutzer-Neigung + Lageausgleich zusammen
 
 struct PoseState {
   kin::BodyPose pose;
@@ -34,6 +41,11 @@ uint32_t g_walk_ms = 0;         // Zeitpunkt des letzten Fahrbefehls
 gait::Params g_gait_params;
 uint8_t g_unreachable = 0;      // Bitmaske Beine 0..5
 uint32_t g_clamped = 0;         // Bitmaske Gelenke 0..17 (an Kalibriergrenze)
+bool g_leveling = false;        // Lageausgleich eingeschaltet
+bool g_level_fault = false;     // ... wegen falscher Sensorrichtung abgeschaltet
+bool g_level_active = false;
+float g_level_corr[2] = {0, 0};  // Roll, Nick
+uint32_t g_dirty_ms = 0;        // letzte Änderung an gespeicherten Einstellungen (0 = keine)
 struct GaitStatus {
   bool walking;
   uint8_t swing;
@@ -46,6 +58,7 @@ PoseState g_current;
 gait::Gait g_gait;
 posture::Sequencer g_seq{posture::Config{SIT_HEIGHT, SIT_STANCE, SIT_RISE_S}};
 bool g_settling = false;  // Übergang in die IK-Haltung läuft noch (normale Rampe)
+leveling::Controller g_level;
 
 PoseState defaults() {
   PoseState s;
@@ -103,12 +116,107 @@ uint8_t solveIk(const kin::BodyPose& pose, const gait::Gait& g, float angles[NUM
 
 float g_angles[NUM_SERVOS] = {};
 
+// Reichweite für die Gangart: Coxa-Achsen im Lauf-System (Körper verschoben bzw.
+// gedreht) und erlaubter Fußabstand, damit das Knie beim Anheben nicht zu weit
+// einknickt. minFootRadius rechnet etwas länger -> nur bei Änderungen.
+void updateReach(const PoseState& cur, float step_height) {
+  static float last_z = -1.0f, last_stance = -1.0f, last_lift = -1.0f;
+  static float r_min = 0.0f, r_max = 0.0f;
+  if (fabsf(cur.pose.z - last_z) > 0.25f || fabsf(cur.stance - last_stance) > 0.25f ||
+      step_height != last_lift) {
+    last_z = cur.pose.z;
+    last_stance = cur.stance;
+    last_lift = step_height;
+    r_min = gait::minFootRadius(LEG_GEOMETRY, cur.stance, cur.pose.z, step_height, KNEE_MIN_DEG);
+    r_max = gait::maxFootRadius(LEG_GEOMETRY, cur.pose.z);
+  }
+  kin::Vec3 coxa[NUM_LEGS];
+  for (int leg = 0; leg < NUM_LEGS; ++leg) coxa[leg] = kin::coxaWorld(cur.pose, LEG_MOUNTS[leg]);
+  g_gait.setReach(coxa, r_min, r_max);
+}
+
+// ---- Gespeicherte Einstellungen (NVS): Haltung, Gang, Lageausgleich, Stellgeschwindigkeit
+constexpr const char* NVS_NAMESPACE = "hexapod";
+constexpr const char* NVS_KEY = "motion";
+constexpr uint32_t BLOB_MAGIC = 0x48584D31;  // "HXM1"
+constexpr uint16_t BLOB_VERSION = 1;
+
+struct SettingsBlob {
+  uint32_t magic;
+  uint16_t version;
+  uint8_t gait_type;
+  uint8_t leveling;
+  float x, y, z, roll, pitch, yaw, stance;
+  float swing_s, step_height;
+  float slew;
+};
+
+void markDirty() {
+  uint32_t now = millis();
+  g_dirty_ms = now ? now : 1;
+}
+
+void loadSettings() {
+  Preferences prefs;
+  if (!prefs.begin(NVS_NAMESPACE, true)) return;
+  SettingsBlob b;
+  size_t len = prefs.getBytes(NVS_KEY, &b, sizeof(b));
+  prefs.end();
+  if (len != sizeof(b) || b.magic != BLOB_MAGIC || b.version != BLOB_VERSION) return;
+  const float vals[] = {b.x, b.y, b.z, b.roll, b.pitch, b.yaw, b.stance, b.swing_s, b.step_height, b.slew};
+  for (float v : vals) {
+    if (!isfinite(v)) return;
+  }
+  const PoseLimits& L = POSE_LIMITS;
+  const GaitLimits& G = GAIT_LIMITS;
+  g_target.pose.x = clampf(b.x, -L.shift_max, L.shift_max);
+  g_target.pose.y = clampf(b.y, -L.shift_max, L.shift_max);
+  g_target.pose.z = clampf(b.z, L.height_min, L.height_max);
+  g_target.pose.roll_deg = clampf(b.roll, -L.tilt_max, L.tilt_max);
+  g_target.pose.pitch_deg = clampf(b.pitch, -L.tilt_max, L.tilt_max);
+  g_target.pose.yaw_deg = clampf(b.yaw, -L.yaw_max, L.yaw_max);
+  g_target.stance = clampf(b.stance, L.stance_min, L.stance_max);
+  if (b.gait_type < gait::NUM_TYPES) g_gait_params.type = static_cast<gait::Type>(b.gait_type);
+  g_gait_params.swing_s = clampf(b.swing_s, G.swing_min, G.swing_max);
+  g_gait_params.step_height = clampf(b.step_height, G.height_min, G.height_max);
+  g_leveling = b.leveling != 0;
+  if (b.slew > 0.0f) servos.setSlewDegPerS(b.slew);
+}
+
+void saveSettings() {
+  portENTER_CRITICAL(&g_mux);
+  PoseState t = g_target;
+  gait::Params gp = g_gait_params;
+  bool lvl = g_leveling;
+  portEXIT_CRITICAL(&g_mux);
+  SettingsBlob b = {};
+  b.magic = BLOB_MAGIC;
+  b.version = BLOB_VERSION;
+  b.gait_type = static_cast<uint8_t>(gp.type);
+  b.leveling = lvl ? 1 : 0;
+  b.x = t.pose.x;
+  b.y = t.pose.y;
+  b.z = t.pose.z;
+  b.roll = t.pose.roll_deg;
+  b.pitch = t.pose.pitch_deg;
+  b.yaw = t.pose.yaw_deg;
+  b.stance = t.stance;
+  b.swing_s = gp.swing_s;
+  b.step_height = gp.step_height;
+  b.slew = servos.slewDegPerS();
+  Preferences prefs;
+  if (!prefs.begin(NVS_NAMESPACE, false)) return;
+  prefs.putBytes(NVS_KEY, &b, sizeof(b));
+  prefs.end();
+}
+
 }  // namespace
 
 void begin() {
   g_target = defaults();
   g_current = sitState();
   g_gait_params = defaultGait();
+  loadSettings();  // zuletzt eingestellte Haltung, Gang, Lageausgleich, Stellgeschwindigkeit
   g_gait.setParams(g_gait_params);
   kin::Vec3 n[NUM_LEGS];
   neutralFeet(g_current.stance, n);
@@ -158,13 +266,40 @@ void applyPoseJson(JsonVariantConst o) {
 
   portENTER_CRITICAL(&g_mux);
   g_target = next;
+  markDirty();
   portEXIT_CRITICAL(&g_mux);
 }
 
 void resetPose() {
   portENTER_CRITICAL(&g_mux);
   g_target = defaults();
+  markDirty();
   portEXIT_CRITICAL(&g_mux);
+}
+
+void setLeveling(bool on) {
+  portENTER_CRITICAL(&g_mux);
+  g_leveling = on;
+  if (on) g_level_fault = false;  // neuer Versuch (Regler wird im Regel-Task zurückgesetzt)
+  markDirty();
+  portEXIT_CRITICAL(&g_mux);
+}
+
+void notifySettingsChanged() {
+  portENTER_CRITICAL(&g_mux);
+  markDirty();
+  portEXIT_CRITICAL(&g_mux);
+}
+
+void loop() {
+  portENTER_CRITICAL(&g_mux);
+  uint32_t dirty = g_dirty_ms;
+  portEXIT_CRITICAL(&g_mux);
+  if (dirty == 0 || millis() - dirty < SAVE_DELAY_MS) return;
+  portENTER_CRITICAL(&g_mux);
+  if (g_dirty_ms == dirty) g_dirty_ms = 0;  // in der Zwischenzeit nichts Neues
+  portEXIT_CRITICAL(&g_mux);
+  saveSettings();
 }
 
 void stand() {
@@ -229,6 +364,7 @@ bool applyGaitJson(JsonVariantConst o, String& err) {
 
   portENTER_CRITICAL(&g_mux);
   g_gait_params = next;
+  markDirty();
   portEXIT_CRITICAL(&g_mux);
   return true;
 }
@@ -242,6 +378,7 @@ void update(float dt) {
   bool leaving = g_leave_pose;
   bool req_stand = g_req_stand;
   bool req_sit = g_req_sit;
+  bool leveling_on = g_leveling && !g_level_fault;
   g_enter_pose = g_leave_pose = g_req_stand = g_req_sit = false;
   gait::Params gp = g_gait_params;
   float cmd[3] = {g_walk_cmd[0], g_walk_cmd[1], g_walk_cmd[2]};
@@ -292,6 +429,15 @@ void update(float dt) {
     goal.stance = po.stance;
   }
 
+  // Lageausgleich: nur im Stehen/Laufen, mit gültigem Lagesensor. Sonst baut sich
+  // die Korrektur langsam ab.
+  if (!leveling_on) g_level.clearFault();
+  const bool level_active = leveling_on && imu.ok() && powered && !po.active && !g_settling &&
+                            g_seq.state() == posture::State::Standing;
+  g_level.update(dt, level_active, imu.rollDeg(), imu.pitchDeg(), goal.pose.roll_deg, goal.pose.pitch_deg);
+  goal.pose.roll_deg = clampf(goal.pose.roll_deg + g_level.rollDeg(), -LEVEL_TILT_MAX, LEVEL_TILT_MAX);
+  goal.pose.pitch_deg = clampf(goal.pose.pitch_deg + g_level.pitchDeg(), -LEVEL_TILT_MAX, LEVEL_TILT_MAX);
+
   // Haltung mit begrenzter Geschwindigkeit nachführen (fließende Bewegung).
   // Höhe und Fußabstand aus dem Haltungswechsel direkt (dort schon geglättet bzw.
   // als Sprung gewollt: die Gangart setzt die Füße dann mit Schritten um).
@@ -308,6 +454,7 @@ void update(float dt) {
 
   // Gang: Füße im Lauf-System
   neutralFeet(g_current.stance, neutral);
+  updateReach(g_current, gp.step_height);
   g_gait.setParams(gp);
   g_gait.setCommand(cmd[0], cmd[1], cmd[2]);
   g_gait.update(dt, neutral);
@@ -331,6 +478,15 @@ void update(float dt) {
   g_clamped = clamped;
   g_status = st;
   g_posture = g_seq.state();
+  g_level_active = level_active;
+  g_level_corr[0] = g_level.rollDeg();
+  g_level_corr[1] = g_level.pitchDeg();
+  if (g_level.fault() && g_leveling) {
+    // falsche Sensorrichtung: ausschalten und melden (bleibt gemeldet bis zum Einschalten)
+    g_leveling = false;
+    g_level_fault = true;
+    markDirty();
+  }
   portEXIT_CRITICAL(&g_mux);
 }
 
@@ -343,6 +499,8 @@ void toJson(JsonObject obj) {
   gait::Params gp = g_gait_params;
   GaitStatus st = g_status;
   posture::State ps = g_posture;
+  bool lvl_on = g_leveling, lvl_fault = g_level_fault, lvl_active = g_level_active;
+  float lvl_r = g_level_corr[0], lvl_p = g_level_corr[1];
   portEXIT_CRITICAL(&g_mux);
 
   obj["mode"] = m == Mode::Pose ? "pose" : "manual";
@@ -355,6 +513,13 @@ void toJson(JsonObject obj) {
   p["pitch"] = t.pose.pitch_deg;
   p["yaw"] = t.pose.yaw_deg;
   p["stance"] = t.stance;
+
+  JsonObject lv = obj["level"].to<JsonObject>();
+  lv["on"] = lvl_on;
+  lv["active"] = lvl_active;
+  lv["roll"] = roundf(lvl_r * 10.0f) / 10.0f;
+  lv["pitch"] = roundf(lvl_p * 10.0f) / 10.0f;
+  if (lvl_fault) lv["fault"] = true;
 
   JsonObject g = obj["gait"].to<JsonObject>();
   g["type"] = gait::typeName(gp.type);  // gewählt (wirkt im Stillstand)
@@ -411,6 +576,7 @@ void geometryToJson(JsonObject obj) {
   gl["height_max"] = G.height_max;
   gl["height_default"] = G.height_default;
   gl["stride_max"] = G.stride_max;
+  obj["knee_min"] = KNEE_MIN_DEG;
 }
 
 }  // namespace motion

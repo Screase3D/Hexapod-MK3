@@ -178,6 +178,10 @@
                     </div>
                   </div>
                   <p id="imu-raw" class="muted small mono imu-raw"></p>
+                  <div class="row wrap">
+                    <button id="imu-level" class="btn btn-small" type="button" title="Roboter waagerecht hinstellen, 2 s ruhig halten">Als waagerecht übernehmen</button>
+                  </div>
+                  <p id="imu-cal" class="small imu-cal" hidden></p>
                 </div>
 
                 <div class="card o-servo">
@@ -233,7 +237,7 @@
                 </div>
                 <label class="slider-row">
                   <span>Tempo</span>
-                  <input id="walk-scale" type="range" min="10" max="100" step="5" value="60">
+                  <input id="walk-scale" type="range" min="10" max="100" step="5" value="80">
                   <span id="walk-scale-val" class="mono"></span>
                 </label>
                 <details class="fold">
@@ -245,13 +249,15 @@
                   </label>
                   <label class="slider-row">
                     <span>Fußhub</span>
-                    <input id="gait-height" type="range" min="5" max="20" step="1">
+                    <input id="gait-height" type="range" min="5" max="25" step="1">
                     <span id="gait-height-val" class="mono"></span>
                   </label>
-                  <p class="muted small">Ein Wechsel der Gangart wirkt nach dem Anhalten.</p>
+                  <p class="muted small">Kürzere Schritte = schneller, aber hektischer. Quer zum Körper begrenzt
+                    die Reichweite der Beine das Tempo zusätzlich (das Knie darf nicht zu weit einknicken).
+                    Ein Wechsel der Gangart wirkt nach dem Anhalten. Alles wird gespeichert.</p>
                 </details>
                 <p class="hint small"><kbd>W</kbd><kbd>S</kbd> vor/zurück · <kbd>A</kbd><kbd>D</kbd> seitlich ·
-                  <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>Leertaste</kbd> Stopp</p>
+                  <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>R</kbd><kbd>F</kbd> höher/tiefer · <kbd>Leertaste</kbd> Stopp</p>
               </div>
 
               <div class="card o-pose">
@@ -267,11 +273,23 @@
                   (<span class="mono">include/robot_geometry.h</span>) – erst nach dem Messen verwenden.</p>
                 <div id="pose-sliders"></div>
                 <p id="pose-warn" class="warn-text small" hidden></p>
+                <div class="level-row">
+                  <label class="switch" title="Körper mit dem Lagesensor waagerecht halten (bzw. auf der eingestellten Neigung)">
+                    <input id="level-on" type="checkbox">
+                    <span class="slider"></span>
+                    <span class="switch-label">Lageausgleich</span>
+                  </label>
+                  <span id="level-info" class="muted small mono"></span>
+                </div>
+                <p id="level-fault" class="warn-text small" hidden>Lageausgleich abgeschaltet: Er hat die
+                  Schräglage verstärkt statt ausgeglichen. Einbaulage des Lagesensors unter
+                  <a href="#einstellungen">Einstellungen</a> prüfen.</p>
                 <div class="row wrap">
                   <button id="pose-reset" class="btn" type="button">Zurücksetzen</button>
                 </div>
                 <p class="muted small">Die Füße bleiben stehen, der Körper bewegt sich darüber – auch beim
-                  Laufen. Der Joystick schaltet die IK automatisch ein; einzelne Servo-Befehle beenden sie.</p>
+                  Laufen. Änderungen werden gespeichert und gelten auch nach einem Neustart.
+                  Der Joystick schaltet die IK automatisch ein; einzelne Servo-Befehle beenden sie.</p>
               </div>
             </div>
           </div>
@@ -525,8 +543,35 @@
                   <span id="ctl-slew-val" class="mono"></span>
                 </label>
                 <p class="muted small">Höchstgeschwindigkeit bei Einzelbefehlen (Kalibrierung, Justierung,
-                  Montagestellung). Beim Laufen gilt mindestens 450&nbsp;°/s, damit die Füße den
-                  Schrittbahnen folgen.</p>
+                  Montagestellung). Das Lauftempo bestimmen <b>Tempo</b>, <b>Schrittdauer</b> und Gangart
+                  (Karte Laufen); dabei gilt mindestens 600&nbsp;°/s, damit die Füße den Schrittbahnen folgen.</p>
+              </div>
+
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-level"/></svg>Lagesensor</h2>
+                <div class="form-grid">
+                  <label for="imu-xdir">X-Pfeil zeigt nach</label>
+                  <select id="imu-xdir">
+                    <option value="vorne">vorne</option>
+                    <option value="links">links</option>
+                    <option value="hinten">hinten</option>
+                    <option value="rechts">rechts</option>
+                  </select>
+                  <label for="imu-flip">Bauteilseite</label>
+                  <select id="imu-flip">
+                    <option value="0">oben</option>
+                    <option value="1">unten (Platine kopfüber)</option>
+                  </select>
+                </div>
+                <p class="muted small">Pfeile auf der GY-521-Platine. Prüfen: Nase anheben → <b>Nick positiv</b>,
+                  rechte Seite absenken → <b>Roll positiv</b> (Werte unter <a href="#steuerung">Steuerung</a> → Lage).</p>
+                <div class="row wrap">
+                  <button id="imu-level2" class="btn" type="button" title="Roboter waagerecht hinstellen, 2 s ruhig halten">Nullpunkt setzen (waagerecht)</button>
+                  <button id="imu-gyro" class="btn" type="button" title="Roboter 2 s ruhig halten">Gyro neu messen</button>
+                  <button id="imu-level-reset" class="btn btn-ghost" type="button">Nullpunkt löschen</button>
+                </div>
+                <p id="imu-cal2" class="small imu-cal" hidden></p>
+                <dl class="kv" id="imu-info"></dl>
               </div>
 
               <div class="card">
@@ -563,6 +608,7 @@
                   <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Fahren (Steuerung)</dd>
                   <dt><kbd>Q</kbd><kbd>E</kbd></dt><dd>Drehen (Steuerung)</dd>
                   <dt><kbd>Leertaste</kbd></dt><dd>Anhalten (Steuerung)</dd>
+                  <dt><kbd>R</kbd><kbd>F</kbd></dt><dd>Körper höher/tiefer (Steuerung)</dd>
                   <dt><kbd>←</kbd><kbd>→</kbd></dt><dd>Servo ±1 µs, mit Umschalt ±10 µs (Kalibrieren)</dd>
                   <dt><kbd>↑</kbd><kbd>↓</kbd></dt><dd>vorheriger/nächster Servo (Kalibrieren)</dd>
                 </dl>

@@ -64,4 +64,8 @@ Vec3 worldToBody(const BodyPose& pose, const Vec3& p_world);
 // Abstand `stance` von der Coxa-Achse, auf dem Boden (z = 0).
 Vec3 stanceFoot(const LegMount& m, float stance);
 
+// Coxa-Achse in Weltkoordinaten (auf den Boden projiziert) bei verschobenem und
+// gedrehtem Körper; Rollen/Nicken bleiben unberücksichtigt.
+Vec3 coxaWorld(const BodyPose& pose, const LegMount& m);
+
 }  // namespace kin

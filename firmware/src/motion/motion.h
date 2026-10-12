@@ -39,6 +39,16 @@ void stopWalking();
 // Gangparameter: type ("tripod"/"ripple"/"wave"), swing_s, step_height
 bool applyGaitJson(JsonVariantConst obj, String& err);
 
+// Lageausgleich: hält den Körper mit dem Lagesensor waagerecht (bzw. auf der
+// eingestellten Neigung). Schaltet sich bei falscher Sensorrichtung selbst ab.
+void setLeveling(bool on);
+
+// Haltung, Gang, Lageausgleich und Stellgeschwindigkeit werden gespeichert und
+// beim Start wiederhergestellt. notifySettingsChanged() z. B. nach "slew";
+// loop() (aus loop(), nicht dem Regel-Task) schreibt verzögert ins NVS.
+void notifySettingsChanged();
+void loop();
+
 // Aus dem Regel-Task: Haltung nachführen, Gang rechnen, IK, Servos setzen
 void update(float dt_s);
 

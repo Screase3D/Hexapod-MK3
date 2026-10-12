@@ -107,6 +107,28 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     result(out, true);
   } else if (strcmp(cmd, "gait") == 0) {
     result(out, motion::applyGaitJson(in, err), err);
+  } else if (strcmp(cmd, "leveling") == 0) {
+    bool on = in["on"] | false;
+    motion::setLeveling(on);
+    result(out, true, on ? "Lageausgleich an" : "Lageausgleich aus");
+
+  // --- Lagesensor ---
+  } else if (strcmp(cmd, "imu_cal") == 0) {
+    bool level = in["level"] | false;
+    imu.requestCalibration(level);
+    result(out, true, level ? "Nullpunkt wird gemessen – Roboter 2 s ruhig und waagerecht halten"
+                            : "Gyro wird gemessen – Roboter 2 s ruhig halten");
+  } else if (strcmp(cmd, "imu_level_reset") == 0) {
+    imu.resetLevel();
+    result(out, true, "Nullpunkt zurückgesetzt");
+  } else if (strcmp(cmd, "imu_mount") == 0) {
+    attitude::AxisDir dir;
+    if (!attitude::axisDirFromName(in["x"] | "", dir)) {
+      result(out, false, "x muss vorne, links, hinten oder rechts sein");
+    } else {
+      imu.setMount(dir, in["upside_down"] | false);
+      result(out, true, "Einbaulage gespeichert – Nullpunkt neu setzen");
+    }
 
   // --- Sollwerte (schalten in den manuellen Modus) ---
   } else if (strcmp(cmd, "servo_us") == 0) {
@@ -134,6 +156,7 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     result(out, true);
   } else if (strcmp(cmd, "slew") == 0) {
     servos.setSlewDegPerS(in["deg_per_s"] | SERVO_SLEW_DEG_PER_S);
+    motion::notifySettingsChanged();
     out["deg_per_s"] = servos.slewDegPerS();
     result(out, true);
 
