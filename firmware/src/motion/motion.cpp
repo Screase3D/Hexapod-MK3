@@ -973,6 +973,7 @@ Activity activity() {
   a.gesture = a.pose && g_gesture != gestures::Type::None;
   a.alive = g_alive;
   a.leveling = g_leveling;
+  a.level_fault = g_level_fault;
   portEXIT_CRITICAL(&g_mux);
   return a;
 }

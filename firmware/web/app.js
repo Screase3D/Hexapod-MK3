@@ -144,6 +144,7 @@ function connect() {
     renderConnection();
     send('cal_get');
     checkVersion();
+    if (OTA.rebooting) location.reload();  // neue Firmware = neue Oberfläche
   };
   ws.onclose = () => {
     S.wsOpen = false;
@@ -170,11 +171,20 @@ function send(cmd, params = {}) {
 
 setInterval(() => {
   if (!S.wsOpen) return;
+  S.pingAt = performance.now();
   S.ws.send('{"cmd":"ping"}');
   if (Date.now() - S.lastMsg > 5000) S.ws.close();  // Verbindung hängt -> neu aufbauen
 }, 1500);
 
 function onMessage(m) {
+  if (m.type === 'pong' && S.pingAt) {
+    // Antwortzeit (geglättet): zeigt, wie flüssig sich der Roboter steuern lässt
+    const rtt = performance.now() - S.pingAt;
+    S.pingAt = 0;
+    S.rtt = S.rtt ? S.rtt * 0.7 + rtt * 0.3 : rtt;
+    renderConnection();
+    return;
+  }
   if (m.type === 'telemetry') {
     S.tel = m;
     renderTelemetry();
@@ -211,10 +221,17 @@ function setPill(id, text, cls = '') {
   pill.className = 'pill ' + cls;
 }
 
+const RTT_SLOW_MS = 250;
+
 function renderConnection() {
-  setPill('pill-conn', S.wsOpen ? 'Verbunden' : 'Getrennt', S.wsOpen ? 'pill-ok' : 'pill-bad');
+  if (!S.wsOpen) S.rtt = 0;
+  const rtt = S.rtt ? Math.round(S.rtt) : 0;
+  const slow = S.wsOpen && rtt > RTT_SLOW_MS;
+  setPill('pill-conn', S.wsOpen ? (slow ? 'Verbindung langsam' : 'Verbunden') : 'Getrennt',
+    S.wsOpen ? (slow ? 'pill-warn' : 'pill-ok') : 'pill-bad');
+  $('pill-conn').title = S.wsOpen ? `Antwortzeit ${rtt || '–'} ms${slow ? ' – Steuerung reagiert verzögert (WLAN-Empfang?)' : ''}` : '';
   $('sb-conn').classList.toggle('on', S.wsOpen);
-  $('sb-conn-text').textContent = S.wsOpen ? `Verbunden · ${location.hostname}` : 'Getrennt';
+  $('sb-conn-text').textContent = S.wsOpen ? `Verbunden · ${location.hostname}${rtt ? ` · ${rtt} ms` : ''}` : 'Getrennt';
   renderBanner();
 }
 
@@ -262,6 +279,9 @@ function renderTelemetry() {
   const t = S.tel;
   const sv = t.servo;
   renderPad(t.pad);
+  renderLogState(t.log);
+  if (FPV.open) renderFpv(t);
+  if (S.tab === 'control') markProfile();
 
   // Akku
   if (t.bat.state === 'off') setPill('pill-bat', 'Akku aus', 'pill-idle');
@@ -630,6 +650,7 @@ function makeJoystick(el, onChange) {
   };
   el.addEventListener('pointerdown', (e) => {
     if (pid !== null) return;
+    if (e.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(8);  // kurzes Antippen spürbar
     pid = e.pointerId;
     el.setPointerCapture(pid);
     el.classList.add('active');
@@ -756,7 +777,9 @@ function setMoveMode(mode) {
   });
   MOVE.mode = mode;
   setSeg('move-mode', mode);
+  setSeg('fpv-mode', mode);
   $('joy-turn').classList.toggle('joy-h', mode === 'walk');
+  $('fpv-joy-r').classList.toggle('joy-h', mode === 'walk');
   setMoveLabels();
   $('walk-settings').hidden = mode !== 'walk';
   $('body-settings').hidden = mode !== 'body';
@@ -765,6 +788,7 @@ function setMoveMode(mode) {
   $('posture-buttons').hidden = mode === 'arms';
   try { localStorage.setItem('moveMode', mode); } catch (e) { /* egal */ }
   if (S.tel) renderWalk(S.tel.motion);
+  if (FPV.open && S.tel) renderFpv(S.tel);
 }
 
 function bindMove() {
@@ -1242,6 +1266,7 @@ const pageFromHash = () => Object.keys(PAGES).find((k) => location.hash === `#${
 
 function showTab(name) {
   if (!PAGES[name]) name = 'control';
+  if (name !== 'control') closeFpv();
   if (name !== 'control' && (W.timer || W.keys.size)) walkStopAll();
   S.tab = name;
   if (location.hash !== `#${PAGES[name]}`) history.replaceState(null, '', `#${PAGES[name]}`);
@@ -1274,7 +1299,10 @@ function showTab(name) {
     loadStatus();
     S.statusTimer = setInterval(loadStatus, 5000);
   }
-  if (name === 'system') renderTiles();
+  if (name === 'system') {
+    renderTiles();
+    loadLog();
+  }
   if (name === 'cal') renderManualValues();
   if (name === 'leds') loadLeds();
   if (name === 'pad') loadPad();
@@ -1550,7 +1578,7 @@ function renderTiles() {
   if (rssi === undefined && w && w.sta.state === 'connected') rssi = w.sta.rssi;
   if (rssi !== undefined) {
     const [cls, text] = wifiQuality(rssi);
-    setTile('wifi', `${rssi} dBm`, statusEl(cls, text + (w && w.sta.ssid ? ` · ${w.sta.ssid}` : '')));
+    setTile('wifi', `${rssi} dBm`, statusEl(cls, text + (w && w.sta.ssid ? ` · ${w.sta.ssid}` : '') + (S.rtt ? ` · ${Math.round(S.rtt)} ms` : '')));
   } else if (w && w.ap.active) {
     setTile('wifi', 'Access Point', `„${w.ap.ssid}“ · ${w.ap.clients} Gerät(e)`);
   } else setTile('wifi', '–');
@@ -1603,6 +1631,357 @@ function renderVersion(s) {
     toast(`Neue Firmware ${s.fw} – Seite neu laden`, true);
   }
   $('sb-ver').classList.toggle('stale', !!stale);
+}
+
+// --------------------------------------------------------------- Profile ----
+
+// Haltung + Gang auf einen Klick (alle in der Firmware erreichbar, Tempo bei 100 %)
+const PROFILES = [
+  { id: 'normal', name: 'Normal', hint: 'Standard, 125 mm/s', z: 52, stance: 100, type: 'tripod', swing_s: 0.4, step_height: 15 },
+  { id: 'stable', name: 'Stabil', hint: 'tief und breit, Ripple (immer 4 Beine am Boden)', z: 42, stance: 115, type: 'ripple', swing_s: 0.45, step_height: 12 },
+  { id: 'terrain', name: 'Gelände', hint: 'hoch, Fuß 25 mm anheben', z: 70, stance: 100, type: 'tripod', swing_s: 0.5, step_height: 25 },
+  { id: 'sport', name: 'Sport', hint: 'kurze Schritte, bis 167 mm/s', z: 55, stance: 95, type: 'tripod', swing_s: 0.3, step_height: 18 },
+  { id: 'sneak', name: 'Schleichen', hint: 'Welle, langsam und leise', z: 45, stance: 105, type: 'wave', swing_s: 0.5, step_height: 10 },
+];
+const PROFILE_MAX_OWN = 4;
+
+function ownProfiles() {
+  try { return JSON.parse(localStorage.getItem('profiles') || '[]'); } catch (e) { return []; }
+}
+
+function saveOwnProfiles(list) {
+  try { localStorage.setItem('profiles', JSON.stringify(list)); } catch (e) { toast('Speichern im Browser nicht möglich', true); }
+}
+
+function applyProfile(p) {
+  const pose = { z: p.z, stance: p.stance, x: p.x || 0, y: p.y || 0, roll: p.roll || 0, pitch: p.pitch || 0, yaw: p.yaw || 0 };
+  if (!send('pose', pose)) return;
+  send('gait', { type: p.type, swing_s: p.swing_s, step_height: p.step_height });
+  const m = S.tel && S.tel.motion;
+  toast(`Profil „${p.name}“${m && m.gait && m.gait.walking && m.gait.active !== p.type ? ' – Gangart nach dem Anhalten' : ''}`);
+}
+
+// aktives Profil: Haltung und Gang stimmen (fast) überein
+function profileMatches(p, m) {
+  const ps = m.pose || {};
+  const g = m.gait || {};
+  const near = (a, b, tol) => Math.abs((a || 0) - (b || 0)) <= tol;
+  return near(ps.z, p.z, 1) && near(ps.stance, p.stance, 1) && near(ps.x, p.x, 1) && near(ps.y, p.y, 1) &&
+    near(ps.roll, p.roll, 1) && near(ps.pitch, p.pitch, 1) && near(ps.yaw, p.yaw, 1) &&
+    g.type === p.type && near(g.swing_s, p.swing_s, 0.01) && near(g.step_height, p.step_height, 0.5);
+}
+
+function renderProfiles() {
+  const box = $('profiles');
+  const own = ownProfiles();
+  box.innerHTML = '';
+  const add = (p, ownIdx) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'profile';
+    b.dataset.profile = p.id;
+    b.title = p.hint || `eigenes Profil: Höhe ${p.z} mm, Fußabstand ${p.stance} mm, ${p.type}`;
+    b.textContent = p.name;
+    b.onclick = () => applyProfile(p);
+    if (ownIdx !== undefined) {
+      const del = document.createElement('span');
+      del.className = 'del';
+      del.textContent = '×';
+      del.title = 'Profil löschen';
+      del.onclick = (e) => {
+        e.stopPropagation();
+        if (!confirm(`Profil „${p.name}“ löschen?`)) return;
+        const list = ownProfiles();
+        list.splice(ownIdx, 1);
+        saveOwnProfiles(list);
+        renderProfiles();
+      };
+      b.appendChild(del);
+    }
+    box.appendChild(b);
+  };
+  PROFILES.forEach((p) => add(p));
+  own.forEach((p, i) => add(p, i));
+  if (own.length < PROFILE_MAX_OWN) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'profile profile-add';
+    b.textContent = '+ Merken';
+    b.title = 'Aktuelle Haltung und Gangart als eigenes Profil speichern (in diesem Browser)';
+    b.onclick = saveProfile;
+    box.appendChild(b);
+  }
+  markProfile();
+}
+
+function saveProfile() {
+  const m = S.tel && S.tel.motion;
+  if (!m || !m.pose || !m.gait) {
+    toast('Keine Verbindung zum Hexapod', true);
+    return;
+  }
+  const name = (prompt('Name für das Profil:', 'Mein Profil') || '').trim().slice(0, 20);
+  if (!name) return;
+  const ps = m.pose;
+  const g = m.gait;
+  const list = ownProfiles();
+  list.push({
+    id: `own-${Date.now()}`, name, z: Math.round(ps.z), stance: Math.round(ps.stance), x: Math.round(ps.x), y: Math.round(ps.y),
+    roll: Math.round(ps.roll), pitch: Math.round(ps.pitch), yaw: Math.round(ps.yaw),
+    type: g.type, swing_s: g.swing_s, step_height: g.step_height,
+  });
+  saveOwnProfiles(list);
+  renderProfiles();
+  toast(`Profil „${name}“ gespeichert`);
+}
+
+function markProfile() {
+  const m = S.tel && S.tel.motion;
+  if (!m || !m.pose) return;
+  const all = PROFILES.concat(ownProfiles());
+  document.querySelectorAll('#profiles .profile[data-profile]').forEach((b) => {
+    const p = all.find((x) => x.id === b.dataset.profile);
+    b.classList.toggle('active', !!p && profileMatches(p, m));
+  });
+}
+
+// -------------------------------------------------------- Fahrer-Ansicht ----
+
+const FPV = { open: false, home: null, next: null, gesture: 0 };
+const FPV_GESTURES = [['circle', 'Kreisen'], ['nod', 'Ja'], ['shake', 'Nein'], ['pushup', 'Liegestütz'], ['dance', 'Tanzen']];
+
+// Kameraansicht ins Vollbild-Overlay verschieben (kein zweiter Stream nötig)
+function openFpv() {
+  if (FPV.open) return;
+  FPV.open = true;
+  const view = $('cam-view');
+  FPV.home = view.parentElement;
+  FPV.next = view.nextSibling;
+  $('fpv-video').appendChild(view);
+  $('fpv').hidden = false;
+  document.documentElement.classList.add('fpv-on');
+  setMoveMode(MOVE.mode);
+  if (!S.camWanted) {
+    S.camWanted = true;
+    updateStream();
+  }
+  const el = $('fpv');
+  if (el.requestFullscreen) {
+    el.requestFullscreen({ navigationUI: 'hide' }).then(() => {
+      // Handy quer (geht nur im Vollbild und nicht überall)
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    }).catch(() => {});
+  }
+  if (S.tel) renderFpv(S.tel);
+}
+
+function closeFpv() {
+  if (!FPV.open) return;
+  FPV.open = false;
+  if (W.timer || W.keys.size || W.joyMove.some((v) => v) || W.joyTurn) walkStopAll();
+  moveStopAll();
+  FPV.home.insertBefore($('cam-view'), FPV.next);
+  $('fpv').hidden = true;
+  document.documentElement.classList.remove('fpv-on');
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+function renderFpv(t) {
+  const m = t.motion || {};
+  const st = $('walk-state');
+  $('fpv-state').textContent = st.textContent;
+  $('fpv-state').className = `fpv-chip${st.classList.contains('badge-on') ? ' on' : ''}${st.classList.contains('badge-warn') ? ' warn' : ''}`;
+  const b = t.bat || {};
+  $('fpv-bat').textContent = b.state === 'ok' || b.state === 'warn' || b.state === 'critical' ? `🔋 ${b.v.toFixed(1)} V` : '';
+  $('fpv-bat').className = `fpv-chip${b.state === 'warn' || b.state === 'critical' ? ' warn' : ''}`;
+
+  const posture = m.mode === 'pose' ? m.posture : null;
+  const standing = posture === 'standing';
+  const busy = posture === 'standing_up' || posture === 'sitting_down';
+  const arms = m.mode === 'pose' && m.arms ? m.arms : 'down';
+  const p = $('fpv-posture');
+  p.hidden = MOVE.mode === 'arms';
+  p.textContent = standing ? 'Hinsetzen' : 'Aufstehen';
+  p.disabled = busy;
+  $('fpv-arms').hidden = MOVE.mode !== 'arms';
+  $('fpv-arms').textContent = $('arms-toggle').textContent.replace('Vorderbeine ', '');
+  $('fpv-arms').disabled = $('arms-toggle').disabled;
+  $('fpv-wave').hidden = MOVE.mode !== 'arms';
+  $('fpv-wave').disabled = arms !== 'up';
+  $('fpv-gesture').hidden = MOVE.mode !== 'body';
+  $('fpv-gesture').textContent = m.gesture ? 'Stopp' : `Geste: ${FPV_GESTURES[FPV.gesture][1]}`;
+  $('fpv-hud').setAttribute('aria-pressed', S.hud);
+
+  // Infozeile: Tempo, Hinweise (Reichweite, gesperrt, Controller)
+  const g = m.gait || {};
+  const info = [];
+  if (g.walking) info.push(`${g.vx} / ${g.vy} mm/s · ${g.wz} °/s`);
+  if (!$('walk-limit').hidden) info.push($('walk-limit').textContent);
+  if (t.pad && t.pad.src) info.push(`🎮 ${PAD_MODES[t.pad.mode] || ''}`);
+  $('fpv-info').textContent = info.join(' · ');
+}
+
+function bindFpv() {
+  $('cam-fpv').onclick = openFpv;
+  $('fpv-exit').onclick = closeFpv;
+  bindSeg('fpv-mode', setMoveMode);
+  makeJoystick($('fpv-joy-l'), (x, y) => onStick('L', x, y));
+  makeJoystick($('fpv-joy-r'), (x, y) => onStick('R', x, y));
+  $('fpv-stop').onclick = () => $('btn-estop').click();
+  $('fpv-hud').onclick = () => {
+    $('cam-hud').click();
+    $('fpv-hud').setAttribute('aria-pressed', S.hud);
+  };
+  $('fpv-posture').onclick = () => {
+    const m = S.tel && S.tel.motion;
+    send(m && m.mode === 'pose' && m.posture === 'standing' ? 'sit' : 'stand');
+  };
+  $('fpv-arms').onclick = () => $('arms-toggle').click();
+  $('fpv-wave').onclick = () => send('wave');
+  $('fpv-gesture').onclick = () => {
+    const m = S.tel && S.tel.motion;
+    if (m && m.gesture) {
+      send('gesture', { name: 'stop' });
+      return;
+    }
+    send('gesture', { name: FPV_GESTURES[FPV.gesture][0] });
+    FPV.gesture = (FPV.gesture + 1) % FPV_GESTURES.length;
+  };
+}
+
+// --------------------------------------------------------- Firmware-Update ----
+
+const OTA = { busy: false, rebooting: false };
+
+function otaStatus(text, cls = '') {
+  $('ota-status').textContent = text;
+  $('ota-status').className = `small ${cls}`;
+}
+
+function otaUpload() {
+  const f = $('ota-file').files[0];
+  if (!f || OTA.busy) return;
+  if (!f.name.endsWith('.bin')) {
+    otaStatus('Bitte eine .bin-Datei wählen', 'warn-text');
+    return;
+  }
+  if (f.name.includes('factory')) {
+    otaStatus('firmware.factory.bin ist für den Browser-Flasher – hier firmware.bin wählen', 'warn-text');
+    return;
+  }
+  if (!confirm(`Firmware „${f.name}“ (${fmtBytes(f.size)}) aufspielen? Die Servos werden stromlos.`)) return;
+  OTA.busy = true;
+  $('ota-start').disabled = true;
+  $('ota-bar').hidden = false;
+  $('ota-progress').style.width = '0';
+  otaStatus('Übertrage …');
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/ota');
+  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+  xhr.upload.onprogress = (e) => {
+    if (!e.lengthComputable) return;
+    const pct = Math.round((e.loaded / e.total) * 100);
+    $('ota-progress').style.width = `${pct}%`;
+    otaStatus(pct < 100 ? `Übertrage … ${pct} %` : 'Prüfe und schreibe …');
+  };
+  xhr.onload = () => {
+    let r = {};
+    try { r = JSON.parse(xhr.responseText); } catch (e) { /* leer */ }
+    OTA.busy = false;
+    if (xhr.status === 200 && r.ok !== false) {
+      OTA.rebooting = true;
+      otaStatus('Erfolgreich – ESP32 startet neu, die Seite lädt danach neu …', 'ok-text');
+      toast('Firmware übertragen – Neustart');
+    } else {
+      otaStatus(r.msg || `Fehler (HTTP ${xhr.status})`, 'warn-text');
+      $('ota-start').disabled = false;
+    }
+  };
+  xhr.onerror = () => {
+    OTA.busy = false;
+    otaStatus('Verbindung abgebrochen – Update nicht übernommen', 'warn-text');
+    $('ota-start').disabled = false;
+  };
+  xhr.send(f);
+}
+
+function bindOta() {
+  $('ota-file').onchange = () => {
+    $('ota-start').disabled = !$('ota-file').files.length;
+    otaStatus('');
+  };
+  $('ota-start').onclick = otaUpload;
+}
+
+// ------------------------------------------------------------ Ereignisse ----
+
+const EV = { seq: 0, entries: [], seenWarn: 0, loading: false, uptime: null };
+
+async function loadLog() {
+  if (EV.loading) return;
+  EV.loading = true;
+  try {
+    const r = await api(`/api/log?since=${EV.seq}`);
+    if (r.seq < EV.seq) {  // ESP32 neu gestartet
+      EV.entries = [];
+      EV.seq = 0;
+      EV.loading = false;
+      return loadLog();
+    }
+    const now = Date.now();
+    for (const e of r.entries) e.at = now - (r.uptime_ms - e.ms);
+    EV.entries = EV.entries.concat(r.entries).slice(-100);
+    EV.seq = r.seq;
+    renderLog();
+  } catch (e) { /* später erneut */ }
+  EV.loading = false;
+}
+
+const fmtTime = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+function renderLog() {
+  const list = $('evlog');
+  list.innerHTML = '';
+  for (const e of EV.entries.slice().reverse()) {  // neueste oben
+    const li = document.createElement('li');
+    li.className = e.lvl;
+    li.innerHTML = '<time></time><span class="lvl"></span><span></span>';
+    li.firstChild.textContent = fmtTime(e.at);
+    li.firstChild.title = `${Math.round(e.ms / 1000)} s nach dem Start`;
+    li.lastChild.textContent = e.text;
+    list.appendChild(li);
+  }
+}
+
+// Telemetrie: neue Einträge holen; Punkt im Menü bei ungesehenen Warnungen
+function renderLogState(l) {
+  if (!l) return;
+  if (l.seq < EV.seq) EV.seq = Math.min(EV.seq, 0);  // Neustart: alles neu holen
+  if (S.tab === 'system') {
+    if (l.seq !== EV.seq) loadLog();
+    EV.seenWarn = l.warn;
+  }
+  if (l.warn < EV.seenWarn) EV.seenWarn = 0;
+  $('nav-sys-dot').hidden = !(l.warn > EV.seenWarn);
+}
+
+function logText() {
+  return EV.entries.map((e) => `${fmtTime(e.at)} [${e.lvl}] ${e.text}`).join('\n');
+}
+
+function bindLog() {
+  $('log-copy').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(logText());
+      toast('Ereignisse kopiert');
+    } catch (e) {
+      // ohne HTTPS gibt es keine Zwischenablage-API: als Datei anbieten
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([logText()], { type: 'text/plain' }));
+      a.download = 'hexapod-ereignisse.txt';
+      a.click();
+    }
+  };
 }
 
 async function loadStatus() {
@@ -2379,6 +2758,10 @@ function init() {
   bindMove();
   bindLeds();
   bindPad();
+  bindLog();
+  bindOta();
+  bindFpv();
+  renderProfiles();
   bindGlobal();
   bindEditor();
   bindCamera();

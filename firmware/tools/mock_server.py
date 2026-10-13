@@ -260,7 +260,7 @@ def telemetry():
         "imu": imu_tel(t),
         "ctl": {"hz": 50.0, "max_us": 1830},
         "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3},
-        "motion": motion_tel(), "led": led_state(), "pad": pad_tel(),
+        "motion": motion_tel(), "led": led_state(), "pad": pad_tel(), "log": log_tel(),
         "wifi": wifi_tel(), "heap": 182000, "ws": 1,
     }
 
@@ -322,11 +322,17 @@ def handle(cmd):
     if c == "torque":
         if cmd.get("on") and state["estop"]:
             return {**out, "ok": False, "msg": "Not-Aus aktiv - erst freigeben"}
+        if state["torque"] != bool(cmd.get("on")):
+            ev("info", "Servos %s" % ("an" if cmd.get("on") else "aus"))
         state["torque"] = bool(cmd.get("on"))
     elif c == "estop":
+        if not state["estop"]:
+            ev("warn", "Not-Aus ausgelöst")
         state["estop"], state["torque"] = True, False
         out["msg"] = "Not-Aus ausgelöst"
     elif c == "estop_clear":
+        if state["estop"]:
+            ev("info", "Not-Aus freigegeben")
         state["estop"] = False
         out["msg"] = "Not-Aus freigegeben (Servos bleiben aus)"
     elif c == "mode":
@@ -410,6 +416,8 @@ def handle(cmd):
             state["gait"]["type"] = cmd["type"]
         if "swing_s" in cmd:
             state["gait"]["swing_s"] = max(0.3, min(1.2, float(cmd["swing_s"])))
+        if "step_height" in cmd:
+            state["gait"]["step_height"] = max(5, min(25, float(cmd["step_height"])))
     elif c == "alive":
         state["alive"] = bool(cmd.get("on"))
         out["msg"] = "Lebendig an" if state["alive"] else "Lebendig aus"
@@ -429,8 +437,6 @@ def handle(cmd):
         state["imu_mount"], state["imu_flip"] = cmd["x"], bool(cmd.get("upside_down"))
         state["imu_level"] = [0.0, 0.0]
         out["msg"] = "Einbaulage gespeichert – Nullpunkt neu setzen"
-        if "step_height" in cmd:
-            state["gait"]["step_height"] = max(5, min(25, float(cmd["step_height"])))
     elif c == "pose_reset":
         state["pose"] = {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0, "stance": 100}
         out["msg"] = "Haltung zurückgesetzt"
@@ -792,6 +798,38 @@ async def pad_post(request):
     return web.json_response({**pad_json(), "ok": True})
 
 
+# --- Ereignisprotokoll (wie sys/evlog.cpp) ---
+EVLOG = []
+
+
+def ev(level, text):
+    EVLOG.append({"seq": len(EVLOG) + 1, "ms": int((time.time() - state["start"]) * 1000), "lvl": level, "text": text})
+    del EVLOG[:-48]
+
+
+def log_tel():
+    warn = [e["seq"] for e in EVLOG if e["lvl"] != "info"]
+    return {"seq": EVLOG[-1]["seq"] if EVLOG else 0, "warn": warn[-1] if warn else 0}
+
+
+async def log_get(request):
+    since = int(request.query.get("since", 0))
+    return web.json_response({"seq": EVLOG[-1]["seq"] if EVLOG else 0,
+                              "uptime_ms": int((time.time() - state["start"]) * 1000),
+                              "entries": [e for e in EVLOG if e["seq"] > since]})
+
+
+async def ota_post(request):
+    body = await request.read()
+    if len(body) < 64 * 1024:
+        return web.json_response({"ok": False, "msg": "Datei zu klein für eine Firmware"}, status=400)
+    if body[0] != 0xE9:
+        return web.json_response({"ok": False, "msg": "Keine ESP32-Firmware (.bin aus .pio/build/hexapod/firmware.bin verwenden)"}, status=400)
+    ev("info", "Firmware-Update über die Weboberfläche gestartet (%d KB)" % (len(body) // 1024))
+    ev("info", "Firmware-Update erfolgreich (%d KB) – Neustart" % (len(body) // 1024))
+    return web.json_response({"ok": True, "msg": "Firmware übertragen – startet neu"})
+
+
 async def battery_get(_):
     return web.json_response(battery())
 
@@ -840,6 +878,10 @@ async def static(request):
 
 
 def main():
+    # Mock: wie nach einem Spannungseinbruch gestartet (zeigt die Warnung in der Oberfläche)
+    ev("warn", "Start: Firmware %s (mock), Unterspannung (Brownout) – Akku schwach oder Servos ziehen die 5 V herunter"
+       % FW_VERSION)
+    ev("info", "WLAN verbunden: MockNet (192.168.1.50, -58 dBm)")
     app = web.Application()
     app.add_routes([
         web.get("/ws", ws_handler),
@@ -851,6 +893,7 @@ def main():
         web.get("/api/battery", battery_get), web.post("/api/battery", battery_post),
         web.get("/api/leds", leds_get), web.post("/api/leds", leds_post),
         web.get("/api/pad", pad_get), web.post("/api/pad", pad_post),
+        web.get("/api/log", log_get), web.post("/api/ota", ota_post),
         web.get("/api/kinematics", kinematics),
         web.get("/api/i2c", i2c_get), web.post("/api/i2c/scan", i2c_scan),
         web.post("/api/estop", estop), web.post("/api/reboot", ok),

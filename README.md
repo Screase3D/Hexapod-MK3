@@ -18,7 +18,8 @@ später erweitert um KI-Funktionen mit der Kamera.
 | 3c | **Lebendig**: im Stand ab und zu kleine zufällige Bewegungen (umschauen, Gewicht verlagern, Bein heben, tippen, Füße neu setzen, atmen) | 🟡 implementiert und auf dem PC getestet – noch nicht am Roboter |
 | 3d | **Version** in den Einstellungen, **LED-Einstellungen** (Farbe/Effekt der Augen je Zustand), **Xbox-Controller** direkt per Bluetooth oder über den Browser ([docs/controller.md](docs/controller.md)) | 🟡 implementiert und auf dem PC getestet – Bluetooth-Controller noch nicht mit echter Hardware getestet |
 | 4 | Lagesensor-Kalibrierung (Einbaulage, Nullpunkt, Gyro) und **Lageausgleich** (Körper waagerecht halten); Geländeanpassung | 🟡 Lageausgleich implementiert und auf dem PC getestet – noch nicht am Roboter; Geländeanpassung geplant |
-| 5 | Kamera/KI: Objekterkennung (auf dem ESP32-S3 oder am PC über den Stream), Folgen, OTA-Updates | Ideen |
+| 3e | **Fahrer-Ansicht** (Kamera im Vollbild mit Joysticks), **Profile** (Haltung + Gang), **Firmware-Update über WLAN**, **Ereignisprotokoll** (u. a. Neustartgrund), Antwortzeit, App auf dem Home-Bildschirm | 🟡 implementiert und im Browser/auf dem PC getestet – noch nicht am Roboter |
+| 5 | Kamera/KI: Objekterkennung (auf dem ESP32-S3 oder am PC über den Stream), Folgen | Ideen |
 
 ## Repository
 
@@ -124,6 +125,22 @@ firmware/                            PlatformIO-Projekt
 Gespeicherte Einstellungen (Kalibrierung, WLAN, Kamera, Akku-Schalter) bleiben bei einem
 erneuten Upload erhalten.
 
+### Über WLAN aktualisieren (ohne Kabel)
+
+Läuft schon eine Firmware ab 0.7.0, geht jedes weitere Update über WLAN – die Servos werden dabei
+stromlos, danach startet der ESP32 neu:
+
+- **Aus PlatformIO:** unten in der Statusleiste die Umgebung **`hexapod_ota`** wählen (statt
+  `hexapod`) und **→ (Upload)** – oder `pio run -e hexapod_ota -t upload`. Der PC muss im selben WLAN
+  sein; findet er `hexapod.local` nicht, in `platformio.ini` bei `hexapod_ota` die IP als
+  `upload_port` eintragen. Optional mit Passwort: `OTA_PASSWORD` in `include/secrets.h`.
+- **Aus der Oberfläche:** *Einstellungen → Firmware-Update*, `firmware.bin` aus
+  `firmware/.pio/build/hexapod/` (oder aus dem CI-Artefakt) wählen, **Hochladen**. Die Seite lädt
+  nach dem Neustart von selbst neu.
+
+Geht dabei etwas schief (Strom weg, WLAN-Abbruch), bleibt die alte Firmware aktiv. Startet eine neue
+Firmware gar nicht, hilft das Flashen per USB.
+
 ### Alternative: fertige Firmware im Browser flashen
 
 Jeder Push baut die Firmware automatisch auf GitHub (Workflow *Firmware*). Ohne lokale
@@ -195,12 +212,12 @@ oben rechts. Jede Seite hat eine eigene Adresse, z. B. `http://hexapod.local/#ka
 
 | Seite | Inhalt |
 |---|---|
-| **Steuerung** | Kamerastream (Vollbild, Lage als künstlicher Horizont im Bild, Kameraeinstellungen über ⚙), Karte *Bewegung* mit drei Modi für die Joysticks: *Laufen* (bzw. W/A/S/D/Q/E, R/F: Höhe), *Körper* (verschieben/neigen, Gesten) und *Vorderbeine* (heben, steuern, winken), Schalter *Lebendig*; Aufstehen/Hinsetzen, Körperhaltung (IK) mit Lageausgleich und Hinweisen bei unerreichbarer Haltung, Lage mit Nullpunkt, Torque |
+| **Steuerung** | Kamerastream (Vollbild, Lage als künstlicher Horizont im Bild, Kameraeinstellungen über ⚙), **Fahrer-Ansicht** (Kamera im Vollbild mit Joysticks, Modus, Aufstehen, STOP – am Handy quer), Karte *Bewegung* mit drei Modi für die Joysticks: *Laufen* (bzw. W/A/S/D/Q/E, R/F: Höhe), *Körper* (verschieben/neigen, Gesten) und *Vorderbeine* (heben, steuern, winken), Schalter *Lebendig*; Aufstehen/Hinsetzen, Körperhaltung (IK) mit **Profilen** (Normal, Stabil, Gelände, Sport, Schleichen, eigene), Lageausgleich und Hinweisen bei unerreichbarer Haltung, Lage mit Nullpunkt, Torque |
 | **Kalibrierung & Justierung** | *Kalibrieren*: Servo für Servo (Rohmodus, Montagestellung, Referenz, Grenzen, Test); *Justieren*: alle 18 Gelenke auf einen Blick; Speichern, Export/Import |
-| **Systemübersicht** | Kennzahlen (Akku, WLAN, Regelung, Kamera, Speicher, Laufzeit), Komponenten, I²C-Scan, Neustart |
+| **Systemübersicht** | Kennzahlen (Akku, WLAN mit Antwortzeit, Regelung, Kamera, Speicher, Laufzeit), Komponenten, I²C-Scan, Neustart, **Ereignisse** seit dem Start (Neustartgrund, WLAN, Not-Aus, Akku, Controller, Updates; Punkt im Menü bei neuen Warnungen) |
 | **LEDs** | Augen: Farbe und Effekt je Zustand (Servos aus, steht, läuft, Vorderbeine, Geste, …), eine Farbe für alles oder aus, Helligkeit, Board-LED; Vorschau |
 | **Controller** | Xbox-Controller per Bluetooth am Roboter (koppeln, vergessen) oder am Handy/PC über den Browser, Live-Test, Tempo/Totzone/Kennlinie, Tastenbelegung |
-| **Einstellungen** | WLAN, Servo-Stellgeschwindigkeit, Lagesensor (Einbaulage, Nullpunkt, Gyro), Akkuüberwachung, Farbschema (automatisch/dunkel/hell), Tastenkürzel, Version (Firmware, Git-Stand, Build-Datum) |
+| **Einstellungen** | WLAN, Servo-Stellgeschwindigkeit, Lagesensor (Einbaulage, Nullpunkt, Gyro), Akkuüberwachung, Farbschema (automatisch/dunkel/hell), Tastenkürzel, Version (Firmware, Git-Stand, Build-Datum), **Firmware-Update** |
 
 ## Oberfläche ohne Roboter entwickeln
 

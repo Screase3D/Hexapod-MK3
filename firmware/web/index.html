@@ -5,7 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0d1217">
   <title>Hexapod MK3</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2l12 7v14l-12 7-12-7V9z' fill='%233fb6a8'/%3E%3C/svg%3E">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <!-- Als App auf den Home-Bildschirm (iOS: Teilen -> Zum Home-Bildschirm; startet ohne Browserleisten) -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Hexapod">
   <link rel="stylesheet" href="/style.css">
   <script>
     // Farbschema vor dem ersten Zeichnen setzen (kein Aufblitzen)
@@ -48,6 +55,7 @@
       <symbol id="i-servo" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="10" rx="2"/><circle cx="9" cy="8" r="3"/><path d="M9 8l5-3.5"/></symbol>
       <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 17.5h6M10 20.5h4"/><path d="M8.5 14.5a6 6 0 1 1 7 0c-.8.6-1 1.4-1 2v1h-5v-1c0-.6-.2-1.4-1-2z"/></symbol>
       <symbol id="i-gamepad" viewBox="0 0 24 24"><path d="M7 7.5h10a4.5 4.5 0 0 1 4.4 5.5l-.9 4a2.6 2.6 0 0 1-4.4 1.2L14 16h-4l-2.1 2.2a2.6 2.6 0 0 1-4.4-1.2l-.9-4A4.5 4.5 0 0 1 7 7.5z"/><path d="M7.5 10.5v3M6 12h3"/><circle cx="15.5" cy="11" r=".9" fill="currentColor" stroke="none"/><circle cx="17.3" cy="12.8" r=".9" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-drive" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><circle cx="7.5" cy="14.5" r="2.2"/><circle cx="16.5" cy="14.5" r="2.2"/><path d="M9.5 8.5h5"/></symbol>
       <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
     </defs>
   </svg>
@@ -66,7 +74,8 @@
           <svg class="ic"><use href="#i-sliders"/></svg><span class="nav-label">Kalibrierung &amp; Justierung</span>
           <span id="nav-cal-dot" class="nav-dot" title="Ungespeicherte Kalibrierung" hidden></span></a>
         <a class="nav-item" href="#system" data-page="system" title="Systemübersicht">
-          <svg class="ic"><use href="#i-chip"/></svg><span class="nav-label">Systemübersicht</span></a>
+          <svg class="ic"><use href="#i-chip"/></svg><span class="nav-label">Systemübersicht</span>
+          <span id="nav-sys-dot" class="nav-dot" title="Neue Warnungen im Ereignisprotokoll" hidden></span></a>
         <a class="nav-item" href="#leds" data-page="leds" title="LEDs">
           <svg class="ic"><use href="#i-bulb"/></svg><span class="nav-label">LEDs</span></a>
         <a class="nav-item" href="#controller" data-page="pad" title="Controller">
@@ -136,6 +145,8 @@
                     <svg class="ic"><use href="#i-camera"/></svg></a>
                   <button id="cam-hud" class="btn btn-ghost btn-icon" type="button" aria-pressed="false" title="Lage im Bild einblenden (HUD)">
                     <svg class="ic"><use href="#i-hud"/></svg></button>
+                  <button id="cam-fpv" class="btn btn-ghost btn-icon" type="button" title="Fahrer-Ansicht: Kamera im Vollbild mit Joysticks">
+                    <svg class="ic"><use href="#i-drive"/></svg></button>
                   <button id="cam-full" class="btn btn-ghost btn-icon" type="button" title="Vollbild">
                     <svg class="ic"><use href="#i-expand"/></svg></button>
                   <span id="cam-stats" class="cam-stats muted small mono"></span>
@@ -326,6 +337,7 @@
                 </div>
                 <p id="pose-placeholder" class="warn-text small" hidden>Beinmaße sind noch Platzhalter
                   (<span class="mono">include/robot_geometry.h</span>) – erst nach dem Messen verwenden.</p>
+                <div class="profiles" id="profiles" aria-label="Profile"></div>
                 <div id="pose-sliders"></div>
                 <p id="pose-warn" class="alert small" hidden></p>
                 <div class="level-row">
@@ -558,6 +570,16 @@
                 verbindet sich danach von selbst wieder.</p>
               <button id="sys-reboot" class="btn btn-danger-outline" type="button"><svg class="ic"><use href="#i-power"/></svg>ESP32 neu starten</button>
             </div>
+            <div class="card span-all">
+              <div class="card-head">
+                <h2><svg class="ic"><use href="#i-clock"/></svg>Ereignisse</h2>
+                <button id="log-copy" class="btn btn-small" type="button">Kopieren</button>
+              </div>
+              <ol class="evlog" id="evlog"></ol>
+              <p class="muted small">Seit dem letzten Start (bis zu 48 Einträge, gehen beim Neustart verloren). Der Grund des
+                letzten Neustarts steht im ersten Eintrag – „Unterspannung“ deutet auf eine zu schwache 5-V-Versorgung
+                unter Servolast hin.</p>
+            </div>
           </div>
         </section>
 
@@ -705,6 +727,7 @@
 
         <section id="page-settings" class="page" data-title="Einstellungen">
           <div class="grid-2">
+            <div class="stack">
             <div class="card">
               <h2><svg class="ic"><use href="#i-wifi"/></svg>WLAN</h2>
               <p class="small" id="wifi-current"></p>
@@ -730,6 +753,28 @@
               <p class="muted small" id="wifi-hint"></p>
             </div>
 
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-chip"/></svg>Version</h2>
+                <dl class="kv" id="about-info"></dl>
+                <p class="alert small" id="about-stale" hidden>Diese Seite stammt von einer älteren Firmware.
+                  <a href="#" onclick="location.reload(); return false;">Neu laden</a></p>
+              </div>
+
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-upload"/></svg>Firmware-Update</h2>
+                <div class="row wrap">
+                  <input id="ota-file" type="file" accept=".bin,application/octet-stream">
+                  <button id="ota-start" class="btn btn-primary" type="button" disabled>Hochladen</button>
+                </div>
+                <div class="ota-bar" id="ota-bar" hidden><i id="ota-progress"></i></div>
+                <p class="small" id="ota-status"></p>
+                <p class="muted small"><code>firmware.bin</code> aus <code>firmware/.pio/build/hexapod/</code> (nach dem Bauen)
+                  oder aus dem CI-Artefakt <i>hexapod-firmware</i> wählen – nicht <code>firmware.factory.bin</code>. Die Servos
+                  werden dabei stromlos; danach startet der ESP32 neu. Direkt aus PlatformIO geht es mit der Umgebung
+                  <code>hexapod_ota</code> (<code>pio run -e hexapod_ota -t upload</code>).</p>
+              </div>
+            </div>
+
             <div class="stack">
               <div class="card">
                 <h2><svg class="ic"><use href="#i-servo"/></svg>Servos</h2>
@@ -740,7 +785,7 @@
                 </label>
                 <p class="muted small">Höchstgeschwindigkeit bei Einzelbefehlen (Kalibrierung, Justierung,
                   Montagestellung). Das Lauftempo bestimmen <b>Tempo</b>, <b>Schrittdauer</b> und Gangart
-                  (Karte Laufen); dabei gilt mindestens 600&nbsp;°/s, damit die Füße den Schrittbahnen folgen.</p>
+                  (Karte Bewegung); dabei gilt mindestens 600&nbsp;°/s, damit die Füße den Schrittbahnen folgen.</p>
               </div>
 
               <div class="card">
@@ -810,16 +855,43 @@
                 </dl>
               </div>
 
-              <div class="card">
-                <h2><svg class="ic"><use href="#i-chip"/></svg>Version</h2>
-                <dl class="kv" id="about-info"></dl>
-                <p class="alert small" id="about-stale" hidden>Diese Seite stammt von einer älteren Firmware.
-                  <a href="#" onclick="location.reload(); return false;">Neu laden</a></p>
-              </div>
             </div>
           </div>
         </section>
       </main>
+    </div>
+  </div>
+
+  <!-- Fahrer-Ansicht: Kamera im Vollbild, Joysticks darüber -->
+  <div id="fpv" class="fpv" hidden>
+    <div class="fpv-video" id="fpv-video"></div>
+    <div class="fpv-top">
+      <button id="fpv-exit" class="fpv-btn fpv-icon" type="button" title="Fahrer-Ansicht verlassen" aria-label="Fahrer-Ansicht verlassen">
+        <svg class="ic"><use href="#i-x"/></svg></button>
+      <div class="seg seg-mode fpv-seg" id="fpv-mode" role="tablist" aria-label="Was die Joysticks steuern">
+        <button type="button" role="tab" data-value="walk">Laufen</button>
+        <button type="button" role="tab" data-value="body">Körper</button>
+        <button type="button" role="tab" data-value="arms">Beine</button>
+      </div>
+      <span class="fpv-chip" id="fpv-state">–</span>
+      <span class="fpv-chip" id="fpv-bat"></span>
+      <span class="fpv-spacer"></span>
+      <button id="fpv-hud" class="fpv-btn fpv-icon" type="button" title="Lage einblenden (HUD)" aria-label="Lage einblenden">
+        <svg class="ic"><use href="#i-hud"/></svg></button>
+      <button id="fpv-stop" class="fpv-btn fpv-stop" type="button" title="Not-Aus (Esc)">STOP</button>
+    </div>
+    <p class="fpv-info" id="fpv-info"></p>
+    <div class="fpv-bottom">
+      <div class="joy fpv-joy" id="fpv-joy-l" role="application" aria-label="linker Joystick">
+        <div class="joy-cross"></div><div class="joy-knob"></div></div>
+      <div class="fpv-actions">
+        <button id="fpv-posture" class="fpv-btn" type="button">Aufstehen</button>
+        <button id="fpv-arms" class="fpv-btn" type="button" hidden>Heben</button>
+        <button id="fpv-wave" class="fpv-btn" type="button" hidden>Winken</button>
+        <button id="fpv-gesture" class="fpv-btn" type="button" hidden>Geste</button>
+      </div>
+      <div class="joy joy-h fpv-joy" id="fpv-joy-r" role="application" aria-label="rechter Joystick">
+        <div class="joy-cross"></div><div class="joy-knob"></div></div>
     </div>
   </div>
 

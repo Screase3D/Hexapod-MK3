@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include "sys/evlog.h"
 #include <string.h>
 
 namespace padble {
@@ -142,10 +143,11 @@ bool connectTo(const NimBLEAddress& a, bool pairing) {
     g_client->setConnectionParams(6, 12, 0, 100);
   }
   if (!g_client->connect(a)) {
+    EV_WARN("Controller: Verbindung fehlgeschlagen (Fehler %d)", g_client->getLastError());
     if (pairing) NimBLEDevice::deleteBond(a);
     return false;
   }
-  g_client->secureConnection();  // Kopplung ("Just Works") bzw. Verschlüsselung mit dem Bond
+  if (!g_client->secureConnection()) EV_WARN("Controller: Verschlüsselung/Kopplung fehlgeschlagen");
   bool report = false;
   g_out = nullptr;
   for (NimBLERemoteService* svc : g_client->getServices(true)) {
@@ -165,6 +167,7 @@ bool connectTo(const NimBLEAddress& a, bool pairing) {
     }
   }
   if (!report || !g_client->isConnected()) {
+    EV_WARN("Controller: keine Eingabedaten – Firmware des Controllers aktuell (BLE)?");
     disconnect();
     if (pairing) NimBLEDevice::deleteBond(a);
     return false;

@@ -38,6 +38,8 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 | `POST /api/leds` | Teilmenge: `mode`, `brightness`, `board`, `single` {color?, effect?}, `state`+`color?`+`effect?`, `reset`, `preview` (zeigt den geänderten Stil 2,5 s) | wie GET; gespeichert. Effekte: `off`, `solid`, `breathe`, `blink`, `pulse`, `wink` (Blinzeln), `alternate`, `rainbow` |
 | `GET /api/pad` | – | Controller: `enabled` (Bluetooth), `addr` (gekoppelt), `deadzone`, `expo`, `speed` (0..1), `invert_y`, `map` {Taste: Aktion}, `buttons`, `actions` (siehe [controller.md](controller.md)) |
 | `POST /api/pad` | Teilmenge: `enabled`, `deadzone`, `expo`, `speed`, `invert_y`, `map` {Taste: Aktion}, `pair`, `forget`, `reset` | wie GET; gespeichert. `pair` schaltet Bluetooth ein und sucht 60 s |
+| `GET /api/log?since=N` | – | Ereignisprotokoll: `seq` (neueste Nummer), `uptime_ms`, `entries` [{seq, ms (seit Start), lvl (`info`/`warn`/`error`), text}] mit Nummer > N |
+| `POST /api/ota` | Firmware (`firmware.bin`) als Body, `application/octet-stream` | schreibt die Firmware in die zweite App-Partition (Servos vorher stromlos), prüft sie und startet neu; Fehler mit `msg` |
 | `GET /api/kinematics` | – | Beinmaße, Montagepunkte, Grenzen der Körperhaltung (`limits`) und der Gangparameter (`gait_limits`), `placeholder` |
 | `GET /api/i2c` | – | letzter I²C-Scan: `devices` (gefunden), `missing` (erwartet, fehlt) |
 | `POST /api/i2c/scan` | `{}` | I²C-Bus neu scannen (0x08–0x77), Antwort wie GET |
@@ -123,6 +125,7 @@ Beispiel:
              "arms": "down", "gesture": "nod", "body": true, "offset_limited": true,
              "unreachable": [], "clamped": []},
   "led":   "stand",
+  "log":   {"seq": 12, "warn": 3},
   "pad":   {"src": "ble", "mode": "walk", "speed": 60, "ble": "connected", "name": "Xbox Wireless Controller",
             "bat": 80, "in": {"lx": 0, "ly": 0.5, "rx": 0, "ry": 0, "lt": 0, "rt": 0, "b": 0}, "msg": "Modus: Laufen", "seq": 3},
   "wifi":  {"mode": "sta", "rssi": -58},
@@ -150,7 +153,8 @@ der Reichweitengrenze ist. `motion.alive`: Einstellung `on`, `act` = laufende Ak
 `tilt`, `lift`, `tap`, `shuffle`). `led`: Zustand der Augen-LEDs (wie `GET /api/leds`). `pad`: Quelle
 (`ble`, `web` oder leer), Modus, Tempo in %, Bluetooth-Zustand (`off`, `idle`, `searching`, `pairing` mit
 `pair_left`, `connecting`, `connected` mit `name`, `bat`), `in` = aktueller Controller-Zustand (nur wenn aktiv),
-`msg`/`seq` = letzte Meldung (neue Meldung = neue `seq`). `motion.level`: Lageausgleich `on`, `active`
+`msg`/`seq` = letzte Meldung (neue Meldung = neue `seq`). `log`: Nummer des neuesten Eintrags im
+Ereignisprotokoll und der neuesten Warnung (für den Hinweis im Menü). `motion.level`: Lageausgleich `on`, `active`
 (wirkt gerade), aktuelle Korrektur `roll`/`pitch` in Grad, `fault: true` = wegen falscher
 Sensorrichtung abgeschaltet. `imu`: `pitch`/`roll` nach Abzug des Nullpunkts `level`
 ([Roll, Nick] der schief eingebauten Platine), `acc` im Körpersystem, `mount`/`flip` =

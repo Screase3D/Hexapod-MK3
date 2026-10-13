@@ -4,6 +4,7 @@
 #include <WiFi.h>
 
 #include "config.h"
+#include "sys/evlog.h"
 #include "ui/status_leds.h"
 #include "input/pad_control.h"
 #include "control_stats.h"
@@ -230,6 +231,8 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     attachCal(out, id);
   } else if (strcmp(cmd, "cal_save") == 0) {
     bool ok = servos.saveCalibration();
+    if (ok) EV_INFO("Kalibrierung gespeichert");
+    else EV_ERROR("Kalibrierung speichern fehlgeschlagen");
     result(out, ok, ok ? "Kalibrierung gespeichert" : "Speichern fehlgeschlagen");
   } else if (strcmp(cmd, "cal_reload") == 0) {
     bool ok = servos.reloadCalibration();
@@ -251,6 +254,9 @@ void buildTelemetry(JsonDocument& doc) {
   motion::toJson(doc["motion"].to<JsonObject>());
   doc["led"] = ledfx::stateName(statusLeds.state());
   padctl::telemetry(doc["pad"].to<JsonObject>());
+  JsonObject lg = doc["log"].to<JsonObject>();
+  lg["seq"] = evlog::seq();
+  lg["warn"] = evlog::warnSeq();
   JsonObject w = doc["wifi"].to<JsonObject>();
   bool sta = wifi::staConnected();
   w["mode"] = wifi::isAccessPoint() ? (sta ? "ap+sta" : "ap") : "sta";

@@ -154,6 +154,20 @@ Haltung, Gangparameter, Lageausgleich und Stellgeschwindigkeit werden gespeicher
 der letzten Änderung) und gelten auch nach einem Neustart; **Zurücksetzen** stellt die
 Standardhaltung wieder her. Am PC heben/senken **R**/**F** den Körper in 5-mm-Schritten.
 
+**Profile** (Knöpfe über den Reglern) setzen Haltung und Gang auf einen Klick; Verschieben und
+Neigen gehen dabei auf null. Alle sind erreichbar und zum Laufen geeignet (Tempo bei 100 %):
+
+| Profil | Höhe | Fußabstand | Gangart | Schrittdauer | Fußhub | Tempo vorwärts |
+|---|---|---|---|---|---|---|
+| Normal | 52 mm | 100 mm | Dreifuß | 0,4 s | 15 mm | 125 mm/s |
+| Stabil | 42 mm | 115 mm | Ripple | 0,45 s | 12 mm | 56 mm/s |
+| Gelände | 70 mm | 100 mm | Dreifuß | 0,5 s | 25 mm | 100 mm/s |
+| Sport | 55 mm | 95 mm | Dreifuß | 0,3 s | 18 mm | 167 mm/s |
+| Schleichen | 45 mm | 105 mm | Welle | 0,5 s | 10 mm | 20 mm/s |
+
+*+ Merken* speichert die aktuelle Haltung und Gangart als eigenes Profil (bis zu vier, im Browser).
+Das markierte Profil entspricht der aktuellen Einstellung.
+
 **Erster Test:** Roboter aufbocken (Füße frei), Torque an, IK aktivieren und Höhe langsam
 ändern. Alle Füße sollten sich gleichmäßig senkrecht bewegen. Bewegt sich ein Bein falsch herum,
 stimmt dessen Kalibrierung (Drehrichtung) oder Montagewinkel nicht.

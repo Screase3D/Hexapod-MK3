@@ -84,6 +84,7 @@ void startMdns() {
   MDNS.end();
   if (MDNS.begin(WIFI_HOSTNAME)) {
     MDNS.addService("http", "tcp", HTTP_PORT);
+    MDNS.enableArduino(3232);  // Firmware-Update per PlatformIO/Arduino-IDE (sys/ota.cpp)
   } else {
     log_w("mDNS-Start fehlgeschlagen");
   }

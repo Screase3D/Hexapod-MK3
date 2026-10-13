@@ -12,6 +12,7 @@
 
 #include "config.h"
 #include "control_stats.h"
+#include "input/pad_ble.h"
 #include "input/pad_control.h"
 #include "motion/motion.h"
 #include "net/camera.h"
@@ -22,6 +23,8 @@
 #include "sensors/i2c_scan.h"
 #include "sensors/imu.h"
 #include "servo/servo_controller.h"
+#include "sys/evlog.h"
+#include "sys/ota.h"
 #include "ui/status_leds.h"
 
 namespace {
@@ -114,6 +117,66 @@ void updateLeds() {
   statusLeds.update();
 }
 
+// Zustandswechsel ins Ereignisprotokoll (Not-Aus, Servos, Akku, WLAN, Lagesensor, Controller)
+void watchEvents() {
+  static bool first = true;
+  static bool estop, torque, sta, ap, imu_ok, lvl_fault;
+  static BatteryMonitor::State bat;
+  static padble::State ble;
+  const bool estop_now = servos.emergencyStopActive();
+  const bool torque_now = servos.torqueRequested();
+  const BatteryMonitor::State bat_now = battery.state();
+  const bool sta_now = wifi::staConnected();
+  const bool ap_now = wifi::isAccessPoint();
+  const bool imu_now = imu.ok();
+  const bool lvl_now = motion::activity().level_fault;
+  const padble::State ble_now = padble::status().state;
+  if (!first) {
+    if (estop_now != estop) {
+      if (estop_now) EV_WARN("Not-Aus ausgelöst");
+      else EV_INFO("Not-Aus freigegeben");
+    }
+    if (torque_now != torque && !estop_now) EV_INFO("Servos %s", torque_now ? "an" : "aus");
+    if (bat_now != bat) {
+      if (bat_now == BatteryMonitor::State::Warn) EV_WARN("Akku schwach: %.2f V", battery.voltage());
+      else if (bat_now == BatteryMonitor::State::Critical) EV_ERROR("Akku leer: %.2f V – Servos gesperrt", battery.voltage());
+      else if (bat == BatteryMonitor::State::Warn || bat == BatteryMonitor::State::Critical)
+        EV_INFO("Akku wieder in Ordnung: %.2f V", battery.voltage());
+    }
+    if (sta_now != sta) {
+      if (sta_now) EV_INFO("WLAN verbunden: %s (%s, %d dBm)", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
+      else EV_WARN("WLAN getrennt");
+    }
+    if (ap_now != ap) EV_INFO("Access Point %s", ap_now ? "an" : "aus");
+    if (imu_now != imu_ok) {
+      if (imu_now) EV_INFO("Lagesensor antwortet wieder");
+      else EV_ERROR("Lagesensor antwortet nicht");
+    }
+    if (lvl_now && !lvl_fault) EV_WARN("Lageausgleich abgeschaltet: Einbaulage des Lagesensors prüfen");
+    if (ble_now != ble) {
+      const padble::Status st = padble::status();
+      switch (ble_now) {
+        case padble::State::Connected: EV_INFO("Controller verbunden: %s", st.name); break;
+        case padble::State::Pairing:   EV_INFO("Controller: Kopplung gestartet"); break;
+        case padble::State::Searching:
+          if (ble == padble::State::Connected) EV_WARN("Controller getrennt");
+          break;
+        case padble::State::Off:       EV_INFO("Bluetooth aus"); break;
+        default: break;
+      }
+    }
+  }
+  first = false;
+  estop = estop_now;
+  torque = torque_now;
+  bat = bat_now;
+  sta = sta_now;
+  ap = ap_now;
+  imu_ok = imu_now;
+  lvl_fault = lvl_now;
+  ble = ble_now;
+}
+
 void printBanner() {
   Serial.println();
   Serial.println("==============================");
@@ -156,11 +219,27 @@ void setup() {
   web::begin();
   camera::startStreamServer();
   padctl::begin();  // Controller (Bluetooth nur, wenn eingeschaltet)
+  ota::begin();     // Firmware-Update per PlatformIO über WLAN
   Serial.printf("[Web]   http://%s/  bzw.  http://%s.local/\n", wifi::ip().c_str(), WIFI_HOSTNAME);
 
   xTaskCreatePinnedToCore(controlTask, "control", 4096, nullptr, CONTROL_TASK_PRIO, nullptr,
                           CONTROL_TASK_CORE);
   Serial.println("Bereit. Servos sind aus - Torque in der Weboberfläche einschalten.");
+  bool reset_warn;
+  const char* reason = evlog::resetReason(reset_warn);
+  evlog::add(reset_warn ? evlog::Level::Warn : evlog::Level::Info, "Start: Firmware %s (%s), %s", HEXAPOD_FW_VERSION,
+             HEXAPOD_FW_GIT, reason);
+  if (!servos.boardOk(0) || !servos.boardOk(1)) {
+    EV_ERROR("Servotreiber fehlt: PCA9685 #1 %s, #2 %s", servos.boardOk(0) ? "OK" : "FEHLT",
+             servos.boardOk(1) ? "OK" : "FEHLT");
+  }
+  if (!imu_ok) EV_ERROR("Lagesensor (MPU6050) nicht gefunden");
+  if (!cam_ok) EV_ERROR("Kamera nicht gefunden");
+  if (wifi::staConnected()) {
+    EV_INFO("WLAN verbunden: %s (%s, %d dBm)", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  } else if (wifi::isAccessPoint()) {
+    EV_INFO("Access Point aktiv (%s)", WiFi.softAPIP().toString().c_str());
+  }
 }
 
 void loop() {
@@ -183,6 +262,7 @@ void loop() {
   if (now - last_led >= LED_PERIOD_MS) {
     last_led = now;
     updateLeds();
+    watchEvents();
   }
 
   wifi::loop();
@@ -190,6 +270,7 @@ void loop() {
   imu.loop();      // geänderte Lagesensor-Kalibrierung speichern
   motion::loop();  // geänderte Haltung/Gang verzögert speichern
   padctl::loop();  // Controller auswerten
+  ota::loop();
 
   if (commands::rebootRequested()) {
     if (reboot_at == 0) reboot_at = now + 500;  // Antwort noch ausliefern

@@ -13,6 +13,8 @@
 #include "sensors/battery.h"
 #include "sensors/i2c_scan.h"
 #include "servo/servo_controller.h"
+#include "sys/evlog.h"
+#include "sys/ota.h"
 #include "ui/status_leds.h"
 #include "input/pad_control.h"
 
@@ -212,6 +214,19 @@ esp_err_t padPostHandler(httpd_req_t* req) {
   return sendJson(req, out);
 }
 
+esp_err_t logHandler(httpd_req_t* req) {
+  // ?since=N: nur neuere Einträge
+  uint32_t since = 0;
+  char query[32], val[12];
+  if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
+      httpd_query_key_value(query, "since", val, sizeof(val)) == ESP_OK) {
+    since = strtoul(val, nullptr, 10);
+  }
+  JsonDocument doc;
+  evlog::toJson(doc.to<JsonObject>(), since);
+  return sendJson(req, doc);
+}
+
 esp_err_t batteryGetHandler(httpd_req_t* req) {
   JsonDocument doc;
   battery.toJson(doc.to<JsonObject>());
@@ -259,6 +274,43 @@ esp_err_t i2cScanHandler(httpd_req_t* req) {
   doc["ok"] = done;
   if (!done) doc["msg"] = "Scan nicht abgeschlossen (Regel-Task läuft nicht?)";
   return sendJson(req, doc, done ? nullptr : "503 Service Unavailable");
+}
+
+// Firmware-Update: Body = firmware.bin (application/octet-stream)
+esp_err_t otaHandler(httpd_req_t* req) {
+  constexpr size_t CHUNK = 4096;
+  String err;
+  if (req->content_len < 64 * 1024) return sendResult(req, false, "Datei zu klein für eine Firmware");
+  if (!ota::webBegin(req->content_len, err)) return sendResult(req, false, err);
+  uint8_t* buf = (uint8_t*)malloc(CHUNK);
+  if (!buf) {
+    ota::webAbort();
+    return sendResult(req, false, "Kein Speicher", "500 Internal Server Error");
+  }
+  size_t remaining = req->content_len;
+  int timeouts = 0;
+  bool ok = true;
+  while (remaining > 0) {
+    int r = httpd_req_recv(req, (char*)buf, remaining < CHUNK ? remaining : CHUNK);
+    if (r == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 5) continue;
+    if (r <= 0) {
+      err = "Übertragung abgebrochen";
+      ota::webAbort();
+      ok = false;
+      break;
+    }
+    timeouts = 0;
+    if (!ota::webWrite(buf, r, err)) {
+      ok = false;
+      break;
+    }
+    remaining -= r;
+  }
+  free(buf);
+  if (ok) ok = ota::webEnd(err);
+  if (!ok) return sendResult(req, false, err);
+  commands::requestReboot();
+  return sendResult(req, true, "Firmware übertragen – startet neu");
 }
 
 // Not-Aus auch ohne WebSocket erreichbar
@@ -387,6 +439,8 @@ bool begin() {
   registerUri("/api/leds", HTTP_POST, ledsPostHandler);
   registerUri("/api/pad", HTTP_GET, padGetHandler);
   registerUri("/api/pad", HTTP_POST, padPostHandler);
+  registerUri("/api/log", HTTP_GET, logHandler);
+  registerUri("/api/ota", HTTP_POST, otaHandler);
   registerUri("/api/kinematics", HTTP_GET, kinematicsHandler);
   registerUri("/api/i2c", HTTP_GET, i2cGetHandler);
   registerUri("/api/i2c/scan", HTTP_POST, i2cScanHandler);

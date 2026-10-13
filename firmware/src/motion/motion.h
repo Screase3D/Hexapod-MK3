@@ -90,6 +90,7 @@ struct Activity {
   bool gesture = false;
   bool alive = false;     // Einstellung "Lebendig"
   bool leveling = false;  // Einstellung Lageausgleich
+  bool level_fault = false;  // Lageausgleich wegen falscher Sensorrichtung abgeschaltet
 };
 Activity activity();
 

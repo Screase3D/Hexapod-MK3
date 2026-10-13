@@ -4,6 +4,19 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste als `v0.6.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.7.0
+
+- **Fahrer-Ansicht**: Kamera im Vollbild mit Joysticks darüber (Modus, Aufstehen/Hinsetzen,
+  Vorderbeine/Winken, Gesten, HUD, STOP) – am Handy quer wie eine Fernsteuerung.
+- **Profile** in der Karte Körperhaltung: Normal, Stabil (tief, breit, Ripple), Gelände (hoch,
+  hoher Fußhub), Sport (schnell), Schleichen (Welle) sowie bis zu vier eigene (im Browser gespeichert).
+- **Firmware-Update über WLAN**: Upload in den Einstellungen oder `pio run -e hexapod_ota -t upload`.
+- **Ereignisprotokoll** (Systemübersicht): Neustartgrund (erkennt Unterspannung/Absturz), WLAN,
+  Not-Aus, Servos, Akku, Lagesensor, Controller, Kalibrierung, Updates; Punkt im Menü bei Warnungen.
+- Antwortzeit der Verbindung in der Seitenleiste, Warnung bei langsamer Verbindung.
+- Als App auf den Home-Bildschirm (Icon, ohne Browserleisten auf iOS).
+- Kurzes Vibrieren beim Greifen eines Joysticks (Android), Einstellungen übersichtlicher angeordnet.
+
 ## 0.6.0
 
 - **Version** in den Einstellungen und in der Seitenleiste (Firmware, Git-Stand, Build-Datum).
