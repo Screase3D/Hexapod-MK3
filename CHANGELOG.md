@@ -2,7 +2,18 @@
 
 Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird beim Build
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
-Seitenleiste, z. B. `v0.7.4`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+Seitenleiste, z. B. `v0.8.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+
+## 0.8.0
+
+- **Schneller laufen:** Schritte bis 70 statt 50 mm (Coxa ±20° statt ±14°). Dreifuß in der
+  Standardhaltung 175 statt 125 mm/s, Profil *Sport* (0,3 s, 15 mm Hub) 216 mm/s, Ripple 88 statt
+  62 mm/s, Welle 35 statt 25 mm/s. Bei hohem Fußhub bleibt der Schritt kürzer (25 mm Hub: 50 mm), damit
+  kein Gelenk im Schwung schneller als ca. 550 °/s drehen muss (MG90S: ca. 600 °/s ohne Last).
+- **Lageausgleich viermal so schnell:** 10° Schräglage sind nach ca. 0,7 s statt 3 s ausgeglichen, ohne
+  Überschwingen (Korrektur höchstens 30 °/s). Beim Laufen bewusst ruhiger (reagiert nicht auf jeden Schritt).
+- „WebSocket … fehlgeschlagen (errno 0)“ erscheint nicht mehr – eine schon geschlossene Verbindung (z. B.
+  ein alter Tab) ist kein Fehler.
 
 ## 0.7.4
 

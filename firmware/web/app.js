@@ -1678,10 +1678,10 @@ function renderVersion(s) {
 
 // Haltung + Gang auf einen Klick (alle in der Firmware erreichbar, Tempo bei 100 %)
 const PROFILES = [
-  { id: 'normal', name: 'Normal', hint: 'Standard, 125 mm/s', z: 52, stance: 100, type: 'tripod', swing_s: 0.4, step_height: 15 },
+  { id: 'normal', name: 'Normal', hint: 'Standard, 175 mm/s', z: 52, stance: 100, type: 'tripod', swing_s: 0.4, step_height: 15 },
   { id: 'stable', name: 'Stabil', hint: 'tief und breit, Ripple (immer 4 Beine am Boden)', z: 42, stance: 115, type: 'ripple', swing_s: 0.45, step_height: 12 },
   { id: 'terrain', name: 'Gelände', hint: 'hoch, Fuß 25 mm anheben', z: 70, stance: 100, type: 'tripod', swing_s: 0.5, step_height: 25 },
-  { id: 'sport', name: 'Sport', hint: 'kurze Schritte, bis 167 mm/s', z: 55, stance: 95, type: 'tripod', swing_s: 0.3, step_height: 18 },
+  { id: 'sport', name: 'Sport', hint: 'schnelle Schritte, bis 216 mm/s', z: 55, stance: 95, type: 'tripod', swing_s: 0.3, step_height: 15 },
   { id: 'sneak', name: 'Schleichen', hint: 'Welle, langsam und leise', z: 45, stance: 105, type: 'wave', swing_s: 0.5, step_height: 10 },
 ];
 const PROFILE_MAX_OWN = 4;

@@ -854,7 +854,7 @@ async def kinematics(_):
                    "stance_min": 75, "stance_max": 135, "stance_default": 100,
                    "shift_max": 40, "tilt_max": 20, "yaw_max": 25},
         "gait_limits": {"swing_min": 0.3, "swing_max": 1.2, "swing_default": 0.4, "height_min": 5,
-                        "height_max": 25, "height_default": 15, "stride_max": 50},
+                        "height_max": 25, "height_default": 15, "stride_max": 70},
         "knee_min": 25})
 
 

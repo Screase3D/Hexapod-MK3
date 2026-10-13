@@ -345,7 +345,7 @@ int wsSend(httpd_handle_t, int fd, const char* buf, size_t len, int flags) {
       sent += r;
       continue;
     }
-    const int err = r < 0 ? errno : 0;
+    const int err = r < 0 ? errno : ENOTCONN;  // 0 Bytes: Verbindung ist zu
     const bool again = err == EAGAIN || err == EWOULDBLOCK || err == EINTR;
     g_ws_errno = err;
     if (!again) return HTTPD_SOCK_ERR_FAIL;
@@ -359,7 +359,8 @@ int wsSend(httpd_handle_t, int fd, const char* buf, size_t len, int flags) {
 void logWsSendFailure(const char* what, esp_err_t err) {
   const int e = g_ws_errno;
   g_ws_errno = 0;
-  if (e == ECONNRESET || e == EPIPE || e == ENOTCONN || e == ECONNABORTED || e == EBADF) return;
+  // errno 0: Fehler ohne eigene Sendefunktion (Sitzung schon geschlossen)
+  if (e == 0 || e == ECONNRESET || e == EPIPE || e == ENOTCONN || e == ECONNABORTED || e == EBADF) return;
   static uint32_t last = 0;
   static uint32_t suppressed = 0;
   const uint32_t now = millis();

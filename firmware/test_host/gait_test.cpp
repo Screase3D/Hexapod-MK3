@@ -59,7 +59,7 @@ static gait::Params firmwareParams(gait::Type t) {
   p.type = t;
   p.swing_s = GAIT_LIMITS.swing_default;
   p.step_height = GAIT_LIMITS.height_default;
-  p.max_stride = GAIT_LIMITS.stride_max;
+  p.max_stride = gaitStrideMax(p.step_height);
   return p;
 }
 
@@ -146,6 +146,7 @@ static void testWalking(bool extreme) {
       if (extreme) {
         p.step_height = GAIT_LIMITS.height_max;
         p.swing_s = GAIT_LIMITS.swing_min;
+        p.max_stride = gaitStrideMax(p.step_height);
       }
       gait::Gait g = makeGait(TYPES[ti], n, &p);
       g.setCommand(c.vx, c.vy, c.turn);
@@ -230,7 +231,7 @@ static void testWalking(bool extreme) {
   CHECK(limit_hits == 0);
   CHECK(max_slip < 0.05f);
   if (!extreme) {
-    CHECK(max_jump < 8.0f);  // 400 mm/s bei 50 Hz
+    CHECK(max_jump < 9.0f);  // 450 mm/s bei 50 Hz
     // Standbeine (tragen das Gewicht) bleiben unter der normalen Servo-Rampe,
     // Schwungbeine (unbelastet) unter der Rampe im IK-Betrieb
     CHECK(max_rate_stance < SERVO_SLEW_DEG_PER_S);

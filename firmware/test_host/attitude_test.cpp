@@ -160,6 +160,32 @@ static void testLeveling() {
     CHECK_NEAR(c.rollDeg(), 0.0, 1e-6);
     std::printf("Info: falsche Sensorrichtung nach %.1f s erkannt\n", i * dt);
   }
+  // schnell und ohne Überschwingen: Haltung folgt höchstens mit 45 °/s, Servos und Filter
+  // verzögern zusätzlich (Totzeit 60 ms + 0,15 s); 10° Schräglage wird in 1,5 s ausgeglichen
+  {
+    leveling::Controller c;
+    float roll = 0.0f, pose = 0.0f;  // gemessene Lage, tatsächliche Körperneigung
+    float delayed[3] = {0, 0, 0};
+    const float terrain = 10.0f;
+    float settle_t = -1.0f, overshoot = 0.0f;
+    for (int i = 0; i < 250; ++i) {  // 5 s
+      c.update(dt, true, roll, 0.0f, 0.0f, 0.0f);
+      const float step = 45.0f * dt;  // Haltung folgt mit begrenzter Geschwindigkeit
+      pose += std::fmax(-step, std::fmin(step, c.rollDeg() - pose));
+      roll += dt / 0.15f * (terrain + delayed[0] - roll);
+      delayed[0] = delayed[1];
+      delayed[1] = delayed[2];
+      delayed[2] = pose;
+      if (std::fabs(roll) <= 1.0f && settle_t < 0.0f) settle_t = i * dt;
+      if (std::fabs(roll) > 1.0f) settle_t = -1.0f;
+      if (-roll > overshoot) overshoot = -roll;
+    }
+    CHECK(!c.fault());
+    CHECK(settle_t >= 0.0f && settle_t < 1.5f);
+    CHECK(overshoot < 1.5f);
+    CHECK_NEAR(roll, 0.0, 0.6);
+    std::printf("Info: 10° Schräglage nach %.2f s ausgeglichen, Überschwingen %.2f°\n", settle_t, overshoot);
+  }
   // kleine Abweichungen (Totzone) bewegen nichts
   {
     leveling::Controller c;

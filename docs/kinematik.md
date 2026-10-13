@@ -159,11 +159,11 @@ Neigen gehen dabei auf null. Alle sind erreichbar und zum Laufen geeignet (Tempo
 
 | Profil | Höhe | Fußabstand | Gangart | Schrittdauer | Fußhub | Tempo vorwärts |
 |---|---|---|---|---|---|---|
-| Normal | 52 mm | 100 mm | Dreifuß | 0,4 s | 15 mm | 125 mm/s |
-| Stabil | 42 mm | 115 mm | Ripple | 0,45 s | 12 mm | 56 mm/s |
+| Normal | 52 mm | 100 mm | Dreifuß | 0,4 s | 15 mm | 175 mm/s |
+| Stabil | 42 mm | 115 mm | Ripple | 0,45 s | 12 mm | 78 mm/s |
 | Gelände | 70 mm | 100 mm | Dreifuß | 0,5 s | 25 mm | 100 mm/s |
-| Sport | 55 mm | 95 mm | Dreifuß | 0,3 s | 18 mm | 167 mm/s |
-| Schleichen | 45 mm | 105 mm | Welle | 0,5 s | 10 mm | 20 mm/s |
+| Sport | 55 mm | 95 mm | Dreifuß | 0,3 s | 15 mm | 216 mm/s |
+| Schleichen | 45 mm | 105 mm | Welle | 0,5 s | 10 mm | 28 mm/s |
 
 *+ Merken* speichert die aktuelle Haltung und Gangart als eigenes Profil (bis zu vier, im Browser).
 Das markierte Profil entspricht der aktuellen Einstellung.
@@ -176,9 +176,13 @@ stimmt dessen Kalibrierung (Drehrichtung) oder Montagewinkel nicht.
 
 Schalter **Lageausgleich** in der Karte Körperhaltung: Der Körper bleibt mithilfe des Lagesensors
 waagerecht – bzw. auf der mit *Rollen*/*Nicken* eingestellten Neigung –, auch auf schrägem
-Untergrund ([`leveling.cpp`](../firmware/src/kinematics/leveling.cpp)). Ein langsamer Regler
-(Zeitkonstante ca. 1 s, Totzone 0,5°) addiert je Achse bis zu ±15° zur befohlenen Neigung. Er wirkt
-nur im Stehen und Laufen; beim Aufstehen/Hinsetzen baut sich die Korrektur ab.
+Untergrund ([`leveling.cpp`](../firmware/src/kinematics/leveling.cpp)). Ein Regler addiert je Achse
+bis zu ±15° zur befohlenen Neigung: im Stand mit Zeitkonstante 0,25 s (10° Schräglage sind nach
+ca. 0,7 s ausgeglichen), beim Laufen ruhiger mit ca. 0,7 s, damit er nicht auf jeden Schritt
+reagiert. Die Korrektur ändert sich höchstens um 30 °/s (die Haltung folgt mit 45 °/s; schneller
+würde der Regler vorauslaufen und überschwingen), Totzone 0,5°. Er wirkt nur im Stehen und Laufen;
+beim Aufstehen/Hinsetzen baut sich die Korrektur ab. Der Lagesensor selbst ist schnell: Der
+Komplementärfilter folgt Drehungen sofort über die Drehrate.
 
 Voraussetzung: Einbaulage und Nullpunkt des Lagesensors stimmen (siehe
 [kalibrierung.md](kalibrierung.md#lagesensor)). Dreht der Sensor falsch herum, würde der Regler
@@ -241,14 +245,20 @@ phasengesteuert:
 
 | Gangart | gleichzeitig in der Luft | Zyklus (bei 0,4 s Schrittdauer) | Tempo vorwärts | seitwärts |
 |---|---|---|---|---|
-| Dreifuß (`tripod`) | 3 (vl, hl, mr ↔ ml, vr, hr) | 0,8 s | 125 mm/s | 95 mm/s |
-| Ripple (`ripple`) | 2 (je Seite eins) | 1,2 s | 62 mm/s | 50 mm/s |
-| Welle (`wave`) | 1 | 2,4 s | 25 mm/s | 21 mm/s |
+| Dreifuß (`tripod`) | 3 (vl, hl, mr ↔ ml, vr, hr) | 0,8 s | 175 mm/s | 95 mm/s |
+| Ripple (`ripple`) | 2 (je Seite eins) | 1,2 s | 88 mm/s | 50 mm/s |
+| Welle (`wave`) | 1 | 2,4 s | 35 mm/s | 21 mm/s |
 
 (Höchstwerte bei 100 % Tempo, Standardhaltung, 15 mm Fußhub.) Das Tempo begrenzen zwei Dinge:
 
-1. **Fußweg je Standphase** (50 mm, `GAIT_LIMITS.stride_max`) geteilt durch die Dauer der
-   Standphase. Kürzere Schrittdauer = schneller.
+1. **Fußweg je Standphase** (70 mm, `GAIT_LIMITS.stride_max`) geteilt durch die Dauer der
+   Standphase. Kürzere Schrittdauer = schneller. Ripple und Welle sind dabei grundsätzlich
+   langsamer: Es schwingen weniger Beine gleichzeitig, die Standphase ist zwei- bzw. fünfmal so
+   lang wie der Schwung – der Fuß legt seine 70 mm also in längerer Zeit zurück. Schneller ginge
+   nur mit schnellerem Schwung, und den begrenzen die Servos. Bei hohem Fußhub ist der Schritt
+   kürzer (`gaitStrideMax`: ab 15 mm Hub je mm 2 mm weniger, bei 25 mm 50 mm), weil schon das
+   Anheben viel Gelenkgeschwindigkeit braucht – so bleiben alle Gelenke im Schwung unter ca.
+   550 °/s (MG90S ohne Last ca. 600 °/s).
 2. **Reichweite** ([`gait::minFootRadius`](../firmware/src/kinematics/gait.cpp)): Kommt ein Fuß der
    Coxa-Achse zu nahe, muss das Knie zum Anheben weit einknicken. Die Gangart rechnet deshalb aus
    Körperhöhe, Fußabstand und Fußhub, wie weit ein Fuß nach innen darf, ohne dass der Kniewinkel

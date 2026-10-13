@@ -18,7 +18,11 @@ void Controller::reset() {
 
 void Controller::axis(float dt, float err, float& corr, float& sat_t) {
   float e = std::fabs(err) > cfg_.deadband_deg ? err - std::copysign(cfg_.deadband_deg, err) : 0.0f;
-  corr += cfg_.gain * e * dt;
+  float step = cfg_.gain * e * dt;
+  const float max_step = cfg_.max_rate_deg_s * dt;
+  if (step > max_step) step = max_step;
+  if (step < -max_step) step = -max_step;
+  corr += step;
   if (corr > cfg_.max_deg) corr = cfg_.max_deg;
   if (corr < -cfg_.max_deg) corr = -cfg_.max_deg;
   // Falsche Richtung: Korrektur am Anschlag, Abweichung bleibt groß (richtig

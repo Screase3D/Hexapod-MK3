@@ -98,10 +98,19 @@ constexpr float KNEE_MIN_DEG = 25.0f;
 
 // stride_max begrenzt den Fußweg je Standphase (Tempo geradeaus); quer zum Körper
 // und bei tiefem Körper oder hohem Fußhub begrenzt zusätzlich KNEE_MIN_DEG.
-// Standard 15 mm Hub / 0,4 s: Dreifuß bis 125 mm/s, Gelenke im Schwung unter ca.
-// 300 °/s; kürzeste Schrittdauer 0,3 s, schneller schafft ein MG90S den Schwung
-// nicht (siehe test_host/gait_test.cpp).
-constexpr GaitLimits GAIT_LIMITS = {0.3f, 1.2f, 0.4f, 5.0f, 25.0f, 15.0f, 50.0f};
+// Standardhaltung, 15 mm Hub, 70 mm Schritt: Dreifuß 175 mm/s bei 0,4 s Schwung
+// (Gelenke im Schwung bis ca. 350 °/s), 233 mm/s bei 0,3 s (ca. 410 °/s; MG90S ohne
+// Last ca. 600 °/s). Ripple schafft die Hälfte, Welle ein Fünftel (weniger Beine
+// schwingen gleichzeitig). Kürzeste Schrittdauer 0,3 s (test_host/gait_test.cpp).
+constexpr GaitLimits GAIT_LIMITS = {0.3f, 1.2f, 0.4f, 5.0f, 25.0f, 15.0f, 70.0f};
+
+// Schrittlänge je Fußhub: Ein hoher Hub braucht im Schwung schon viel Gelenk-
+// geschwindigkeit (25 mm in 0,3 s: ca. 560 °/s bei 50 mm Schritt), dort bleibt der
+// Schritt kürzer. Bis 15 mm Hub volle 70 mm, je mm darüber 2 mm weniger (25 mm: 50 mm).
+constexpr float gaitStrideMax(float step_height) {
+  const float s = GAIT_LIMITS.stride_max - 2.0f * (step_height - GAIT_LIMITS.height_default);
+  return s > GAIT_LIMITS.stride_max ? GAIT_LIMITS.stride_max : (s < 50.0f ? 50.0f : s);
+}
 
 // Servo-Rampe, solange die IK die Sollwerte vorgibt: Die Bahnen sind dort schon
 // glatt, eine langsamere Rampe würde die Füße nur hinterherhinken lassen.

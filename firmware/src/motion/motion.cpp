@@ -23,6 +23,9 @@ constexpr float RAD2DEG = 57.2957795f;
 // (Schieber erzeugen viele Änderungen, der Flash soll nicht unnötig altern)
 constexpr uint32_t SAVE_DELAY_MS = 2000;
 constexpr float LEVEL_TILT_MAX = 25.0f;  // Nutzer-Neigung + Lageausgleich zusammen
+// Lageausgleich: im Stand schnell (Zeitkonstante 0,25 s), beim Laufen ruhiger – die Schritte
+// schaukeln den Körper, darauf soll er nicht jedes Mal reagieren
+constexpr float LEVEL_GAIN_STAND = 4.0f, LEVEL_GAIN_WALK = 1.5f;
 // Körper-Joystick: voller Ausschlag verschiebt bzw. neigt den Körper so weit
 constexpr float BODY_SHIFT_MM = 30.0f;
 constexpr float BODY_TILT_DEG = 12.0f;
@@ -116,7 +119,7 @@ gait::Params defaultGait() {
   gait::Params p;
   p.swing_s = GAIT_LIMITS.swing_default;
   p.step_height = GAIT_LIMITS.height_default;
-  p.max_stride = GAIT_LIMITS.stride_max;
+  p.max_stride = gaitStrideMax(p.step_height);
   return p;
 }
 
@@ -330,6 +333,7 @@ void loadSettings() {
   if (b.gait_type < gait::NUM_TYPES) g_gait_params.type = static_cast<gait::Type>(b.gait_type);
   g_gait_params.swing_s = clampf(b.swing_s, G.swing_min, G.swing_max);
   g_gait_params.step_height = clampf(b.step_height, G.height_min, G.height_max);
+  g_gait_params.max_stride = gaitStrideMax(g_gait_params.step_height);
   g_leveling = (b.flags & FLAG_LEVELING) != 0;
   g_alive = (b.flags & FLAG_ALIVE) != 0;
   if (b.slew > 0.0f) servos.setSlewDegPerS(b.slew);
@@ -561,6 +565,7 @@ bool applyGaitJson(JsonVariantConst o, String& err) {
   if (o["step_height"].is<float>()) {
     next.step_height = clampf(o["step_height"], L.height_min, L.height_max);
   }
+  next.max_stride = gaitStrideMax(next.step_height);
 
   portENTER_CRITICAL(&g_mux);
   g_gait_params = next;
@@ -872,6 +877,7 @@ void update(float dt) {
   // die Korrektur langsam ab. Soll-Lage inkl. Geste, damit er nicht dagegen regelt.
   if (!leveling_on) g_level.clearFault();
   const bool level_active = leveling_on && imu.ok() && standing && !po.active;
+  g_level.setGain(g_gait.idle() ? LEVEL_GAIN_STAND : LEVEL_GAIN_WALK);
   g_level.update(dt, level_active, imu.rollDeg(), imu.pitchDeg(), goal.pose.roll_deg + go.roll + al.body.roll,
                  goal.pose.pitch_deg + go.pitch + al.body.pitch);
   goal.pose.roll_deg = clampf(goal.pose.roll_deg + g_level.rollDeg(), -LEVEL_TILT_MAX, LEVEL_TILT_MAX);
