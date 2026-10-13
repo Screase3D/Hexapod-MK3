@@ -31,7 +31,7 @@ constexpr float    SERVO_PWM_HZ = 50.0f;
 // ---------------------------------------------------------------------------
 constexpr int PIN_BATTERY_ADC = 1;   // Spannungsteiler R1 100k / R2 47k
 constexpr int PIN_EYES_LED    = 14;  // 2x WS2812B "Augen" (über 330 Ω)
-constexpr int PIN_BOARD_LED   = 48;  // WS2812 auf dem ESP32-S3-CAM-Board
+constexpr int PIN_BOARD_LED   = 48;  // WS2812 auf dem ESP32-S3-CAM-Board (aus, sobald das WLAN steht)
 constexpr int PIN_BOOT_BUTTON = 0;   // BOOT-Taster (low-aktiv)
 
 // ---------------------------------------------------------------------------

@@ -54,7 +54,8 @@ jobs:
             ../src/sensors/attitude.cpp ../src/kinematics/leveling.cpp -o attitude_test
           ./attitude_test
           g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include moves_test.cpp ../src/kinematics/arms.cpp \
-            ../src/kinematics/gestures.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o moves_test
+            ../src/kinematics/alive.cpp ../src/kinematics/gestures.cpp ../src/kinematics/gait.cpp \
+            ../src/kinematics/kinematics.cpp -o moves_test
           ./moves_test
 
       - name: Firmware bauen

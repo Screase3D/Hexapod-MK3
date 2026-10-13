@@ -113,4 +113,15 @@ PoseCheck checkPose(const LegGeometry& g, const LegMount* mounts, int legs, cons
   return r;
 }
 
+bool footReachable(const LegGeometry& g, const LegMount& m, const BodyPose& pose, const Vec3& foot,
+                   const float* lo, const float* hi, float margin_deg, float knee_min_deg) {
+  JointAngles a;
+  if (!legIk(g, m, bodyToLeg(m, worldToBody(pose, foot)), a)) return false;
+  const float v[3] = {a.coxa, a.femur, a.tibia};
+  for (int j = 0; j < 3; ++j) {
+    if (v[j] < lo[j] + margin_deg || v[j] > hi[j] - margin_deg) return false;
+  }
+  return 90.0f + a.tibia >= knee_min_deg;
+}
+
 }  // namespace kin

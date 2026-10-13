@@ -81,4 +81,10 @@ struct PoseCheck {
 PoseCheck checkPose(const LegGeometry& g, const LegMount* mounts, int legs, const BodyPose& pose,
                     const Vec3* feet, const float* lo, const float* hi);
 
+// Einzelnes Bein: Fußpunkt foot (Welt) bei Körperlage pose erreichbar, alle Gelenke
+// mindestens margin_deg innerhalb von lo/hi (je 3 Werte: Coxa, Femur, Tibia) und
+// Kniewinkel (90° + Tibia) mindestens knee_min_deg?
+bool footReachable(const LegGeometry& g, const LegMount& m, const BodyPose& pose, const Vec3& foot,
+                   const float* lo, const float* hi, float margin_deg, float knee_min_deg);
+
 }  // namespace kin

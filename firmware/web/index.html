@@ -290,10 +290,21 @@
                 </div>
 
                 <div id="arms-settings" hidden>
-                  <label class="check-row"><input id="arms-mirror" type="checkbox"> Beide Vorderbeine folgen dem linken Joystick</label>
+                  <p id="arms-info" class="warn-note small"></p>
+                  <label class="check-row"><input id="arms-mirror" type="checkbox"> Gespiegelt: links bewegt beide Beine, rechts ↕ streckt sie aus</label>
                   <p class="muted small">Heben: Er verlagert das Gewicht nach hinten, setzt die Mittelbeine vor und hebt
-                    dann die Vorderbeine. Joysticks: ↑ hoch / ↓ runter, → vor / ← zurück, je ein Joystick pro Bein.
+                    dann die Vorderbeine. Je ein Joystick pro Bein, der Fuß folgt der Richtung: ↑ hoch / ↓ runter,
+                    ← → schwenken (nach vorne bzw. zur Seite). Er geht so weit, wie das Bein reicht.
                     Laufen geht erst wieder nach dem Absetzen.</p>
+                </div>
+
+                <div class="level-row">
+                  <label class="switch" title="Im Stand ab und zu kleine zufällige Bewegungen: umschauen, Gewicht verlagern, ein Bein kurz heben …">
+                    <input id="alive-on" type="checkbox">
+                    <span class="slider"></span>
+                    <span class="switch-label">Lebendig</span>
+                  </label>
+                  <span id="alive-info" class="muted small"></span>
                 </div>
               </div>
 

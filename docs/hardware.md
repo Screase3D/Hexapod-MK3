@@ -26,7 +26,7 @@ Alle Pins stehen zentral in [`firmware/include/config.h`](../firmware/include/co
 | 21 | I²C SCL | |
 | 1 | Akkuspannung (ADC1_CH0) | Teiler R1 100 kΩ / R2 47 kΩ, 100 nF → Faktor 3,128 |
 | 14 | WS2812B-Augen (Daten) | RMT |
-| 48 | WS2812 auf dem Board | Statusanzeige parallel zu den Augen |
+| 48 | WS2812 auf dem Board | Statusanzeige nur beim Start und Verbinden mit dem WLAN, danach aus (sitzt vor der Kamera) |
 | 0 | BOOT-Taster | derzeit ungenutzt |
 | 4 / 5 | Kamera SCCB SDA / SCL | eigener I²C-Port 1 |
 | 15 | Kamera XCLK | 20 MHz |

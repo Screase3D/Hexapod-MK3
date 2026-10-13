@@ -39,6 +39,7 @@ state = {
     "arms_seq": [("down", 0)], "arms_t": 0.0,
     "gesture": None, "gesture_t": 0.0,
     "body": [0.0] * 5, "body_t": 0.0,
+    "alive": False,
     # Lagesensor (wie imu.cpp) und Lageausgleich (wie motion.cpp)
     "imu_mount": "vorne", "imu_flip": False, "imu_level": [0.0, 0.0],
     "imu_cal": None, "imu_cal_t": 0.0, "imu_cal_level": False, "imu_cal_msg": "",
@@ -208,9 +209,23 @@ def gait_status():
     return g
 
 
+ALIVE_ACTS = ["look", "shift", "lift", "tilt", "tap", "shuffle"]
+
+
+def alive_tel(g):
+    # wie alive.cpp (vereinfacht): im Stillstand alle 6 s eine Aktion von 2,5 s
+    a = {"on": state["alive"]}
+    t = time.time()
+    if (state["alive"] and state["mode"] == "pose" and posture() == "standing" and arms() == "down"
+            and not gesture() and not g["walking"] and t % 6 < 2.5):
+        a["act"] = ALIVE_ACTS[int(t // 6) % len(ALIVE_ACTS)]
+    return a
+
+
 def motion_tel():
-    m = {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "gait": gait_status(),
-         "level": level_tel(time.time()), "arms": arms(), "unreachable": [], "clamped": []}
+    g = gait_status()
+    m = {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "gait": g,
+         "level": level_tel(time.time()), "arms": arms(), "alive": alive_tel(g), "unreachable": [], "clamped": []}
     if gesture():
         m["gesture"] = gesture()
     body_on = time.time() - state["body_t"] < 0.6 and any(abs(v) > 1e-3 for v in state["body"])
@@ -389,6 +404,9 @@ def handle(cmd):
             state["gait"]["type"] = cmd["type"]
         if "swing_s" in cmd:
             state["gait"]["swing_s"] = max(0.3, min(1.2, float(cmd["swing_s"])))
+    elif c == "alive":
+        state["alive"] = bool(cmd.get("on"))
+        out["msg"] = "Lebendig an" if state["alive"] else "Lebendig aus"
     elif c == "leveling":
         state["leveling"] = bool(cmd.get("on"))
         out["msg"] = "Lageausgleich an" if state["leveling"] else "Lageausgleich aus"

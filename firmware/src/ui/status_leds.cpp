@@ -23,11 +23,10 @@ void StatusLeds::begin() {
 
 void StatusLeds::writeEyes(uint8_t r, uint8_t g, uint8_t b) {
   uint32_t rgb = (uint32_t)r << 16 | (uint32_t)g << 8 | b;
+  // Board-LED nur, solange das Netz noch nicht steht (sie blendet die Kamera)
+  writeBoard(mode_ == Mode::Boot || mode_ == Mode::WifiConnect ? rgb : 0);
   if (rgb == last_rgb_) return;
   last_rgb_ = rgb;
-
-  // Board-LED (eine WS2812) über die Core-Funktion
-  rgbLedWrite(PIN_BOARD_LED, r, g, b);
 
   if (!ok_) return;
   rmt_data_t data[EYE_COUNT * 24];
@@ -46,6 +45,12 @@ void StatusLeds::writeEyes(uint8_t r, uint8_t g, uint8_t b) {
     }
   }
   rmtWrite(PIN_EYES_LED, data, RMT_SYMBOLS_OF(data), 10);
+}
+
+void StatusLeds::writeBoard(uint32_t rgb) {
+  if (rgb == last_board_) return;
+  last_board_ = rgb;
+  rgbLedWrite(PIN_BOARD_LED, rgb >> 16 & 0xFF, rgb >> 8 & 0xFF, rgb & 0xFF);  // eine WS2812, Core-Funktion
 }
 
 void StatusLeds::update() {

@@ -14,7 +14,8 @@ später erweitert um KI-Funktionen mit der Kamera.
 | 1 | Grundgerüst: WLAN, Webserver, Kamerastream (mit Drehung), Servotreiber, **Servo-Kalibrierung**, manuelle Servosteuerung, I²C-Scan, Akku-/Sicherheitsfunktionen, CI-Build | ✅ läuft auf der Hardware |
 | 2 | Kinematik: inverse Kinematik je Bein, Körperhaltung (Höhe, Fußabstand, Verschieben, Rollen/Nicken/Gieren) | ✅ läuft am Roboter, Beinmaße aus dem CAD ([Zeichnung](docs/beingeometrie.png), [docs/kinematik.md](docs/kinematik.md)), inklusive Aufstehen/Hinsetzen; Haltung wird gespeichert, unerreichbare Haltungen werden begrenzt und gemeldet |
 | 3 | Gangarten (Dreifuß, Ripple, Welle) mit weichen Fußbahnen, Touch-Joysticks und Tastatur in der UI, Verbindungs-Watchdog | ✅ läuft am Roboter; jetzt mit richtungsabhängiger Reichweitengrenze, bis 125 mm/s und mitwachsender Schrittdauer beim langsamen Laufen ([docs/kinematik.md](docs/kinematik.md#laufen)) – noch nicht am Roboter getestet |
-| 3b | Körper-Joystick (Schwerpunkt verlagern, neigen), Gesten (Kreisen, Ja, Nein, Liegestütz, Tanzen), **Vorderbeine** heben und steuern, Winken | 🟡 implementiert und auf dem PC getestet (Standsicherheit durchgerechnet) – noch nicht am Roboter |
+| 3b | Körper-Joystick (Schwerpunkt verlagern, neigen), Gesten (Kreisen, Ja, Nein, Liegestütz, Tanzen), **Vorderbeine** heben und steuern, Winken | ✅ läuft am Roboter; Vorderbeine jetzt mit großem, IK-geprüftem Arbeitsraum (schwenken, 15–160 mm hoch, ausstrecken) – noch nicht am Roboter getestet |
+| 3c | **Lebendig**: im Stand ab und zu kleine zufällige Bewegungen (umschauen, Gewicht verlagern, Bein heben, tippen, Füße neu setzen, atmen) | 🟡 implementiert und auf dem PC getestet – noch nicht am Roboter |
 | 4 | Lagesensor-Kalibrierung (Einbaulage, Nullpunkt, Gyro) und **Lageausgleich** (Körper waagerecht halten); Geländeanpassung | 🟡 Lageausgleich implementiert und auf dem PC getestet – noch nicht am Roboter; Geländeanpassung geplant |
 | 5 | Kamera/KI: Objekterkennung (auf dem ESP32-S3 oder am PC über den Stream), Folgen, OTA-Updates | Ideen |
 
@@ -189,7 +190,7 @@ oben rechts. Jede Seite hat eine eigene Adresse, z. B. `http://hexapod.local/#ka
 
 | Seite | Inhalt |
 |---|---|
-| **Steuerung** | Kamerastream (Vollbild, Lage als künstlicher Horizont im Bild, Kameraeinstellungen über ⚙), Karte *Bewegung* mit drei Modi für die Joysticks: *Laufen* (bzw. W/A/S/D/Q/E, R/F: Höhe), *Körper* (verschieben/neigen, Gesten) und *Vorderbeine* (heben, steuern, winken); Aufstehen/Hinsetzen, Körperhaltung (IK) mit Lageausgleich und Hinweisen bei unerreichbarer Haltung, Lage mit Nullpunkt, Torque |
+| **Steuerung** | Kamerastream (Vollbild, Lage als künstlicher Horizont im Bild, Kameraeinstellungen über ⚙), Karte *Bewegung* mit drei Modi für die Joysticks: *Laufen* (bzw. W/A/S/D/Q/E, R/F: Höhe), *Körper* (verschieben/neigen, Gesten) und *Vorderbeine* (heben, steuern, winken), Schalter *Lebendig*; Aufstehen/Hinsetzen, Körperhaltung (IK) mit Lageausgleich und Hinweisen bei unerreichbarer Haltung, Lage mit Nullpunkt, Torque |
 | **Kalibrierung & Justierung** | *Kalibrieren*: Servo für Servo (Rohmodus, Montagestellung, Referenz, Grenzen, Test); *Justieren*: alle 18 Gelenke auf einen Blick; Speichern, Export/Import |
 | **Systemübersicht** | Kennzahlen (Akku, WLAN, Regelung, Kamera, Speicher, Laufzeit), Komponenten, I²C-Scan, Neustart |
 | **Einstellungen** | WLAN, Servo-Stellgeschwindigkeit, Lagesensor (Einbaulage, Nullpunkt, Gyro), Akkuüberwachung, Farbschema (automatisch/dunkel/hell), Tastenkürzel |

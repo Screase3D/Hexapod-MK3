@@ -49,20 +49,25 @@ void body(float x, float y, float roll, float pitch, float yaw);
 
 // Vorderbeine: heben (Gewicht nach hinten, Mittelbeine vor, Vorderbeine hoch) bzw.
 // absetzen. Heben nur im Stehen und Stillstand; solange sie oben sind, wird
-// nicht gelaufen. armControl: je Vorderfuß vor(+)/zurück und hoch(+)/runter,
-// normiert -1..1, federt ohne neue Befehle in die Bereitstellung zurück.
+// nicht gelaufen. armControl: je Vorderfuß schwenken (+ = nach innen/vorne) und
+// hoch(+)/runter, reach = beide weiter weg (+)/heran; normiert -1..1, federt ohne
+// neue Befehle in die Bereitstellung zurück. Der Fuß geht so weit, wie das Bein reicht.
 bool setArms(bool up, String& err);
-void armControl(float lx, float lz, float rx, float rz);
+void armControl(float lx, float lz, float rx, float rz, float reach = 0.0f);
 bool wave(String& err);  // rechtes Vorderbein winkt (nur wenn oben)
 
 // Gesten im Stand: "circle", "nod", "shake", "pushup", "dance"; "stop" beendet
 bool gesture(const char* name, String& err);
 
+// "Lebendig": im Stand ab und zu kleine zufällige Bewegungen (umschauen, Gewicht
+// verlagern, ein Bein kurz heben, ...). Jederzeit an/aus, wird gespeichert.
+void setAlive(bool on);
+
 // Lageausgleich: hält den Körper mit dem Lagesensor waagerecht (bzw. auf der
 // eingestellten Neigung). Schaltet sich bei falscher Sensorrichtung selbst ab.
 void setLeveling(bool on);
 
-// Haltung, Gang, Lageausgleich und Stellgeschwindigkeit werden gespeichert und
+// Haltung, Gang, Lageausgleich, Lebendig und Stellgeschwindigkeit werden gespeichert und
 // beim Start wiederhergestellt. notifySettingsChanged() z. B. nach "slew";
 // loop() (aus loop(), nicht dem Regel-Task) schreibt verzögert ins NVS.
 void notifySettingsChanged();

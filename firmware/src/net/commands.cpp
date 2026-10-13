@@ -61,7 +61,7 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     return;
   }
   if (strcmp(cmd, "arm") == 0) {  // Vorderfüße steuern, ohne Antwort
-    motion::armControl(in["lx"] | 0.0f, in["lz"] | 0.0f, in["rx"] | 0.0f, in["rz"] | 0.0f);
+    motion::armControl(in["lx"] | 0.0f, in["lz"] | 0.0f, in["rx"] | 0.0f, in["rz"] | 0.0f, in["reach"] | 0.0f);
     return;
   }
 
@@ -123,6 +123,10 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     result(out, motion::wave(err), err);
   } else if (strcmp(cmd, "gesture") == 0) {
     result(out, motion::gesture(in["name"] | "", err), err);
+  } else if (strcmp(cmd, "alive") == 0) {
+    bool on = in["on"] | false;
+    motion::setAlive(on);
+    result(out, true, on ? "Lebendig an" : "Lebendig aus");
   } else if (strcmp(cmd, "leveling") == 0) {
     bool on = in["on"] | false;
     motion::setLeveling(on);

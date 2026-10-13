@@ -48,7 +48,7 @@ Fehler: HTTP 4xx/5xx mit `{"ok":false,"msg":"…"}`.
 
 Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantwortet. Die Befehle
 `servo_us`, `servo_deg`, `all_us`, `all_deg` und `all_assembly` schalten den Pose-Modus ab.
-`pose`, `pose_reset`, `gait`, `leveling` und `slew` werden gespeichert (NVS, 2 s nach der letzten
+`pose`, `pose_reset`, `gait`, `leveling`, `alive` und `slew` werden gespeichert (NVS, 2 s nach der letzten
 Änderung) und gelten nach einem Neustart weiter.
 
 | `cmd` | Parameter | Wirkung |
@@ -67,7 +67,8 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `body` | `x`, `y`, `roll`, `pitch`, `yaw` (je −1…1) | Körper-Joystick: Körper verschieben (±30 mm) und neigen (±12°, Gieren ±15°), Füße bleiben stehen. **Ohne Antwort**, wie `walk` etwa alle 100 ms senden; ohne neuen Befehl federt der Körper nach 0,6 s zurück |
 | `gesture` | `name`: `circle`/`nod`/`shake`/`pushup`/`dance`/`stop` | Geste abspielen bzw. weich beenden (nur im Stand, Vorderbeine unten), siehe [kinematik.md](kinematik.md#körper-bewegen-und-gesten) |
 | `arms` | `up` (bool) | Vorderbeine heben (Gewicht nach hinten, dann heben; nur im Stillstand) bzw. absetzen, siehe [kinematik.md](kinematik.md#vorderbeine) |
-| `arm` | `lx`, `lz`, `rx`, `rz` (je −1…1) | Vorderfüße steuern (x = vor, z = hoch; l = Bein 1, r = Bein 4), nur wenn oben. **Ohne Antwort**, etwa alle 100 ms senden; ohne Befehl kehren sie nach 0,6 s in die Bereitstellung zurück |
+| `arm` | `lx`, `lz`, `rx`, `rz`, `reach`? (je −1…1) | Vorderfüße steuern (l = Bein 1, r = Bein 4): x = um die Coxa schwenken, + = nach innen/vorne; z = hoch (+)/runter; `reach` = beide weiter weg (+)/heran. Nur wenn oben; der Fuß geht so weit, wie das Bein reicht. **Ohne Antwort**, etwa alle 100 ms senden; ohne Befehl kehren sie nach 0,6 s in die Bereitstellung zurück |
+| `alive` | `on` (bool) | „Lebendig“: im Stand ab und zu kleine zufällige Bewegungen, siehe [kinematik.md](kinematik.md#lebendig); wird gespeichert |
 | `wave` | – | rechtes Vorderbein winkt (nur wenn oben) |
 | `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wirkt im Stillstand |
 | `leveling` | `on` (bool) | Lageausgleich an/aus, siehe [kinematik.md](kinematik.md#lageausgleich) |
@@ -110,6 +111,7 @@ Beispiel:
   "motion": {"mode": "pose", "posture": "standing", "pose": {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0,
              "stance": 100},
              "level": {"on": true, "active": true, "roll": -3.2, "pitch": 1.1},
+             "alive": {"on": true, "act": "look"},
              "gait": {"type": "tripod", "swing_s": 0.4, "step_height": 15, "active": "tripod",
                       "walking": true, "swing": 21, "vx": 100, "vy": 0, "wz": 0,
                       "max_speed": 125, "max_side": 95, "max_turn": 39, "nominal": 125, "cadence": 1.0},
@@ -135,8 +137,9 @@ bzw. seitwärts bzw. Drehen auf der Stelle, mit Reichweitengrenze), `nominal` = 
 Reichweitengrenze (ist `max_speed` deutlich kleiner, schränkt die Haltung das Laufen ein),
 `cadence` = aktuelle Schrittdauer / eingestellte (1–2, langsam = längere Schritte). `motion.arms`:
 `down`, `shift_back`, `raise`, `up`, `lower`, `shift_forward`; `motion.gesture` nur während einer
-Geste; `motion.body` solange der Körper-Joystick wirkt, `offset_limited` wenn er an der
-Reichweitengrenze ist. `motion.level`: Lageausgleich `on`, `active`
+Geste; `motion.body` solange der Körper-Joystick wirkt, `offset_limited` wenn er bzw. ein Vorderbein an
+der Reichweitengrenze ist. `motion.alive`: Einstellung `on`, `act` = laufende Aktion (`look`, `shift`,
+`tilt`, `lift`, `tap`, `shuffle`). `motion.level`: Lageausgleich `on`, `active`
 (wirkt gerade), aktuelle Korrektur `roll`/`pitch` in Grad, `fault: true` = wegen falscher
 Sensorrichtung abgeschaltet. `imu`: `pitch`/`roll` nach Abzug des Nullpunkts `level`
 ([Roll, Nick] der schief eingebauten Platine), `acc` im Körpersystem, `mount`/`flip` =

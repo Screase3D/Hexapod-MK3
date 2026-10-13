@@ -4,6 +4,7 @@
 #include <freertos/FreeRTOS.h>
 
 #include "config.h"
+#include "kinematics/alive.h"
 #include "kinematics/arms.h"
 #include "kinematics/gait.h"
 #include "kinematics/gestures.h"
@@ -61,7 +62,7 @@ struct GaitStatus {
 } g_status = {};
 float g_body_cmd[5] = {0, 0, 0, 0, 0};  // Körper-Joystick: x, y, roll, pitch, yaw (normiert)
 uint32_t g_body_ms = 0;
-float g_arm_cmd[4] = {0, 0, 0, 0};      // Vorderfüße: lx, lz, rx, rz (normiert)
+float g_arm_cmd[5] = {0, 0, 0, 0, 0};   // Vorderfüße: lx, lz, rx, rz, reach (normiert)
 uint32_t g_arm_ms = 0;
 uint8_t g_req_arms = 0;                 // 1 = heben, 2 = absetzen
 bool g_req_wave = false;
@@ -71,6 +72,8 @@ arms::State g_arms_state = arms::State::Down;   // für Telemetrie und Befehlspr
 gestures::Type g_gesture = gestures::Type::None;
 bool g_offset_limited = false;          // Körper-Joystick/Vorderbeine an der Reichweitengrenze
 bool g_body_active = false;
+bool g_alive = false;                   // "Lebendig" eingeschaltet
+alive::Action g_alive_act = alive::Action::None;
 
 // --- nur im Regel-Task ---
 PoseState g_current;
@@ -80,9 +83,20 @@ bool g_settling = false;  // Übergang in die IK-Haltung läuft noch (normale Ra
 leveling::Controller g_level;
 arms::Controller g_arms;
 gestures::Player g_gest;
+alive::Animator g_anim{LEG_MOUNTS};
 bool g_pending_sit = false;   // Hinsetzen, sobald die Vorderbeine unten sind
 float g_lo[NUM_SERVOS], g_hi[NUM_SERVOS];
 uint32_t g_limits_ms = 0;
+kin::BodyPose g_ik_pose = {0, 0, POSE_LIMITS.height_default, 0, 0, 0};  // Körperlage der letzten IK
+
+// Vorderbeine: Fußpunkt erreichbar (mit Abstand zu den Gelenkgrenzen)?
+constexpr float ARM_MARGIN_DEG = 3.0f;
+constexpr int FRONT_LEGS[2] = {0, 3};
+bool armReachable(void*, int k, const kin::Vec3& foot) {
+  const int leg = FRONT_LEGS[k];
+  return kin::footReachable(LEG_GEOMETRY, LEG_MOUNTS[leg], g_ik_pose, foot, &g_lo[leg * 3], &g_hi[leg * 3],
+                            ARM_MARGIN_DEG, KNEE_MIN_DEG);
+}
 
 PoseState defaults() {
   PoseState s;
@@ -169,6 +183,43 @@ PoseState lerpState(const PoseState& a, const PoseState& b, float t) {
   return r;
 }
 
+// "Lebendig"-Versatz mit Anteil k zu Körperlage und Füßen addieren
+void addAlive(kin::BodyPose& p, kin::Vec3 feet[NUM_LEGS], const alive::Output& al, float k) {
+  p.x += al.body.x * k;
+  p.y += al.body.y * k;
+  p.z += al.body.z * k;
+  p.roll_deg += al.body.roll * k;
+  p.pitch_deg += al.body.pitch * k;
+  p.yaw_deg += al.body.yaw * k;
+  for (int leg = 0; leg < NUM_LEGS; ++leg) {
+    feet[leg].x += al.foot[leg].x * k;
+    feet[leg].y += al.foot[leg].y * k;
+    feet[leg].z += al.foot[leg].z * k;
+  }
+}
+
+// ... und zwar so viel davon, wie erreichbar ist (Haltung nahe an den Grenzen)
+void applyAlive(kin::BodyPose& pose, kin::Vec3 feet[NUM_LEGS], const alive::Output& al) {
+  auto ok = [&](float k) {
+    kin::BodyPose p = pose;
+    kin::Vec3 f[NUM_LEGS];
+    for (int leg = 0; leg < NUM_LEGS; ++leg) f[leg] = feet[leg];
+    addAlive(p, f, al, k);
+    return kin::checkPose(LEG_GEOMETRY, LEG_MOUNTS, NUM_LEGS, p, f, g_lo, g_hi).ok();
+  };
+  float k = 1.0f;
+  if (!ok(1.0f)) {
+    float k_bad = 1.0f;
+    k = 0.0f;
+    for (int i = 0; i < 8; ++i) {
+      float mid = 0.5f * (k + k_bad);
+      if (ok(mid)) k = mid;
+      else k_bad = mid;
+    }
+  }
+  addAlive(pose, feet, al, k);
+}
+
 // Größter Anteil t (0..1) des Wegs von a (zulässig) nach b, der zulässig bleibt
 float feasibleFraction(const PoseState& a, const PoseState& b, float mid_dx, const float* lo, const float* hi) {
   if (checkState(b, mid_dx, lo, hi).ok()) return 1.0f;
@@ -239,12 +290,13 @@ constexpr const char* NVS_NAMESPACE = "hexapod";
 constexpr const char* NVS_KEY = "motion";
 constexpr uint32_t BLOB_MAGIC = 0x48584D31;  // "HXM1"
 constexpr uint16_t BLOB_VERSION = 1;
+constexpr uint8_t FLAG_LEVELING = 1, FLAG_ALIVE = 2;
 
 struct SettingsBlob {
   uint32_t magic;
   uint16_t version;
   uint8_t gait_type;
-  uint8_t leveling;
+  uint8_t flags;  // Bit 0: Lageausgleich, Bit 1: Lebendig (frühere Fassung: nur Lageausgleich 0/1)
   float x, y, z, roll, pitch, yaw, stance;
   float swing_s, step_height;
   float slew;
@@ -278,7 +330,8 @@ void loadSettings() {
   if (b.gait_type < gait::NUM_TYPES) g_gait_params.type = static_cast<gait::Type>(b.gait_type);
   g_gait_params.swing_s = clampf(b.swing_s, G.swing_min, G.swing_max);
   g_gait_params.step_height = clampf(b.step_height, G.height_min, G.height_max);
-  g_leveling = b.leveling != 0;
+  g_leveling = (b.flags & FLAG_LEVELING) != 0;
+  g_alive = (b.flags & FLAG_ALIVE) != 0;
   if (b.slew > 0.0f) servos.setSlewDegPerS(b.slew);
 }
 
@@ -287,12 +340,13 @@ void saveSettings() {
   PoseState t = g_target;
   gait::Params gp = g_gait_params;
   bool lvl = g_leveling;
+  bool alv = g_alive;
   portEXIT_CRITICAL(&g_mux);
   SettingsBlob b = {};
   b.magic = BLOB_MAGIC;
   b.version = BLOB_VERSION;
   b.gait_type = static_cast<uint8_t>(gp.type);
-  b.leveling = lvl ? 1 : 0;
+  b.flags = (lvl ? FLAG_LEVELING : 0) | (alv ? FLAG_ALIVE : 0);
   b.x = t.pose.x;
   b.y = t.pose.y;
   b.z = t.pose.z;
@@ -315,7 +369,8 @@ void begin() {
   g_target = defaults();
   g_current = sitState();
   g_gait_params = defaultGait();
-  loadSettings();  // zuletzt eingestellte Haltung, Gang, Lageausgleich, Stellgeschwindigkeit
+  loadSettings();  // zuletzt eingestellte Haltung, Gang, Lageausgleich, Lebendig, Stellgeschwindigkeit
+  g_anim.seed(esp_random());
   g_gait.setParams(g_gait_params);
   kin::Vec3 n[NUM_LEGS];
   neutralFeet(g_current.stance, n);
@@ -411,6 +466,13 @@ bool applyPoseJson(JsonVariantConst o, String& note) {
 void resetPose() {
   portENTER_CRITICAL(&g_mux);
   g_target = defaults();
+  markDirty();
+  portEXIT_CRITICAL(&g_mux);
+}
+
+void setAlive(bool on) {
+  portENTER_CRITICAL(&g_mux);
+  g_alive = on;
   markDirty();
   portEXIT_CRITICAL(&g_mux);
 }
@@ -578,12 +640,13 @@ bool setArms(bool up, String& err) {
   return true;
 }
 
-void armControl(float lx, float lz, float rx, float rz) {
+void armControl(float lx, float lz, float rx, float rz, float reach) {
   portENTER_CRITICAL(&g_mux);
   g_arm_cmd[0] = clampf(lx, -1.0f, 1.0f);
   g_arm_cmd[1] = clampf(lz, -1.0f, 1.0f);
   g_arm_cmd[2] = clampf(rx, -1.0f, 1.0f);
   g_arm_cmd[3] = clampf(rz, -1.0f, 1.0f);
+  g_arm_cmd[4] = clampf(reach, -1.0f, 1.0f);
   g_arm_ms = millis();
   portEXIT_CRITICAL(&g_mux);
 }
@@ -638,6 +701,7 @@ void update(float dt) {
   bool req_stand = g_req_stand;
   bool req_sit = g_req_sit;
   bool leveling_on = g_leveling && !g_level_fault;
+  bool alive_on = g_alive;
   g_enter_pose = g_leave_pose = g_req_stand = g_req_sit = false;
   gait::Params gp = g_gait_params;
   float cmd[3] = {g_walk_cmd[0], g_walk_cmd[1], g_walk_cmd[2]};
@@ -645,7 +709,8 @@ void update(float dt) {
   float body_cmd[5];
   for (int i = 0; i < 5; ++i) body_cmd[i] = g_body_cmd[i];
   uint32_t body_ms = g_body_ms;
-  float arm_cmd[4] = {g_arm_cmd[0], g_arm_cmd[1], g_arm_cmd[2], g_arm_cmd[3]};
+  float arm_cmd[5];
+  for (int i = 0; i < 5; ++i) arm_cmd[i] = g_arm_cmd[i];
   uint32_t arm_ms = g_arm_ms;
   uint8_t req_arms = g_req_arms;
   bool req_wave = g_req_wave;
@@ -660,6 +725,7 @@ void update(float dt) {
     servos.setSlewFloor(0.0f);
     g_arms.reset();
     g_gest.reset();
+    g_anim.reset();
   }
   if (m != Mode::Pose) return;
 
@@ -684,6 +750,7 @@ void update(float dt) {
     g_gait.reset(neutral);
     g_arms.reset();
     g_gest.reset();
+    g_anim.reset();
     g_pending_sit = false;
     servos.setSlewFloor(0.0f);
     g_settling = true;
@@ -720,7 +787,7 @@ void update(float dt) {
   if (req_wave) g_arms.wave();
   const bool arm_fresh = now - arm_ms < WALK_TIMEOUT_MS;
   g_arms.setControl(arm_fresh ? arm_cmd[0] : 0.0f, arm_fresh ? arm_cmd[1] : 0.0f,
-                    arm_fresh ? arm_cmd[2] : 0.0f, arm_fresh ? arm_cmd[3] : 0.0f);
+                    arm_fresh ? arm_cmd[2] : 0.0f, arm_fresh ? arm_cmd[3] : 0.0f, arm_fresh ? arm_cmd[4] : 0.0f);
 
   // Sicherheit: ohne frische Befehle, Torque oder bei Not-Aus nicht laufen;
   // laufen nur im Stehen und mit abgesetzten Vorderbeinen
@@ -746,7 +813,14 @@ void update(float dt) {
 
   // Körper-Joystick (federt ohne neue Befehle zurück) und Gewichtsverlagerung der
   // Vorderbeine; was die Beine nicht erreichen, wird zurückgenommen
-  const arms::Output ao = g_arms.update(dt, g_gait.idle());
+  arms::Frame af;
+  neutralFeet(g_current.stance, neutral);
+  for (int k = 0; k < 2; ++k) {
+    af.coxa[k] = kin::coxaWorld(g_ik_pose, LEG_MOUNTS[FRONT_LEGS[k]]);
+    af.ground[k] = neutral[FRONT_LEGS[k]];
+  }
+  af.reachable = armReachable;
+  const arms::Output ao = g_arms.update(dt, g_gait.idle(), af);
   const bool body_fresh = standing && !po.active && now - body_ms < WALK_TIMEOUT_MS;
   bool offset_limited = false;
   if (!po.active) {
@@ -771,12 +845,17 @@ void update(float dt) {
   // Gesten: Versatz kommt nach der Geschwindigkeitsbegrenzung (schon weich)
   const gestures::Offset go = g_gest.update(dt);
 
+  // "Lebendig": kleine Bewegungen, nur wenn er still steht und sonst nichts läuft
+  const bool alive_allowed = standing && !po.active && g_gait.idle() && !walk_cmd && !g_arms.active() &&
+                             g_gest.active() == gestures::Type::None && !body_fresh;
+  const alive::Output al = g_anim.update(dt, alive_on, alive_allowed);
+
   // Lageausgleich: nur im Stehen/Laufen, mit gültigem Lagesensor. Sonst baut sich
   // die Korrektur langsam ab. Soll-Lage inkl. Geste, damit er nicht dagegen regelt.
   if (!leveling_on) g_level.clearFault();
   const bool level_active = leveling_on && imu.ok() && standing && !po.active;
-  g_level.update(dt, level_active, imu.rollDeg(), imu.pitchDeg(), goal.pose.roll_deg + go.roll,
-                 goal.pose.pitch_deg + go.pitch);
+  g_level.update(dt, level_active, imu.rollDeg(), imu.pitchDeg(), goal.pose.roll_deg + go.roll + al.body.roll,
+                 goal.pose.pitch_deg + go.pitch + al.body.pitch);
   goal.pose.roll_deg = clampf(goal.pose.roll_deg + g_level.rollDeg(), -LEVEL_TILT_MAX, LEVEL_TILT_MAX);
   goal.pose.pitch_deg = clampf(goal.pose.pitch_deg + g_level.pitchDeg(), -LEVEL_TILT_MAX, LEVEL_TILT_MAX);
 
@@ -814,17 +893,19 @@ void update(float dt) {
   kin::Vec3 feet[NUM_LEGS];
   for (int leg = 0; leg < NUM_LEGS; ++leg) feet[leg] = g_gait.foot(leg);
   if (ao.blend > 0.0f) {
-    const int front[2] = {0, 3};
     for (int k = 0; k < 2; ++k) {
-      kin::Vec3& f = feet[front[k]];
-      const kin::Vec3& n = neutral[front[k]];
-      const kin::Vec3 a = {n.x + ao.foot[k].x, n.y + ao.foot[k].y, ao.foot[k].z};
+      kin::Vec3& f = feet[FRONT_LEGS[k]];
+      const kin::Vec3& a = ao.foot[k];
       f = {f.x + (a.x - f.x) * ao.blend, f.y + (a.y - f.y) * ao.blend, f.z + (a.z - f.z) * ao.blend};
     }
   }
 
+  // "Lebendig" zuletzt dazu – so weit, wie die Beine es in dieser Haltung erlauben
+  if (!g_anim.silent()) applyAlive(pose, feet, al);
+
   // Gelenkwinkel aller Beine per IK; unerreichbare Beine behalten ihre Werte
   uint8_t unreachable = solveIk(pose, feet, g_angles);
+  g_ik_pose = pose;
   uint32_t clamped = servos.setAnglesDeg(g_angles);
 
   GaitStatus st;
@@ -847,8 +928,9 @@ void update(float dt) {
   g_posture = g_seq.state();
   g_arms_state = g_arms.state();
   g_gesture = g_gest.active();
-  g_offset_limited = offset_limited;
+  g_offset_limited = offset_limited || g_arms.limited();
   g_body_active = body_fresh;
+  g_alive_act = g_anim.action();
   g_level_active = level_active;
   g_level_corr[0] = g_level.rollDeg();
   g_level_corr[1] = g_level.pitchDeg();
@@ -875,6 +957,8 @@ void toJson(JsonObject obj) {
   arms::State arms_state = g_arms_state;
   gestures::Type gest = g_gesture;
   bool offset_limited = g_offset_limited, body_active = g_body_active;
+  bool alive_on = g_alive;
+  alive::Action alive_act = g_alive_act;
   portEXIT_CRITICAL(&g_mux);
 
   obj["mode"] = m == Mode::Pose ? "pose" : "manual";
@@ -894,6 +978,10 @@ void toJson(JsonObject obj) {
   lv["roll"] = roundf(lvl_r * 10.0f) / 10.0f;
   lv["pitch"] = roundf(lvl_p * 10.0f) / 10.0f;
   if (lvl_fault) lv["fault"] = true;
+
+  JsonObject al = obj["alive"].to<JsonObject>();
+  al["on"] = alive_on;
+  if (alive_act != alive::Action::None) al["act"] = alive::actionName(alive_act);
 
   JsonObject g = obj["gait"].to<JsonObject>();
   g["type"] = gait::typeName(gp.type);  // gewählt (wirkt im Stillstand)

@@ -662,7 +662,16 @@ const MOVE_LABELS = {
   walk: ['Fahren', '↶ Drehen ↷'],
   body: ['Verschieben', 'Neigen'],
   arms: ['linkes Bein', 'rechtes Bein'],
+  armsMirror: ['beide Beine', '↕ ausstrecken'],
 };
+
+function setMoveLabels() {
+  const [l, r] = MOVE_LABELS[MOVE.mode === 'arms' && MOVE.mirror ? 'armsMirror' : MOVE.mode];
+  $('joy-move-label').textContent = l;
+  $('joy-turn-label').textContent = r;
+  $('joy-move').setAttribute('aria-label', l);
+  $('joy-turn').setAttribute('aria-label', r);
+}
 
 // aktueller Befehl im Körper- bzw. Vorderbein-Modus
 function moveCommand() {
@@ -679,10 +688,17 @@ function moveCommand() {
     // rechts: nach rechts = rechte Seite runter (Rollen +), nach oben = Nase hoch
     return ['body', { x: clamp(x, -1, 1), y: clamp(y, -1, 1), roll: rx, pitch: -ry, yaw: clamp(yaw, -1, 1) }];
   }
-  // Vorderbeine: nach rechts = Fuß vor, nach oben = Fuß hoch
+  // Vorderbeine: Der Fuß folgt der Joystick-Richtung (von hinten gesehen): links/rechts
+  // schwenkt, hoch/runter hebt. Firmware: x + = nach innen/vorne, also beim rechten
+  // Bein umgekehrt. Gespiegelt: links bewegt beide, rechts ↑/↓ = ausstrecken/heranziehen.
   const l = [lx, -ly];
-  const r = MOVE.mirror ? l : [rx, -ry];
-  return ['arm', { lx: l[0], lz: l[1], rx: r[0], rz: r[1] }];
+  let r = [-rx, -ry];
+  let reach = 0;
+  if (MOVE.mirror) {
+    r = l;
+    reach = -ry;
+  }
+  return ['arm', { lx: l[0], lz: l[1], rx: r[0], rz: r[1], reach }];
 }
 
 function moveTick() {
@@ -710,7 +726,7 @@ function moveStopAll() {
   MOVE.keys.clear();
   clearInterval(MOVE.timer);
   MOVE.timer = null;
-  if (MOVE.sent) sendQuiet(MOVE.sent, MOVE.sent === 'body' ? { x: 0, y: 0, roll: 0, pitch: 0, yaw: 0 } : { lx: 0, lz: 0, rx: 0, rz: 0 });
+  if (MOVE.sent) sendQuiet(MOVE.sent, MOVE.sent === 'body' ? { x: 0, y: 0, roll: 0, pitch: 0, yaw: 0 } : { lx: 0, lz: 0, rx: 0, rz: 0, reach: 0 });
   MOVE.sent = '';
 }
 
@@ -727,7 +743,7 @@ function onStick(which, x, y) {
 }
 
 function setMoveMode(mode) {
-  if (!MOVE_LABELS[mode]) mode = 'walk';
+  if (!['walk', 'body', 'arms'].includes(mode)) mode = 'walk';
   if (W.timer || W.keys.size) walkStopAll();
   moveStopAll();
   document.querySelectorAll('.joy').forEach((j) => {
@@ -737,10 +753,7 @@ function setMoveMode(mode) {
   MOVE.mode = mode;
   setSeg('move-mode', mode);
   $('joy-turn').classList.toggle('joy-h', mode === 'walk');
-  $('joy-move-label').textContent = MOVE_LABELS[mode][0];
-  $('joy-turn-label').textContent = MOVE_LABELS[mode][1];
-  $('joy-move').setAttribute('aria-label', MOVE_LABELS[mode][0]);
-  $('joy-turn').setAttribute('aria-label', MOVE_LABELS[mode][1]);
+  setMoveLabels();
   $('walk-settings').hidden = mode !== 'walk';
   $('body-settings').hidden = mode !== 'body';
   $('arms-settings').hidden = mode !== 'arms';
@@ -760,8 +773,13 @@ function bindMove() {
     send('arms', { up });
   };
   $('arms-wave').onclick = () => send('wave');
+  $('alive-on').onchange = (e) => {
+    aliveTouched = Date.now();
+    if (!send('alive', { on: e.target.checked })) e.target.checked = !e.target.checked;
+  };
   $('arms-mirror').onchange = (e) => {
     MOVE.mirror = e.target.checked;
+    setMoveLabels();
     moveChanged();
   };
   document.querySelectorAll('[data-gesture]').forEach((b) => {
@@ -830,9 +848,25 @@ const ARMS_TEXT = {
   lower: 'senkt Vorderbeine …', shift_forward: 'verlagert Gewicht …',
 };
 const GESTURE_TEXT = { circle: 'kreist', nod: 'nickt', shake: 'schüttelt', pushup: 'Liegestütz', dance: 'tanzt' };
+const ALIVE_TEXT = {
+  look: 'schaut sich um', shift: 'verlagert das Gewicht', tilt: 'legt den Kopf schief',
+  lift: 'hebt ein Bein', tap: 'tippt mit dem Fuß', shuffle: 'setzt die Füße neu',
+};
+let aliveTouched = 0;
+
+function renderAlive(m) {
+  const a = m.alive;
+  if (!a) return;
+  if (Date.now() - aliveTouched > LOCAL_PRIORITY_MS) $('alive-on').checked = a.on;
+  let info = '';
+  if (a.act) info = ALIVE_TEXT[a.act] || a.act;
+  else if (a.on && !(m.mode === 'pose' && m.posture === 'standing')) info = 'wirkt im Stand';
+  $('alive-info').textContent = info;
+}
 
 function renderWalk(m) {
   if (!m) return;
+  renderAlive(m);
   const g = m.gait || {};
   const st = $('walk-state');
   const posture = m.mode === 'pose' ? m.posture : null;
@@ -877,7 +911,8 @@ function renderWalk(m) {
     b.classList.toggle('running', m.gesture === name);
     b.disabled = name === 'stop' ? !m.gesture : (!standing || arms !== 'down');
   });
-  $('body-info').textContent = m.offset_limited ? 'An der Reichweitengrenze – Körper lässt sich nicht weiter bewegen' : '';
+  $('body-info').textContent = m.offset_limited && arms === 'down' ? 'An der Reichweitengrenze – Körper lässt sich nicht weiter bewegen' : '';
+  $('arms-info').textContent = m.offset_limited && arms === 'up' ? 'So weit reicht das Bein nicht – es bleibt am Rand stehen' : '';
 
   // Tempo durch die Beinreichweite begrenzt?
   let limit = '';

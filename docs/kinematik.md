@@ -304,20 +304,53 @@ läuft das statisch stabil in Schritten ab:
 
 1. **Gewicht verlagern** (1 s): Körper 35 mm nach hinten, die Mittelbeine setzen mit Schritten 25 mm
    nach vorne. Damit steht der Schwerpunkt sicher im Viereck aus Mittel- und Hinterbeinen.
-2. **Heben** (1 s): Die Vorderfüße lösen sich und schwingen in die Bereitstellung 50 mm über dem
-   Boden.
-3. **Steuern:** Je ein Joystick pro Bein – ↑/↓ hoch/runter (20–80 mm über dem Boden), →/← vor
-   (30 mm) und zurück (15 mm). Mit *Beide folgen dem linken Joystick* bewegen sich beide gleich.
-   **Winken** lässt das rechte Bein 3 s winken.
-4. **Absetzen** geht umgekehrt: Füße auf den Boden, dann Gewicht zurück.
+2. **Heben** (1 s): Die Vorderfüße lösen sich und gehen senkrecht in die Bereitstellung 60 mm über
+   dem Boden.
+3. **Steuern:** Je ein Joystick pro Bein, der Fuß folgt der Richtung (von hinten gesehen):
+   ↑/↓ hoch/runter (15–160 mm über dem Boden), ←/→ **schwenken** um die Coxa (je 32°: nach innen bis
+   fast geradeaus nach vorne, nach außen weit zur Seite). Mit *Gespiegelt* bewegt der linke Joystick
+   beide Beine spiegelbildlich, der rechte ↑/↓ streckt sie weiter aus bzw. zieht sie heran
+   (Abstand zur Coxa ca. 87–162 mm). **Winken** hebt das rechte Bein hoch und schwenkt es 3 s hin
+   und her.
+4. **Absetzen**: zurück in die Bereitstellung, senkrecht auf den Boden, dann Gewicht zurück.
+
+Der Arbeitsraum ist kein fester Kasten: Jeder Zielpunkt wird per IK geprüft (erreichbar, alle Gelenke
+mindestens 3° innerhalb der Kalibriergrenzen, Knie nicht unter 25°). Wünscht der Joystick mehr, als
+das Bein hergibt – z. B. ganz hoch **und** weit weg –, wählt die Firmware den nächsten erreichbaren
+Abstand zur Coxa bzw. bleibt am Rand stehen (Hinweis *„So weit reicht das Bein nicht“*). Die Füße
+fahren weich an und bremsen (bis 220 mm/s), kommt die Reichweite nicht hinterher, werden sie langsamer
+statt zu springen. Die Vorderfüße bleiben dabei mindestens 80 mm auseinander und über 60 mm von den
+Mittelfüßen entfernt (Test).
 
 Solange die Vorderbeine oben sind, ist Laufen gesperrt (die Oberfläche sagt das); **Hinsetzen**
 setzt sie vorher automatisch ab. Vor dem Heben prüft die Firmware, ob die Gewichtsverlagerung in der
 aktuellen Haltung erreichbar ist. Im Test bleibt der Schwerpunkt während des ganzen Ablaufs mindestens
 60 mm innerhalb der Standfläche.
 
-**Erster Test:** aufgebockt, dann am Boden mit der Hand in der Nähe – die Werte für Gewichtsverlagerung
-und Bereitstellung stehen in `arms::Config`.
+**Erster Test:** aufgebockt, dann am Boden mit der Hand in der Nähe – die Werte für Gewichtsverlagerung,
+Bereitstellung und Bewegungsbereich stehen in `arms::Config`.
+
+## Lebendig
+
+Schalter **Lebendig** unten in der Karte *Bewegung* (jederzeit an/aus, wird gespeichert): Steht der
+Roboter still und läuft sonst nichts, bewegt er sich ab und zu ganz leicht
+([`alive.cpp`](../firmware/src/kinematics/alive.cpp)) – alle 2,5–7 s eine zufällige Aktion, nie zweimal
+dieselbe hintereinander:
+
+| Aktion | Bewegung |
+|---|---|
+| Umschauen | Körper dreht 7–13° zur Seite (Nase etwas hoch), manchmal danach zur anderen |
+| Gewicht verlagern | Körper 6–12 mm in eine zufällige Richtung, bleibt 1–3 s so |
+| Kopf schief | rollen 3–6°, Nase hoch, leicht drehen – „neugierig“ |
+| Bein heben | Gewicht 5 mm weg von einem Bein, das Bein 14–22 mm anheben, wieder absetzen |
+| Tippen | ein Vorderbein tippt zwei-, dreimal ungeduldig auf |
+| Neu setzen | alle Beine nacheinander kurz anheben und wieder hinstellen |
+
+Dazu „atmet“ er: Der Körper hebt und senkt sich alle 4,5 s um 1,2 mm. Es ist immer höchstens ein Bein
+in der Luft, der Schwerpunkt bleibt mindestens 75 mm innerhalb der Standfläche (Test). In Haltungen
+nahe an den Grenzen fallen die Bewegungen so viel kleiner aus, wie die Beine erlauben. Laufen, Körper-
+Joystick, Gesten, Vorderbeine oder Hinsetzen blenden ihn in 0,4 s aus; danach wartet er 2,5–4,5 s, bevor
+er wieder etwas tut. Die Oberfläche zeigt neben dem Schalter, was er gerade macht.
 
 ## Tests
 
@@ -335,9 +368,11 @@ Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet, auch in der
 - [`attitude_test.cpp`](../firmware/test_host/attitude_test.cpp): Lagesensor-Einbaulagen und
   Vorzeichen, Komplementärfilter, Lageausgleich (gleicht Schräglagen aus, erkennt falsche
   Sensorrichtung)
-- [`moves_test.cpp`](../firmware/test_host/moves_test.cpp): Vorderbeine heben, steuern, winken und
-  absetzen (auch Abbruch mittendrin) – Schwerpunkt immer sicher in der Standfläche, alle Stellungen
-  erreichbar, keine Sprünge; Gesten weich, erreichbar und sauber abbrechbar
+- [`moves_test.cpp`](../firmware/test_host/moves_test.cpp): Vorderbeine heben, im ganzen Bereich
+  steuern, winken und absetzen (auch Abbruch mittendrin, in 17 Körperhaltungen) – Schwerpunkt immer
+  sicher in der Standfläche, alle Stellungen erreichbar und in den Grenzen, keine Sprünge, keine
+  Kollision; Gesten weich, erreichbar und sauber abbrechbar; „Lebendig“ 10 min lang: alle Aktionen,
+  ruhig, nur ein Bein in der Luft, stabil, Ausblenden beim Laufen
 
 ```
 cd firmware/test_host
@@ -349,6 +384,6 @@ g++ -std=c++17 -I../src -I../include posture_test.cpp ../src/kinematics/posture.
 ./posture_test
 g++ -std=c++17 -I../src -I../include attitude_test.cpp ../src/sensors/attitude.cpp ../src/kinematics/leveling.cpp -o attitude_test
 ./attitude_test
-g++ -std=c++17 -I../src -I../include moves_test.cpp ../src/kinematics/arms.cpp ../src/kinematics/gestures.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o moves_test
+g++ -std=c++17 -I../src -I../include moves_test.cpp ../src/kinematics/arms.cpp ../src/kinematics/alive.cpp ../src/kinematics/gestures.cpp ../src/kinematics/gait.cpp ../src/kinematics/kinematics.cpp -o moves_test
 ./moves_test
 ```
