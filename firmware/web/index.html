@@ -46,6 +46,8 @@
       <symbol id="i-walk" viewBox="0 0 24 24"><path d="M12 7.5v9M7.5 9.5L4 7M7.5 12H3.5M7.5 14.5L4 17M16.5 9.5L20 7M16.5 12h4M16.5 14.5L20 17"/><rect x="8.5" y="6" width="7" height="12" rx="3.5"/></symbol>
       <symbol id="i-body" viewBox="0 0 24 24"><path d="M4 15.5h16"/><rect x="7" y="9" width="10" height="4" rx="2"/><path d="M7 11.5L4 15.5M17 11.5l3 4M12 9V5M9.5 6.5L12 4l2.5 2.5"/></symbol>
       <symbol id="i-servo" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="10" rx="2"/><circle cx="9" cy="8" r="3"/><path d="M9 8l5-3.5"/></symbol>
+      <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 17.5h6M10 20.5h4"/><path d="M8.5 14.5a6 6 0 1 1 7 0c-.8.6-1 1.4-1 2v1h-5v-1c0-.6-.2-1.4-1-2z"/></symbol>
+      <symbol id="i-gamepad" viewBox="0 0 24 24"><path d="M7 7.5h10a4.5 4.5 0 0 1 4.4 5.5l-.9 4a2.6 2.6 0 0 1-4.4 1.2L14 16h-4l-2.1 2.2a2.6 2.6 0 0 1-4.4-1.2l-.9-4A4.5 4.5 0 0 1 7 7.5z"/><path d="M7.5 10.5v3M6 12h3"/><circle cx="15.5" cy="11" r=".9" fill="currentColor" stroke="none"/><circle cx="17.3" cy="12.8" r=".9" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
     </defs>
   </svg>
@@ -65,6 +67,10 @@
           <span id="nav-cal-dot" class="nav-dot" title="Ungespeicherte Kalibrierung" hidden></span></a>
         <a class="nav-item" href="#system" data-page="system" title="Systemübersicht">
           <svg class="ic"><use href="#i-chip"/></svg><span class="nav-label">Systemübersicht</span></a>
+        <a class="nav-item" href="#leds" data-page="leds" title="LEDs">
+          <svg class="ic"><use href="#i-bulb"/></svg><span class="nav-label">LEDs</span></a>
+        <a class="nav-item" href="#controller" data-page="pad" title="Controller">
+          <svg class="ic"><use href="#i-gamepad"/></svg><span class="nav-label">Controller</span></a>
         <a class="nav-item" href="#einstellungen" data-page="settings" title="Einstellungen">
           <svg class="ic"><use href="#i-gear"/></svg><span class="nav-label">Einstellungen</span></a>
       </nav>
@@ -72,6 +78,7 @@
         <div class="sb-conn" id="sb-conn" title="Verbindung">
           <span class="conn-dot"></span><span class="nav-label" id="sb-conn-text">Getrennt</span>
         </div>
+        <a class="sb-ver nav-label" id="sb-ver" href="#einstellungen"></a>
         <button class="nav-item sb-collapse" id="sb-collapse" type="button" title="Menü einklappen">
           <svg class="ic"><use href="#i-collapse"/></svg><span class="nav-label">Einklappen</span></button>
       </div>
@@ -205,7 +212,7 @@
             <div class="col col-side">
               <div class="card o-walk" id="walk-card">
                 <div class="card-head">
-                  <h2><svg class="ic"><use href="#i-walk"/></svg>Bewegung</h2>
+                  <h2><svg class="ic"><use href="#i-walk"/></svg>Bewegung<span id="pad-ind" class="badge badge-on pad-badge" hidden></span></h2>
                   <span id="walk-state" class="badge badge-muted">–</span>
                 </div>
                 <div class="seg seg-mode" id="move-mode" role="tablist" aria-label="Was die Joysticks steuern">
@@ -555,6 +562,147 @@
         </section>
 
         <!-- ======================= EINSTELLUNGEN ======================= -->
+        <section id="page-leds" class="page" data-title="LEDs">
+          <div class="grid-2">
+            <div class="card">
+              <h2><svg class="ic"><use href="#i-bulb"/></svg>Augen</h2>
+              <div class="eyes-preview" aria-hidden="true">
+                <span class="eye" id="eye-0"></span><span class="eye" id="eye-1"></span>
+              </div>
+              <p class="muted small center" id="led-now">–</p>
+              <div class="field">
+                <span class="field-label">Farben</span>
+                <div class="seg" id="led-mode" role="radiogroup" aria-label="Farben der Augen">
+                  <button type="button" role="radio" data-value="auto">Je Zustand</button>
+                  <button type="button" role="radio" data-value="single">Eine Farbe</button>
+                  <button type="button" role="radio" data-value="off">Aus</button>
+                </div>
+              </div>
+              <label class="slider-row stacked">
+                <span>Helligkeit</span>
+                <input id="led-bright" type="range" min="5" max="100" step="5">
+                <span id="led-bright-val" class="mono"></span>
+              </label>
+              <div class="form-grid">
+                <label for="led-board">Board-LED</label>
+                <select id="led-board">
+                  <option value="boot">nur beim Start (Standard)</option>
+                  <option value="mirror">wie die Augen</option>
+                  <option value="off">aus</option>
+                </select>
+              </div>
+              <p class="muted small">Die Board-LED sitzt direkt vor der Kamera und stört das Bild. Warnungen
+                (Not-Aus, Akku) zeigen die Augen immer – auch bei „Aus“. Beim Ändern zeigen die Augen die neue
+                Farbe kurz zur Vorschau.</p>
+              <div class="row wrap">
+                <button id="led-reset" class="btn" type="button">Standard wiederherstellen</button>
+              </div>
+            </div>
+
+            <div class="stack">
+              <div class="card" id="led-states-card">
+                <h2><svg class="ic"><use href="#i-walk"/></svg>Je Zustand</h2>
+                <div class="led-list" id="led-states"></div>
+              </div>
+              <div class="card" id="led-single-card" hidden>
+                <h2><svg class="ic"><use href="#i-bulb"/></svg>Eine Farbe</h2>
+                <div class="led-list" id="led-single"></div>
+              </div>
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-alert"/></svg>Feste Anzeigen</h2>
+                <div class="led-list" id="led-fixed"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-pad" class="page" data-title="Controller">
+          <div class="grid-2">
+            <div class="stack">
+              <div class="card">
+                <div class="card-head">
+                  <h2><svg class="ic"><use href="#i-gamepad"/></svg>Bluetooth am Roboter</h2>
+                  <label class="switch" title="Bluetooth des Roboters ein/aus">
+                    <input id="pad-ble-on" type="checkbox">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+                <p class="small" id="pad-ble-status">–</p>
+                <div class="row wrap">
+                  <button id="pad-pair" class="btn btn-primary" type="button">Koppeln</button>
+                  <button id="pad-forget" class="btn btn-danger-outline" type="button">Vergessen</button>
+                </div>
+                <p class="muted small">Der Controller verbindet sich direkt mit dem Roboter – ohne Handy. <b>Koppeln:</b>
+                  Controller einschalten, dann die Kopplungstaste (oben, neben dem USB-Anschluss) gedrückt halten, bis das
+                  Xbox-Logo schnell blinkt. Danach genügt Einschalten. Der ESP32-S3 kann nur Bluetooth Low Energy: Beim
+                  Elite Series 2 und älteren Controllern vorher die Firmware über die App „Xbox Zubehör“ aktualisieren.
+                  Ein Controller merkt sich nur ein Bluetooth-Gerät – mit dem Handy muss er danach neu gekoppelt werden.
+                  Bluetooth teilt sich die Antenne mit dem WLAN; ausgeschaltet ist der Kamerastream am flüssigsten.</p>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <h2><svg class="ic"><use href="#i-control"/></svg>Controller an diesem Gerät</h2>
+                  <label class="switch" title="Controller am Handy/PC über den Browser verwenden">
+                    <input id="pad-web-on" type="checkbox">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+                <p class="small" id="pad-web-status">–</p>
+                <p class="muted small">Alternativ: Controller per Bluetooth oder USB mit diesem Handy/PC verbinden. Die Seite
+                  leitet ihn an den Roboter weiter, solange sie geöffnet ist. Nach dem Verbinden einmal eine Taste drücken,
+                  damit der Browser ihn meldet.</p>
+              </div>
+
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-pulse"/></svg>Test</h2>
+                <div class="pad-live">
+                  <div class="pad-stick"><span class="pad-dot" id="pad-ls"></span></div>
+                  <div class="pad-trig"><span>LT</span><span class="pad-bar"><i id="pad-lt"></i></span>
+                    <span>RT</span><span class="pad-bar"><i id="pad-rt"></i></span></div>
+                  <div class="pad-stick"><span class="pad-dot" id="pad-rs"></span></div>
+                </div>
+                <div class="pad-btns" id="pad-btns"></div>
+                <p class="muted small mono" id="pad-live-info">kein Controller aktiv</p>
+              </div>
+            </div>
+
+            <div class="stack">
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-sliders"/></svg>Sticks</h2>
+                <label class="slider-row stacked">
+                  <span>Tempo beim Laufen</span>
+                  <input id="pad-speed" type="range" min="10" max="100" step="5">
+                  <span id="pad-speed-val" class="mono"></span>
+                </label>
+                <label class="slider-row stacked">
+                  <span>Totzone</span>
+                  <input id="pad-deadzone" type="range" min="2" max="40" step="1">
+                  <span id="pad-deadzone-val" class="mono"></span>
+                </label>
+                <label class="slider-row stacked">
+                  <span>Feinfühligkeit um die Mitte</span>
+                  <input id="pad-expo" type="range" min="0" max="100" step="5">
+                  <span id="pad-expo-val" class="mono"></span>
+                </label>
+                <label class="check-row"><input id="pad-invert" type="checkbox"> Sticks oben/unten umkehren</label>
+                <p class="muted small"><b>Laufen:</b> linker Stick fahren, rechter drehen, RT schneller (bis 100 %), LT
+                  langsamer. <b>Körper:</b> links verschieben, rechts neigen, LT/RT drehen. <b>Vorderbeine:</b> je ein Stick
+                  pro Bein, RT streckt aus, LT zieht heran (der Modus hebt sie, ein anderer setzt sie ab).</p>
+              </div>
+
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-gamepad"/></svg>Tasten</h2>
+                <div class="pad-map" id="pad-map"></div>
+                <div class="row wrap">
+                  <button id="pad-reset" class="btn" type="button">Standardbelegung</button>
+                </div>
+                <p class="muted small">P1–P4 sind die Paddles des Elite Series 2 (im Standardprofil des Controllers).</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section id="page-settings" class="page" data-title="Einstellungen">
           <div class="grid-2">
             <div class="card">
@@ -660,6 +808,13 @@
                   <dt><kbd>←</kbd><kbd>→</kbd></dt><dd>Servo ±1 µs, mit Umschalt ±10 µs (Kalibrieren)</dd>
                   <dt><kbd>↑</kbd><kbd>↓</kbd></dt><dd>vorheriger/nächster Servo (Kalibrieren)</dd>
                 </dl>
+              </div>
+
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-chip"/></svg>Version</h2>
+                <dl class="kv" id="about-info"></dl>
+                <p class="alert small" id="about-stale" hidden>Diese Seite stammt von einer älteren Firmware.
+                  <a href="#" onclick="location.reload(); return false;">Neu laden</a></p>
               </div>
             </div>
           </div>

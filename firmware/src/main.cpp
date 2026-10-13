@@ -12,6 +12,7 @@
 
 #include "config.h"
 #include "control_stats.h"
+#include "input/pad_control.h"
 #include "motion/motion.h"
 #include "net/camera.h"
 #include "net/commands.h"
@@ -89,28 +90,34 @@ void updateSafety() {
 }
 
 void updateLeds() {
-  StatusLeds::Mode mode;
+  using ledfx::State;
+  State st;
   if (servos.emergencyStopActive()) {
-    mode = StatusLeds::Mode::EmergencyStop;
+    st = State::Estop;
   } else if (battery.state() == BatteryMonitor::State::Critical) {
-    mode = StatusLeds::Mode::BatteryLow;
+    st = State::BatteryLow;
   } else if (battery.state() == BatteryMonitor::State::Warn) {
-    mode = StatusLeds::Mode::BatteryWarn;
+    st = State::BatteryWarn;
   } else if (servos.torqueRequested()) {
-    mode = StatusLeds::Mode::TorqueOn;
+    const motion::Activity a = motion::activity();
+    if (a.arms) st = State::Arms;
+    else if (a.gesture) st = State::Gesture;
+    else if (a.walking) st = State::Walk;
+    else if (a.standing) st = State::Stand;
+    else st = State::Torque;
   } else if (wifi::isAccessPoint()) {
-    mode = StatusLeds::Mode::ApMode;
+    st = State::Ap;
   } else {
-    mode = StatusLeds::Mode::Idle;
+    st = State::Idle;
   }
-  statusLeds.setMode(mode);
+  statusLeds.setState(st);
   statusLeds.update();
 }
 
 void printBanner() {
   Serial.println();
   Serial.println("==============================");
-  Serial.printf(" Hexapod MK3  Firmware %s\n", HEXAPOD_FW_VERSION);
+  Serial.printf(" Hexapod MK3  Firmware %s (%s, %s)\n", HEXAPOD_FW_VERSION, HEXAPOD_FW_GIT, HEXAPOD_FW_BUILT);
   Serial.println("==============================");
   Serial.printf("Chip %s rev %d, %d MHz, PSRAM %u KB\n", ESP.getChipModel(), ESP.getChipRevision(),
                 ESP.getCpuFreqMHz(), (unsigned)(ESP.getPsramSize() / 1024));
@@ -124,7 +131,7 @@ void setup() {
   printBanner();
 
   statusLeds.begin();
-  statusLeds.setMode(StatusLeds::Mode::Boot);
+  statusLeds.setState(ledfx::State::Boot);
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ_HZ);
   Wire.setTimeOut(20);
@@ -148,6 +155,7 @@ void setup() {
   wifi::begin();
   web::begin();
   camera::startStreamServer();
+  padctl::begin();  // Controller (Bluetooth nur, wenn eingeschaltet)
   Serial.printf("[Web]   http://%s/  bzw.  http://%s.local/\n", wifi::ip().c_str(), WIFI_HOSTNAME);
 
   xTaskCreatePinnedToCore(controlTask, "control", 4096, nullptr, CONTROL_TASK_PRIO, nullptr,
@@ -181,6 +189,7 @@ void loop() {
   camera::loop();  // Kamera ohne Stream schlafen legen
   imu.loop();      // geänderte Lagesensor-Kalibrierung speichern
   motion::loop();  // geänderte Haltung/Gang verzögert speichern
+  padctl::loop();  // Controller auswerten
 
   if (commands::rebootRequested()) {
     if (reboot_at == 0) reboot_at = now + 500;  // Antwort noch ausliefern

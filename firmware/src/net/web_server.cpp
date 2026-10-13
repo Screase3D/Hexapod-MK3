@@ -13,6 +13,8 @@
 #include "sensors/battery.h"
 #include "sensors/i2c_scan.h"
 #include "servo/servo_controller.h"
+#include "ui/status_leds.h"
+#include "input/pad_control.h"
 
 namespace web {
 namespace {
@@ -176,6 +178,40 @@ esp_err_t wifiScanPostHandler(httpd_req_t* req) {
   return sendResult(req, true, "Suche gestartet");
 }
 
+esp_err_t ledsGetHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  statusLeds.configToJson(doc.to<JsonObject>());
+  return sendJson(req, doc);
+}
+
+esp_err_t ledsPostHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  String err;
+  if (!readJsonBody(req, doc, err)) return sendResult(req, false, err);
+  if (!statusLeds.applyJson(doc, err)) return sendResult(req, false, err);
+  JsonDocument out;
+  statusLeds.configToJson(out.to<JsonObject>());
+  out["ok"] = true;
+  return sendJson(req, out);
+}
+
+esp_err_t padGetHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  padctl::configToJson(doc.to<JsonObject>());
+  return sendJson(req, doc);
+}
+
+esp_err_t padPostHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  String err;
+  if (!readJsonBody(req, doc, err)) return sendResult(req, false, err);
+  if (!padctl::applyJson(doc, err)) return sendResult(req, false, err);
+  JsonDocument out;
+  padctl::configToJson(out.to<JsonObject>());
+  out["ok"] = true;
+  return sendJson(req, out);
+}
+
 esp_err_t batteryGetHandler(httpd_req_t* req) {
   JsonDocument doc;
   battery.toJson(doc.to<JsonObject>());
@@ -324,7 +360,7 @@ void registerUri(const char* uri, httpd_method_t method, esp_err_t (*handler)(ht
 bool begin() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = HTTP_PORT;
-  config.max_uri_handlers = 24;
+  config.max_uri_handlers = 28;
   config.max_open_sockets = 7;
   config.lru_purge_enable = true;
   config.stack_size = 8192;
@@ -347,6 +383,10 @@ bool begin() {
   registerUri("/api/wifi/scan", HTTP_POST, wifiScanPostHandler);
   registerUri("/api/battery", HTTP_GET, batteryGetHandler);
   registerUri("/api/battery", HTTP_POST, batteryPostHandler);
+  registerUri("/api/leds", HTTP_GET, ledsGetHandler);
+  registerUri("/api/leds", HTTP_POST, ledsPostHandler);
+  registerUri("/api/pad", HTTP_GET, padGetHandler);
+  registerUri("/api/pad", HTTP_POST, padPostHandler);
   registerUri("/api/kinematics", HTTP_GET, kinematicsHandler);
   registerUri("/api/i2c", HTTP_GET, i2cGetHandler);
   registerUri("/api/i2c/scan", HTTP_POST, i2cScanHandler);

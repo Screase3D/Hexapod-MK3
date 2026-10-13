@@ -6,6 +6,8 @@ const JOINTS = ['Coxa', 'Femur', 'Tibia'];
 const NUM_SERVOS = 18;
 const DEFAULT_SLOPE = 2000 / 180;
 const LOCAL_PRIORITY_MS = 900;  // so lange hat eine lokale Eingabe Vorrang vor der Telemetrie
+// Kennung dieser Oberfläche, beim Build eingesetzt (scripts/embed_web.py)
+const UI_VERSION = '__HEXAPOD_UI_VERSION__';
 
 const $ = (id) => document.getElementById(id);
 
@@ -141,6 +143,7 @@ function connect() {
     S.lastMsg = Date.now();
     renderConnection();
     send('cal_get');
+    checkVersion();
   };
   ws.onclose = () => {
     S.wsOpen = false;
@@ -258,6 +261,7 @@ function renderBanner() {
 function renderTelemetry() {
   const t = S.tel;
   const sv = t.servo;
+  renderPad(t.pad);
 
   // Akku
   if (t.bat.state === 'off') setPill('pill-bat', 'Akku aus', 'pill-idle');
@@ -1231,7 +1235,9 @@ function bindGlobal() {
 // -------------------------------------------------------- Seiten & Menü -----
 
 // Seite -> Adresse (#steuerung …), damit Neuladen und Zurück-Taste funktionieren
-const PAGES = { control: 'steuerung', cal: 'kalibrierung', system: 'system', settings: 'einstellungen' };
+const PAGES = {
+  control: 'steuerung', cal: 'kalibrierung', system: 'system', leds: 'leds', pad: 'controller', settings: 'einstellungen',
+};
 const pageFromHash = () => Object.keys(PAGES).find((k) => location.hash === `#${PAGES[k]}`) || 'control';
 
 function showTab(name) {
@@ -1270,6 +1276,8 @@ function showTab(name) {
   }
   if (name === 'system') renderTiles();
   if (name === 'cal') renderManualValues();
+  if (name === 'leds') loadLeds();
+  if (name === 'pad') loadPad();
 }
 
 function showCalView(view) {
@@ -1570,14 +1578,42 @@ function renderTiles() {
   if (up != null) setTile('up', fmtUptime(up), s ? `Firmware ${s.fw}` : '');
 }
 
+// Version: Sidebar, Einstellungen; nach einem Update mit noch offener alter Seite -> neu laden
+async function checkVersion() {
+  try {
+    renderVersion(await api('/api/status'));
+  } catch (e) { /* später erneut */ }
+}
+
+function renderVersion(s) {
+  if (!s || !s.fw) return;
+  const stale = s.ui && !UI_VERSION.startsWith('__') && s.ui !== UI_VERSION;
+  $('sb-ver').textContent = `v${s.fw}`;
+  $('sb-ver').title = `Firmware ${s.fw}${s.git ? ' · ' + s.git : ''}${s.build ? ' · gebaut ' + s.build : ''}`;
+  fillKv($('about-info'), [
+    ['Firmware', s.fw],
+    ['Stand (Git)', s.git ? s.git.replace(/\+$/, ' (mit lokalen Änderungen)') : '–'],
+    ['Gebaut', s.build || '–'],
+    ['Oberfläche', UI_VERSION.startsWith('__') ? 'Entwicklung (nicht eingebettet)' : UI_VERSION],
+    ['Chip', `${s.chip.model} rev ${s.chip.rev}`],
+  ]);
+  $('about-stale').hidden = !stale;
+  if (stale && !S.staleShown) {
+    S.staleShown = true;
+    toast(`Neue Firmware ${s.fw} – Seite neu laden`, true);
+  }
+  $('sb-ver').classList.toggle('stale', !!stale);
+}
+
 async function loadStatus() {
   try {
     const s = await api('/api/status');
     S.status = s;
+    renderVersion(s);
     if (S.tab === 'system') renderTiles();
     const w = s.wifi;
     fillKv($('sys-info'), [
-      ['Firmware', `${s.fw} (${s.build})`],
+      ['Firmware', `${s.fw}${s.git ? ' · ' + s.git : ''} (${s.build})`],
       ['Chip', `${s.chip.model} rev ${s.chip.rev}, ${s.chip.cores} Kerne, ${s.chip.mhz} MHz`],
       ['Heap frei', `${fmtBytes(s.mem.heap_free)} (min. ${fmtBytes(s.mem.heap_min)})`],
       ['PSRAM frei', s.mem.psram ? `${fmtBytes(s.mem.psram_free)} von ${fmtBytes(s.mem.psram)}` : 'kein PSRAM'],
@@ -1665,6 +1701,447 @@ async function setBattery(patch) {
     toast(err.message, true);
     loadStatus();
   }
+}
+
+// ------------------------------------------------------------------ LEDs ----
+
+const LED_STATES = {
+  ap: ['Access Point', 'Servos aus, eigenes WLAN'],
+  idle: ['Servos aus', 'bereit, Servos stromlos'],
+  torque: ['Servos an', 'sitzt, steht auf oder setzt sich'],
+  stand: ['steht', 'steht still (auch „Lebendig“)'],
+  walk: ['läuft', 'beim Laufen'],
+  arms: ['Vorderbeine', 'Vorderbeine oben'],
+  gesture: ['Geste', 'Kreisen, Nicken, Tanzen …'],
+  boot: ['Start', 'bis das Netz steht'],
+  wifi: ['WLAN', 'verbindet mit dem Heimnetz'],
+  bat_warn: ['Akku schwach', 'unter 6,8 V'],
+  bat_low: ['Akku leer', 'Servos abgeschaltet'],
+  estop: ['Not-Aus', 'bis zur Freigabe'],
+};
+const LED_EFFECTS = {
+  off: 'aus', solid: 'Dauerlicht', breathe: 'Atmen', blink: 'Blinken', pulse: 'Herzschlag',
+  wink: 'Blinzeln', alternate: 'Wechselblinken', rainbow: 'Regenbogen',
+};
+const L = { cfg: null, preview: null, previewUntil: 0, raf: 0, touched: 0, state: '' };
+
+// Effekte wie in led_fx.cpp (für die Vorschau im Browser)
+function ledHash(x) {
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x7feb352d);
+  x ^= x >>> 15;
+  x = Math.imul(x, 0x846ca68b);
+  x ^= x >>> 16;
+  return x >>> 0;
+}
+const ledLid = (dt) => (dt < 0 || dt > 160 ? 1 : Math.abs(dt - 80) / 80);
+const hexRgb = (h) => {
+  const v = parseInt(h.slice(1), 16);
+  return [v >> 16, (v >> 8) & 255, v & 255];
+};
+function hsvRgb(deg) {
+  const h = (((deg % 360) + 360) % 360) / 60;
+  const i = Math.floor(h);
+  const f = h - i;
+  const q = Math.round(255 * (1 - f));
+  const t = Math.round(255 * f);
+  return [[255, t, 0], [q, 255, 0], [0, 255, t], [0, q, 255], [t, 0, 255], [255, 0, q]][i % 6];
+}
+function ledRender(style, t) {
+  t = Math.floor(t);
+  let k = [1, 1];
+  switch (style.effect) {
+    case 'off': k = [0, 0]; break;
+    case 'breathe': k = [0.12 + 0.88 * (0.5 - 0.5 * Math.cos((2 * Math.PI * (t % 3200)) / 3200))]; break;
+    case 'blink': k = [t % 1000 < 500 ? 1 : 0]; break;
+    case 'pulse': {
+      const x = t % 1400;
+      k = [0.12 + 0.88 * Math.max(Math.exp(-(((x - 100) / 60) ** 2)), 0.6 * Math.exp(-(((x - 350) / 60) ** 2)))];
+      break;
+    }
+    case 'wink': {
+      const h = ledHash(Math.floor(t / 4000) + 1);
+      const dt = (t % 4000) - (500 + (h % 3000));
+      let v = ledLid(dt);
+      if (((h >>> 12) % 4) === 0) v = Math.min(v, ledLid(dt - 300));
+      k = [v];
+      break;
+    }
+    case 'alternate': {
+      const v = t % 1000 < 500 ? 1 : 0;
+      k = [v, 1 - v];
+      break;
+    }
+    case 'rainbow': {
+      const hh = ((t % 7000) * 360) / 7000;
+      return [hsvRgb(hh), hsvRgb(hh + 40)];
+    }
+    default: break;
+  }
+  if (k.length === 1) k.push(k[0]);
+  const c = hexRgb(style.color);
+  return k.map((v) => c.map((x) => Math.round(x * v)));
+}
+
+function ledStyleFor(cfg, id) {
+  const fixed = cfg.fixed.find((s) => s.id === id);
+  if (fixed) return fixed;
+  if (cfg.mode === 'off') return { color: '#000000', effect: 'off' };
+  if (cfg.mode === 'single') return cfg.single;
+  return cfg.states.find((s) => s.id === id) || { color: '#000000', effect: 'off' };
+}
+
+function ledFrame(now) {
+  if (S.tab !== 'leds' || !L.cfg) {
+    L.raf = 0;
+    return;
+  }
+  const id = (S.tel && S.tel.led) || L.cfg.state || 'idle';
+  const fixed = L.cfg.fixed.some((s) => s.id === id);
+  const preview = Date.now() < L.previewUntil && !fixed;
+  const style = preview ? L.preview : ledStyleFor(L.cfg, id);
+  const k = 0.3 + 0.7 * (L.cfg.brightness / 100);  // Helligkeit angedeutet
+  ledRender(style, now).forEach((c, i) => {
+    const [r, g, b] = c.map((v) => Math.round(v * k));
+    const eye = $(`eye-${i}`);
+    eye.style.backgroundColor = `rgb(${r},${g},${b})`;
+    eye.style.boxShadow = r + g + b > 30 ? `0 0 18px 2px rgba(${r},${g},${b},0.55)` : 'none';
+  });
+  if (id !== L.state) {
+    L.state = id;
+    document.querySelectorAll('.led-row').forEach((row) => row.classList.toggle('active', row.dataset.state === id));
+  }
+  const name = LED_STATES[id] ? LED_STATES[id][0] : id;
+  $('led-now').textContent = preview ? `Vorschau – ${LED_EFFECTS[style.effect] || style.effect}`
+    : `Jetzt: ${name} – ${LED_EFFECTS[style.effect] || style.effect}`;
+  L.raf = requestAnimationFrame(ledFrame);
+}
+
+const ledPostThrottled = throttle((patch) => ledPost(patch), 150);
+async function ledPost(patch) {
+  L.touched = Date.now();
+  try {
+    L.cfg = await api('/api/leds', patch);
+    renderLeds(false);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function ledEffectSelect(value, onChange) {
+  const sel = document.createElement('select');
+  for (const [v, label] of Object.entries(LED_EFFECTS)) {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = label;
+    sel.appendChild(o);
+  }
+  sel.value = value;
+  sel.onchange = () => onChange(sel.value);
+  return sel;
+}
+
+// Zeile: Punkt, Name, Farbe, Effekt; patchOf(style) baut den Befehl
+function ledRow(list, id, style, patchOf) {
+  const row = document.createElement('div');
+  row.className = 'led-row';
+  row.dataset.state = id;
+  const dot = document.createElement('span');
+  dot.className = 'led-dot';
+  dot.style.background = style.effect === 'off' ? 'transparent' : style.color;
+  const name = document.createElement('div');
+  name.className = 'led-name';
+  const [title, desc] = LED_STATES[id] || [id, ''];
+  name.innerHTML = `<b></b><span class="muted small"></span>`;
+  name.querySelector('b').textContent = title;
+  name.querySelector('span').textContent = desc;
+  row.append(dot, name);
+  if (!patchOf) {
+    const fx = document.createElement('span');
+    fx.className = 'fixed-fx';
+    fx.textContent = LED_EFFECTS[style.effect] || style.effect;
+    row.append(fx);
+  } else {
+    const color = document.createElement('input');
+    color.type = 'color';
+    color.value = style.color;
+    color.title = 'Farbe';
+    const preview = (st) => {
+      L.preview = st;
+      L.previewUntil = Date.now() + 2500;
+      dot.style.background = st.effect === 'off' ? 'transparent' : st.color;
+    };
+    color.oninput = () => {
+      const st = { color: color.value, effect: sel.value };
+      preview(st);
+      ledPostThrottled({ ...patchOf({ color: color.value }), preview: true });
+    };
+    const sel = ledEffectSelect(style.effect, (v) => {
+      preview({ color: color.value, effect: v });
+      ledPost({ ...patchOf({ effect: v }), preview: true });
+    });
+    sel.title = 'Effekt';
+    row.append(color, sel);
+  }
+  list.appendChild(row);
+  return row;
+}
+
+function renderLeds(rebuild) {
+  const c = L.cfg;
+  if (!c) return;
+  setSeg('led-mode', c.mode);
+  $('led-states-card').hidden = c.mode !== 'auto';
+  $('led-single-card').hidden = c.mode !== 'single';
+  if (document.activeElement !== $('led-bright')) $('led-bright').value = c.brightness;
+  $('led-bright-val').textContent = `${$('led-bright').value} %`;
+  $('led-board').value = c.board;
+  if (!rebuild) return;
+  for (const id of ['led-states', 'led-single', 'led-fixed']) $(id).innerHTML = '';
+  for (const st of c.states) ledRow($('led-states'), st.id, st, (p) => ({ state: st.id, ...p }));
+  const single = ledRow($('led-single'), 'single', c.single, (p) => ({ single: p }));
+  single.querySelector('b').textContent = 'Alle Zustände';
+  single.querySelector('.muted').textContent = 'außer den festen Anzeigen';
+  for (const st of c.fixed) ledRow($('led-fixed'), st.id, st, null);
+  L.state = '';
+}
+
+async function loadLeds() {
+  try {
+    L.cfg = await api('/api/leds');
+    renderLeds(true);
+    if (!L.raf) L.raf = requestAnimationFrame(ledFrame);
+  } catch (e) {
+    toast('LED-Einstellungen nicht verfügbar', true);
+  }
+}
+
+function bindLeds() {
+  bindSeg('led-mode', (v) => ledPost({ mode: v }));
+  $('led-bright').oninput = (e) => {
+    $('led-bright-val').textContent = `${e.target.value} %`;
+    if (L.cfg) L.cfg.brightness = +e.target.value;
+    ledPostThrottled({ brightness: +e.target.value });
+  };
+  $('led-board').onchange = (e) => ledPost({ board: e.target.value });
+  $('led-reset').onclick = async () => {
+    if (!confirm('Alle LED-Einstellungen auf den Standard zurücksetzen?')) return;
+    await ledPost({ reset: true });
+    renderLeds(true);
+    toast('LED-Standard wiederhergestellt');
+  };
+}
+
+// ------------------------------------------------------------- Controller ----
+
+// Reihenfolge wie pad.h (Bit = Index): Name, Beschriftung, Erklärung
+const PAD_BUTTONS = [
+  ['a', 'A', ''], ['b', 'B', ''], ['x', 'X', ''], ['y', 'Y', ''], ['lb', 'LB', 'Schulter links'], ['rb', 'RB', 'Schulter rechts'],
+  ['view', 'View', 'zwei Fenster'], ['menu', 'Menü', 'drei Striche'], ['xbox', 'Xbox', 'Logo-Taste'],
+  ['ls', 'LS', 'linken Stick drücken'], ['rs', 'RS', 'rechten Stick drücken'],
+  ['up', '↑', 'Steuerkreuz'], ['down', '↓', 'Steuerkreuz'], ['left', '←', 'Steuerkreuz'], ['right', '→', 'Steuerkreuz'],
+  ['share', 'Share', 'nur Series X|S'], ['p1', 'P1', 'Paddle oben rechts'], ['p2', 'P2', 'Paddle unten rechts'],
+  ['p3', 'P3', 'Paddle oben links'], ['p4', 'P4', 'Paddle unten links'],
+];
+const PAD_ACTIONS = {
+  none: '– nichts –', stand_sit: 'Aufstehen / Hinsetzen', stop: 'Stopp', arms: 'Vorderbeine heben/absetzen',
+  wave: 'Winken', mode_next: 'Modus wechseln', mode_walk: 'Modus Laufen', mode_body: 'Modus Körper',
+  mode_arms: 'Modus Vorderbeine', gait_prev: 'Gangart zurück', gait_next: 'Gangart weiter', height_up: 'Körper höher',
+  height_down: 'Körper tiefer', speed_up: 'Tempo +', speed_down: 'Tempo −', alive: 'Lebendig an/aus',
+  leveling: 'Lageausgleich an/aus', gesture_next: 'Nächste Geste', circle: 'Geste Kreisen', nod: 'Geste Ja',
+  shake: 'Geste Nein', pushup: 'Geste Liegestütz', dance: 'Geste Tanzen', torque: 'Servos an/aus', estop: 'Not-Aus',
+  pose_reset: 'Haltung zurücksetzen',
+};
+const PAD_MODES = { walk: 'Laufen', body: 'Körper', arms: 'Vorderbeine' };
+// Standard-Gamepad im Browser -> Bits wie pad.h (Index im buttons-Feld der Gamepad-API)
+const GP_BUTTONS = [0, 1, 2, 3, 4, 5, 8, 9, 16, 10, 11, 12, 13, 14, 15, 17];
+const PAD_SEND_MS = 50;
+const P = { cfg: null, web: false, timer: null, seq: null, mode: '', src: '', touched: 0, gpName: '' };
+
+function gamepad() {
+  const list = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter((g) => g && g.connected) : [];
+  return list.find((g) => g.mapping === 'standard') || list[0] || null;
+}
+
+function gamepadState(g) {
+  const pressed = (i) => !!(g.buttons[i] && g.buttons[i].pressed);
+  const value = (i) => (g.buttons[i] ? g.buttons[i].value : 0);
+  const axis = (i) => Math.round((g.axes[i] || 0) * 1000) / 1000;
+  let b = 0;
+  GP_BUTTONS.forEach((gi, bit) => { if (pressed(gi)) b |= 1 << bit; });
+  return {
+    lx: axis(0), ly: -axis(1) || 0, rx: axis(2), ry: -axis(3) || 0,
+    lt: Math.round(value(6) * 1000) / 1000, rt: Math.round(value(7) * 1000) / 1000, b,
+  };
+}
+
+// Gamepad am Handy/PC: Zustand alle 50 ms an den Roboter (der wertet ihn aus)
+function padTick() {
+  const g = P.web ? gamepad() : null;
+  P.gpName = g ? g.id : '';
+  renderPadWeb();
+  if (!g) return;
+  const st = gamepadState(g);
+  sendQuiet('pad', st);
+  if (S.tab === 'pad') renderPadLive(st, P.mode);
+}
+
+function setPadWeb(on) {
+  P.web = on;
+  try { localStorage.setItem('padWeb', on ? '1' : '0'); } catch (e) { /* egal */ }
+  $('pad-web-on').checked = on;
+  clearInterval(P.timer);
+  P.timer = on ? setInterval(padTick, PAD_SEND_MS) : null;
+  renderPadWeb();
+}
+
+function renderPadWeb() {
+  let text = 'aus';
+  if (P.web) {
+    text = P.gpName ? `aktiv: ${P.gpName.replace(/\s*\(.*\)$/, '')}`
+      : 'an – kein Controller erkannt (verbinden, dann eine Taste drücken)';
+  }
+  $('pad-web-status').textContent = text;
+}
+
+function renderPadLive(i, mode) {
+  const pos = (x, y) => `translate(${(x * 33).toFixed(1)}px, ${(-y * 33).toFixed(1)}px)`;
+  $('pad-ls').style.transform = pos(i.lx, i.ly);
+  $('pad-rs').style.transform = pos(i.rx, i.ry);
+  $('pad-lt').style.width = `${Math.round(i.lt * 100)}%`;
+  $('pad-rt').style.width = `${Math.round(i.rt * 100)}%`;
+  $('pad-btns').querySelectorAll('span').forEach((el, bit) => el.classList.toggle('on', !!(i.b & (1 << bit))));
+  $('pad-live-info').textContent = mode ? `Modus ${PAD_MODES[mode] || mode}` : '';
+}
+
+const BLE_TEXT = {
+  off: 'Bluetooth aus',
+  idle: 'an – noch kein Controller gekoppelt',
+  connecting: 'verbindet …',
+};
+
+// Telemetrie: Bluetooth-Status, Quelle, Modus, Meldungen
+function renderPad(p) {
+  if (!p) return;
+  if (P.seq === null) P.seq = p.seq || 0;  // alte Meldungen beim Laden nicht zeigen
+  else if (p.seq && p.seq !== P.seq) {
+    P.seq = p.seq;
+    toast(`🎮 ${p.msg}`);
+  }
+  if (p.mode !== P.mode && P.mode && p.src === 'web') {
+    const g = gamepad();  // Rückmeldung beim Moduswechsel
+    if (g && g.vibrationActuator) {
+      g.vibrationActuator.playEffect('dual-rumble', { duration: 120, strongMagnitude: 0.4, weakMagnitude: 0.4 }).catch(() => {});
+    }
+  }
+  P.mode = p.mode;
+  P.src = p.src;
+  const ind = $('pad-ind');
+  ind.hidden = !p.src;
+  ind.textContent = `🎮 ${PAD_MODES[p.mode] || ''}`;
+  ind.title = `Controller (${p.src === 'ble' ? 'Bluetooth' : 'Browser'}), Tempo ${p.speed} %`;
+
+  let text = BLE_TEXT[p.ble] || p.ble;
+  if (p.ble === 'searching') text = `wartet auf ${p.name || 'den gekoppelten Controller'} – Controller einschalten`;
+  if (p.ble === 'pairing') text = `Kopplung läuft (noch ${p.pair_left || 0} s) – Kopplungstaste am Controller halten, bis das Logo schnell blinkt`;
+  if (p.ble === 'connected') text = `verbunden: ${p.name || 'Xbox-Controller'}${p.bat !== undefined ? ` · Akku ${p.bat} %` : ''}`;
+  $('pad-ble-status').textContent = text;
+  if (Date.now() - P.touched > LOCAL_PRIORITY_MS) $('pad-ble-on').checked = p.ble !== 'off';
+  $('pad-pair').disabled = p.ble === 'pairing' || p.ble === 'connecting';
+  $('pad-forget').disabled = !(P.cfg && P.cfg.addr) && p.ble !== 'connected';
+  if (p.ble === 'connected' && P.cfg && !P.cfg.addr && S.tab === 'pad') loadPad();  // neue Kopplung
+
+  if (S.tab === 'pad' && p.src === 'ble' && p.in) renderPadLive(p.in, p.mode);
+  if (S.tab === 'pad' && !p.src) $('pad-live-info').textContent = 'kein Controller aktiv';
+}
+
+const padPostThrottled = throttle((patch) => padPost(patch), 200);
+async function padPost(patch) {
+  P.touched = Date.now();
+  try {
+    P.cfg = await api('/api/pad', patch);
+    renderPadCfg(false);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function renderPadCfg(rebuild) {
+  const c = P.cfg;
+  if (!c) return;
+  const sl = (id, v, fmt) => {
+    if (document.activeElement !== $(id)) $(id).value = v;
+    $(`${id}-val`).textContent = fmt($(id).value);
+  };
+  sl('pad-speed', Math.round(c.speed * 100), (v) => `${v} %`);
+  sl('pad-deadzone', Math.round(c.deadzone * 100), (v) => `${v} %`);
+  sl('pad-expo', Math.round(c.expo * 100), (v) => `${v} %`);
+  $('pad-invert').checked = c.invert_y;
+  $('pad-forget').disabled = !c.addr;
+  const map = $('pad-map');
+  if (rebuild || !map.children.length) {
+    map.innerHTML = '';
+    for (const [id, label, hint] of PAD_BUTTONS) {
+      const l = document.createElement('label');
+      l.htmlFor = `pad-map-${id}`;
+      l.innerHTML = '<span></span><small></small>';
+      l.firstChild.textContent = label;
+      l.lastChild.textContent = hint;
+      const sel = document.createElement('select');
+      sel.id = `pad-map-${id}`;
+      for (const a of c.actions) {
+        const o = document.createElement('option');
+        o.value = a;
+        o.textContent = PAD_ACTIONS[a] || a;
+        sel.appendChild(o);
+      }
+      sel.onchange = () => padPost({ map: { [id]: sel.value } });
+      map.append(l, sel);
+    }
+  }
+  for (const [id] of PAD_BUTTONS) {
+    const sel = $(`pad-map-${id}`);
+    if (sel && document.activeElement !== sel) sel.value = c.map[id] || 'none';
+  }
+}
+
+async function loadPad() {
+  try {
+    P.cfg = await api('/api/pad');
+    renderPadCfg(true);
+  } catch (e) {
+    toast('Controller-Einstellungen nicht verfügbar', true);
+  }
+}
+
+function bindPad() {
+  $('pad-btns').innerHTML = PAD_BUTTONS.map(([, label]) => `<span>${label}</span>`).join('');
+  $('pad-ble-on').onchange = (e) => padPost({ enabled: e.target.checked });
+  $('pad-pair').onclick = () => padPost({ pair: true });
+  $('pad-forget').onclick = () => {
+    if (confirm('Gekoppelten Controller vergessen?')) padPost({ forget: true });
+  };
+  $('pad-web-on').onchange = (e) => setPadWeb(e.target.checked);
+  const slider = (id, key) => {
+    $(id).oninput = (e) => {
+      $(`${id}-val`).textContent = `${e.target.value} %`;
+      padPostThrottled({ [key]: e.target.value / 100 });
+    };
+  };
+  slider('pad-speed', 'speed');
+  slider('pad-deadzone', 'deadzone');
+  slider('pad-expo', 'expo');
+  $('pad-invert').onchange = (e) => padPost({ invert_y: e.target.checked });
+  $('pad-reset').onclick = async () => {
+    if (!confirm('Standardbelegung und -werte wiederherstellen?')) return;
+    await padPost({ reset: true });
+    renderPadCfg(true);
+  };
+  window.addEventListener('gamepadconnected', () => { if (P.web) padTick(); });
+  window.addEventListener('gamepaddisconnected', () => { if (P.web) padTick(); });
+  let on = false;
+  try { on = localStorage.getItem('padWeb') === '1'; } catch (e) { /* kein Speicher */ }
+  setPadWeb(on);
 }
 
 // ------------------------------------------------------------------ WLAN ----
@@ -1900,6 +2377,8 @@ function init() {
   bindPose();
   bindWalk();
   bindMove();
+  bindLeds();
+  bindPad();
   bindGlobal();
   bindEditor();
   bindCamera();

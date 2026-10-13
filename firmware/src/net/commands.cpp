@@ -4,6 +4,8 @@
 #include <WiFi.h>
 
 #include "config.h"
+#include "ui/status_leds.h"
+#include "input/pad_control.h"
 #include "control_stats.h"
 #include "motion/motion.h"
 #include "net/camera.h"
@@ -58,6 +60,18 @@ void handle(JsonVariantConst in, JsonDocument& out) {
   }
   if (strcmp(cmd, "body") == 0) {  // Körper-Joystick, wie walk ohne Antwort
     motion::body(in["x"] | 0.0f, in["y"] | 0.0f, in["roll"] | 0.0f, in["pitch"] | 0.0f, in["yaw"] | 0.0f);
+    return;
+  }
+  if (strcmp(cmd, "pad") == 0) {  // Gamepad im Browser, ca. 20 Hz, ohne Antwort
+    pad::State s;
+    s.lx = in["lx"] | 0.0f;
+    s.ly = in["ly"] | 0.0f;
+    s.rx = in["rx"] | 0.0f;
+    s.ry = in["ry"] | 0.0f;
+    s.lt = in["lt"] | 0.0f;
+    s.rt = in["rt"] | 0.0f;
+    s.buttons = in["b"] | 0u;
+    padctl::webInput(s);
     return;
   }
   if (strcmp(cmd, "arm") == 0) {  // Vorderfüße steuern, ohne Antwort
@@ -235,6 +249,8 @@ void buildTelemetry(JsonDocument& doc) {
   servos.stateToJson(doc["servo"].to<JsonObject>());
   imu.toJson(doc["imu"].to<JsonObject>());
   motion::toJson(doc["motion"].to<JsonObject>());
+  doc["led"] = ledfx::stateName(statusLeds.state());
+  padctl::telemetry(doc["pad"].to<JsonObject>());
   JsonObject w = doc["wifi"].to<JsonObject>();
   bool sta = wifi::staConnected();
   w["mode"] = wifi::isAccessPoint() ? (sta ? "ap+sta" : "ap") : "sta";
@@ -249,7 +265,9 @@ void buildTelemetry(JsonDocument& doc) {
 
 void buildStatus(JsonDocument& doc) {
   doc["fw"] = HEXAPOD_FW_VERSION;
-  doc["build"] = __DATE__ " " __TIME__;
+  doc["git"] = HEXAPOD_FW_GIT;
+  doc["build"] = HEXAPOD_FW_BUILT;
+  doc["ui"] = HEXAPOD_UI_VERSION;  // Kennung der eingebetteten Oberfläche
   doc["uptime"] = millis() / 1000;
   JsonObject chip = doc["chip"].to<JsonObject>();
   chip["model"] = ESP.getChipModel();

@@ -5,7 +5,16 @@
 
 #include <stdint.h>
 
-#define HEXAPOD_FW_VERSION "0.1.0"
+// Firmware-Version: Datei VERSION, beim Build über scripts/version.py nach
+// src/generated/version.h (ohne PlatformIO, z. B. PC-Tests: Platzhalter)
+#if __has_include("generated/version.h")
+#include "generated/version.h"
+#else
+#define HEXAPOD_FW_VERSION "dev"
+#define HEXAPOD_FW_GIT ""
+#define HEXAPOD_FW_BUILT ""
+#define HEXAPOD_UI_VERSION "dev"
+#endif
 
 // ---------------------------------------------------------------------------
 // I2C-Bus (PCA9685 #1, PCA9685 #2, MPU6050)

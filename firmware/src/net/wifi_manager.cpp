@@ -128,7 +128,7 @@ void startAccessPoint() {
   g_dns.start(53, "*", WiFi.softAPIP());  // Captive Portal: jeder Name -> 192.168.4.1
   g_ap = true;
   g_ap_off_at = 0;
-  statusLeds.setMode(StatusLeds::Mode::ApMode);
+  statusLeds.setState(ledfx::State::Ap);
   Serial.printf("[WiFi] Access Point \"%s\" (Passwort \"%s\") aktiv, IP %s\n", WIFI_AP_SSID,
                 WIFI_AP_PASS, WiFi.softAPIP().toString().c_str());
 }
@@ -241,7 +241,7 @@ void begin() {
 
   String ssid, pass;
   if (loadCredentials(ssid, pass)) {
-    statusLeds.setMode(StatusLeds::Mode::WifiConnect);
+    statusLeds.setState(ledfx::State::WifiConnect);
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);  // geringere Latenz für Steuerung und Stream
     WiFi.setAutoReconnect(true);

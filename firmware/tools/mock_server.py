@@ -56,6 +56,9 @@ state = {
 }
 
 
+FW_VERSION = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "VERSION")).read().strip()
+
+
 def battery():
     if not state["bat_enabled"]:
         return {"v": 1.37, "pct": 0, "state": "off", "enabled": False, "deep_sleep": state["bat_sleep"]}
@@ -257,7 +260,7 @@ def telemetry():
         "imu": imu_tel(t),
         "ctl": {"hz": 50.0, "max_us": 1830},
         "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3},
-        "motion": motion_tel(),
+        "motion": motion_tel(), "led": led_state(), "pad": pad_tel(),
         "wifi": wifi_tel(), "heap": 182000, "ws": 1,
     }
 
@@ -304,6 +307,9 @@ def handle(cmd):
         state["mode"] = "pose"
         state["walk"] = [float(cmd.get(k, 0)) for k in ("vx", "vy", "turn")]
         state["walk_t"] = time.time()
+        return None
+    if c == "pad":  # Gamepad im Browser, ohne Antwort
+        pad_input(cmd)
         return None
     if c == "body":  # Körper-Joystick, ohne Antwort
         state["body"] = [float(cmd.get(k, 0)) for k in ("x", "y", "roll", "pitch", "yaw")]
@@ -509,7 +515,7 @@ async def ws_handler(request):
 
 async def status(_):
     return web.json_response({
-        "fw": "0.1.0-mock", "build": "mock", "uptime": int(time.time() - state["start"]),
+        "fw": FW_VERSION, "git": "mock", "build": "mock", "uptime": int(time.time() - state["start"]),
         "chip": {"model": "ESP32-S3", "rev": 2, "cores": 2, "mhz": 240, "flash": 16777216},
         "mem": {"heap_free": 182000, "heap_min": 150000, "psram": 8388608, "psram_free": 6000000},
         "wifi": wifi_json(),
@@ -577,6 +583,215 @@ async def wifi_scan_get(_):
     return web.json_response({"running": running, "age_s": 0, "networks": [] if running else NETWORKS})
 
 
+# --- LEDs (wie status_leds.cpp / led_fx.cpp) ---
+LED_FIXED = [("boot", "#666666", "solid"), ("wifi", "#0000ff", "blink"), ("bat_warn", "#ff6e00", "solid"),
+             ("bat_low", "#ff0000", "breathe"), ("estop", "#ff0000", "blink")]
+LED_DEFAULT_STATES = [("ap", "#0050ff", "breathe"), ("idle", "#009900", "solid"), ("torque", "#00ffff", "solid"),
+                      ("stand", "#00ffff", "wink"), ("walk", "#008cff", "solid"), ("arms", "#aa00ff", "breathe"),
+                      ("gesture", "#ff00a0", "rainbow")]
+LED_EFFECTS = ["off", "solid", "breathe", "blink", "pulse", "wink", "alternate", "rainbow"]
+
+
+def led_defaults():
+    return {"mode": "auto", "brightness": 100, "board": "boot", "single": {"color": "#00ffff", "effect": "wink"},
+            "states": {i: {"color": c, "effect": e} for i, c, e in LED_DEFAULT_STATES}}
+
+
+LEDS = led_defaults()
+
+
+def led_state():
+    if state["estop"]:
+        return "estop"
+    if state["torque"]:
+        g = gait_status()
+        if arms() != "down":
+            return "arms"
+        if gesture():
+            return "gesture"
+        if g["walking"]:
+            return "walk"
+        return "stand" if state["mode"] == "pose" and posture() == "standing" else "torque"
+    return "ap" if state["wifi_ap"] else "idle"
+
+
+def leds_json():
+    return {"mode": LEDS["mode"], "brightness": LEDS["brightness"], "board": LEDS["board"],
+            "single": dict(LEDS["single"]),
+            "states": [{"id": i, **LEDS["states"][i]} for i, _, _ in LED_DEFAULT_STATES],
+            "fixed": [{"id": i, "color": c, "effect": e} for i, c, e in LED_FIXED], "state": led_state()}
+
+
+def led_style(src, dst):
+    if "color" in src:
+        c = str(src["color"])
+        if len(c) != 7 or c[0] != "#":
+            return "color muss #rrggbb sein"
+        dst["color"] = c.lower()
+    if "effect" in src:
+        if src["effect"] not in LED_EFFECTS:
+            return "unbekannter Effekt"
+        dst["effect"] = src["effect"]
+    return None
+
+
+async def leds_get(_):
+    return web.json_response(leds_json())
+
+
+async def leds_post(request):
+    global LEDS
+    body = await request.json()
+    new = json.loads(json.dumps(LEDS))
+    if body.get("reset"):
+        new = led_defaults()
+    if "mode" in body:
+        if body["mode"] not in ("auto", "single", "off"):
+            return web.json_response({"ok": False, "msg": "mode muss auto, single oder off sein"}, status=400)
+        new["mode"] = body["mode"]
+    if "brightness" in body:
+        new["brightness"] = max(5, min(100, int(body["brightness"])))
+    if "board" in body:
+        if body["board"] not in ("boot", "mirror", "off"):
+            return web.json_response({"ok": False, "msg": "board muss boot, mirror oder off sein"}, status=400)
+        new["board"] = body["board"]
+    if "single" in body:
+        err = led_style(body["single"], new["single"])
+        if err:
+            return web.json_response({"ok": False, "msg": err}, status=400)
+    if "state" in body:
+        if body["state"] not in new["states"]:
+            return web.json_response({"ok": False, "msg": "Zustand nicht einstellbar"}, status=400)
+        err = led_style(body, new["states"][body["state"]])
+        if err:
+            return web.json_response({"ok": False, "msg": err}, status=400)
+    LEDS = new
+    return web.json_response({**leds_json(), "ok": True})
+
+
+# --- Controller (vereinfacht wie pad_control.cpp / pad_map.cpp) ---
+PAD_BUTTONS = ["a", "b", "x", "y", "lb", "rb", "view", "menu", "xbox", "ls", "rs", "up", "down", "left", "right",
+               "share", "p1", "p2", "p3", "p4"]
+PAD_ACTIONS = ["none", "stand_sit", "stop", "arms", "wave", "mode_next", "mode_walk", "mode_body", "mode_arms",
+               "gait_prev", "gait_next", "height_up", "height_down", "speed_up", "speed_down", "alive", "leveling",
+               "gesture_next", "circle", "nod", "shake", "pushup", "dance", "torque", "estop", "pose_reset"]
+PAD_DEFAULT_MAP = ["stand_sit", "stop", "arms", "mode_next", "gait_prev", "gait_next", "alive", "gesture_next", "estop",
+                   "leveling", "wave", "height_up", "height_down", "speed_down", "speed_up", "pose_reset",
+                   "mode_walk", "mode_body", "mode_arms", "stop"]
+PAD_MODES = ["walk", "body", "arms"]
+
+
+def pad_defaults():
+    return {"deadzone": 0.12, "expo": 0.35, "speed": 0.6, "invert_y": False, "map": dict(zip(PAD_BUTTONS, PAD_DEFAULT_MAP))}
+
+
+PAD = {"cfg": pad_defaults(), "enabled": False, "addr": "", "ble": "off", "pair_until": 0.0, "web": None, "web_t": 0.0,
+       "prev_b": 0, "mode": 0, "speed": 0.6, "msg": "", "seq": 0, "src": ""}
+
+
+def pad_msg(m):
+    PAD["msg"] = m
+    PAD["seq"] += 1
+
+
+def pad_ble_state():
+    if not PAD["enabled"]:
+        return "off"
+    if PAD["ble"] == "pairing" and time.time() > PAD["pair_until"]:
+        # Mock: nach 3 s ist ein Controller gekoppelt
+        PAD["ble"], PAD["addr"] = "connected", "98:7a:14:00:11:22"
+        pad_msg("Controller gekoppelt")
+    if PAD["ble"] == "off":
+        PAD["ble"] = "searching" if PAD["addr"] else "idle"
+    return PAD["ble"]
+
+
+def pad_input(cmd):
+    st = {k: float(cmd.get(k, 0)) for k in ("lx", "ly", "rx", "ry", "lt", "rt")}
+    st["b"] = int(cmd.get("b", 0))
+    PAD["web"], PAD["web_t"] = st, time.time()
+    pressed = st["b"] & ~PAD["prev_b"]
+    PAD["prev_b"] = st["b"]
+    if not PAD["src"]:
+        PAD["src"] = "web"
+        return  # beim Verbinden gehaltene Tasten lösen nichts aus
+    for i, name in enumerate(PAD_BUTTONS):
+        if not pressed & (1 << i):
+            continue
+        act = PAD["cfg"]["map"][name]
+        if act == "mode_next":
+            PAD["mode"] = (PAD["mode"] + 1) % 3
+            pad_msg("Modus: " + ["Laufen", "Körper", "Vorderbeine"][PAD["mode"]])
+        elif act == "stand_sit":
+            handle({"cmd": "sit" if posture() == "standing" else "stand"})
+            pad_msg("Setzt sich" if posture() == "sitting_down" else "Steht auf")
+        elif act == "speed_up" or act == "speed_down":
+            PAD["speed"] = max(0.1, min(1.0, PAD["speed"] + (0.1 if act == "speed_up" else -0.1)))
+            pad_msg("Tempo %d %%" % round(PAD["speed"] * 100))
+        elif act == "estop":
+            handle({"cmd": "estop"})
+            pad_msg("Not-Aus – in der Oberfläche freigeben")
+    if PAD_MODES[PAD["mode"]] == "walk" and state["mode"] == "pose":
+        s = PAD["speed"]
+        v = [st["ly"] * s, -st["lx"] * s, -st["rx"] * s]
+        if any(abs(x) > 0.12 for x in v):
+            handle({"cmd": "walk", "vx": v[0], "vy": v[1], "turn": v[2]})
+
+
+def pad_tel():
+    ble = pad_ble_state()
+    if PAD["src"] == "web" and time.time() - PAD["web_t"] > 0.3:
+        PAD["src"] = ""
+    out = {"src": PAD["src"], "mode": PAD_MODES[PAD["mode"]], "speed": round(PAD["speed"] * 100), "ble": ble}
+    if ble == "connected":
+        out.update(name="Xbox Wireless Controller", bat=80)
+    if ble == "pairing":
+        out["pair_left"] = max(0, int(PAD["pair_until"] + 57 - time.time()))
+    if PAD["src"] and PAD["web"]:
+        out["in"] = PAD["web"]
+    if PAD["seq"]:
+        out.update(msg=PAD["msg"], seq=PAD["seq"])
+    return out
+
+
+def pad_json():
+    return {"enabled": PAD["enabled"], "addr": PAD["addr"], **{k: PAD["cfg"][k] for k in ("deadzone", "expo", "speed", "invert_y")},
+            "map": dict(PAD["cfg"]["map"]), "buttons": PAD_BUTTONS, "actions": PAD_ACTIONS}
+
+
+async def pad_get(_):
+    return web.json_response(pad_json())
+
+
+async def pad_post(request):
+    body = await request.json()
+    cfg = json.loads(json.dumps(PAD["cfg"]))
+    if body.get("reset"):
+        cfg = pad_defaults()
+    for k, lo, hi in (("deadzone", 0.02, 0.4), ("expo", 0.0, 1.0), ("speed", 0.1, 1.0)):
+        if k in body:
+            cfg[k] = max(lo, min(hi, float(body[k])))
+    if "invert_y" in body:
+        cfg["invert_y"] = bool(body["invert_y"])
+    for b, a in body.get("map", {}).items():
+        if b not in PAD_BUTTONS or a not in PAD_ACTIONS:
+            return web.json_response({"ok": False, "msg": "unbekannte Taste oder Aktion: " + b}, status=400)
+        cfg["map"][b] = a
+    PAD["cfg"] = cfg
+    PAD["speed"] = cfg["speed"]
+    if "enabled" in body:
+        PAD["enabled"] = bool(body["enabled"])
+        if not PAD["enabled"]:
+            PAD["ble"] = "off"
+    if body.get("forget"):
+        PAD["addr"] = ""
+        PAD["ble"] = "idle" if PAD["enabled"] else "off"
+    if body.get("pair"):
+        PAD["enabled"] = True
+        PAD["ble"], PAD["pair_until"] = "pairing", time.time() + 3
+    return web.json_response({**pad_json(), "ok": True})
+
+
 async def battery_get(_):
     return web.json_response(battery())
 
@@ -634,6 +849,8 @@ def main():
         web.get("/api/wifi", wifi_get), web.post("/api/wifi", wifi_post),
         web.get("/api/wifi/scan", wifi_scan_get), web.post("/api/wifi/scan", wifi_scan_post),
         web.get("/api/battery", battery_get), web.post("/api/battery", battery_post),
+        web.get("/api/leds", leds_get), web.post("/api/leds", leds_post),
+        web.get("/api/pad", pad_get), web.post("/api/pad", pad_post),
         web.get("/api/kinematics", kinematics),
         web.get("/api/i2c", i2c_get), web.post("/api/i2c/scan", i2c_scan),
         web.post("/api/estop", estop), web.post("/api/reboot", ok),

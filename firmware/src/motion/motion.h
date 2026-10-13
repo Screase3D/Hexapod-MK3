@@ -41,6 +41,9 @@ void walk(float vx, float vy, float turn);
 void stopWalking();
 // Gangparameter: type ("tripod"/"ripple"/"wave"), swing_s, step_height
 bool applyGaitJson(JsonVariantConst obj, String& err);
+const char* cycleGait(int dir);  // nächste (+1) / vorige (-1) Gangart, liefert den Namen
+// Höhe um dz ändern (Controller); true = begrenzt, note erklärt warum
+bool nudgeHeight(float dz, String& note);
 
 // Körper-Joystick: Versatz normiert -1..1 (x vor, y links, roll, pitch, yaw), wird
 // zur Haltung addiert (nur im Stehen). Ohne neuen Befehl für WALK_TIMEOUT_MS
@@ -75,6 +78,20 @@ void loop();
 
 // Aus dem Regel-Task: Haltung nachführen, Gang rechnen, IK, Servos setzen
 void update(float dt_s);
+
+// Was gerade passiert (für LEDs und Controller)
+struct Activity {
+  bool pose = false;      // IK-Modus
+  bool standing = false;  // steht (Übergang abgeschlossen)
+  bool sitting = false;
+  bool walking = false;
+  bool arms = false;      // Vorderbeine nicht unten
+  bool arms_up = false;   // Vorderbeine oben (steuerbar)
+  bool gesture = false;
+  bool alive = false;     // Einstellung "Lebendig"
+  bool leveling = false;  // Einstellung Lageausgleich
+};
+Activity activity();
 
 void toJson(JsonObject obj);          // Telemetrie
 void geometryToJson(JsonObject obj);  // Maße und Grenzen für die Oberfläche

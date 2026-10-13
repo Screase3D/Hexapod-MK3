@@ -127,6 +127,11 @@ kbd {
 .sb-foot { margin-top: auto; display: flex; flex-direction: column; gap: 4px; }
 .sb-conn { display: flex; align-items: center; gap: 12px; min-height: 36px; padding: 0 17px; color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
 .conn-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); flex: none; }
+.sb-ver { padding: 0 17px 4px 47px; color: var(--muted); font-size: 0.75rem; text-decoration: none; font-family: var(--mono, monospace); }
+.sb-ver:empty { display: none; }
+.sb-ver.stale { color: var(--warn-text); }
+.sb-ver.stale::after { content: " ↻"; }
+.nav-collapsed .sb-ver { display: none; }
 .sb-conn.on .conn-dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(12, 163, 12, 0.2); }
 .sb-collapse .ic { transition: transform 0.18s; }
 .sb-backdrop { display: none; }
@@ -619,4 +624,41 @@ details.fold[open] summary { margin-bottom: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* ================================================================== LEDs */
+.eyes-preview { display: flex; justify-content: center; gap: 44px; padding: 14px 0 6px; }
+.eye { width: 46px; height: 46px; border-radius: 50%; background: #000; border: 2px solid var(--border);
+  transition: background-color 40ms linear; }
+.center { text-align: center; }
+.led-list { display: flex; flex-direction: column; }
+.led-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) 44px minmax(0, 9.5rem); gap: 10px; align-items: center;
+  padding: 9px 0; border-top: 1px solid var(--border); }
+.led-row:first-child { border-top: 0; }
+.led-row .led-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); }
+.led-row .led-name { display: flex; flex-direction: column; min-width: 0; }
+.led-row .led-name b { font-weight: 600; }
+.led-row.active .led-name b::after { content: " · jetzt"; color: var(--accent); font-weight: 600; }
+.led-row input[type=color] { width: 44px; height: 32px; padding: 2px; border-radius: var(--radius-sm); cursor: pointer; }
+.led-row .fixed-fx { grid-column: 3 / span 2; color: var(--muted); font-size: 0.85rem; }
+
+/* ============================================================ Controller */
+.pad-live { display: flex; align-items: center; justify-content: space-around; gap: 12px; padding: 8px 0; }
+.pad-stick { position: relative; width: 84px; height: 84px; border-radius: 50%; border: 2px solid var(--border);
+  background: var(--surface-2, transparent); }
+.pad-dot { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
+  background: var(--accent); transition: transform 50ms linear; }
+.pad-trig { display: grid; grid-template-columns: auto 64px; gap: 6px 8px; align-items: center; font-size: 0.8rem; color: var(--muted); }
+.pad-bar { display: block; height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+.pad-bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.pad-btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.pad-btns span { min-width: 34px; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--border); text-align: center;
+  font: 600 0.75rem/1.6 var(--mono); color: var(--muted); }
+.pad-btns span.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pad-map { display: grid; grid-template-columns: minmax(0, 7rem) minmax(0, 1fr); gap: 6px 12px; align-items: center; margin-bottom: 12px; }
+.pad-map label { font-weight: 600; font-size: 0.9rem; }
+.pad-map label small { display: block; font-weight: 400; color: var(--muted); }
+.pad-badge { margin-left: 6px; }
+@media (max-width: 480px) {
+  .led-row { grid-template-columns: 14px minmax(0, 1fr) 40px minmax(0, 7.5rem); gap: 8px; }
 }

@@ -23,7 +23,7 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 
 | Methode & Pfad | Body | Antwort |
 |---|---|---|
-| `GET /api/status` | – | Firmware, Chip, Speicher, WLAN, Kamera, Geräte, Akku |
+| `GET /api/status` | – | `fw` (Version aus `firmware/VERSION`), `git` (Commit, `+` = mit lokalen Änderungen gebaut), `build` (Datum), `ui` (Kennung der eingebetteten Oberfläche), Chip, Speicher, WLAN, Kamera, Geräte, Akku |
 | `GET /api/calibration` | – | `{"version":2,"servos":[…18…],"dirty":bool}`, je Servo u. a. `ref_deg`, `center_us`, `us_per_deg`, `min_deg`, `max_deg` (siehe [kalibrierung.md](kalibrierung.md)) |
 | `POST /api/calibration` | wie GET (ohne `dirty`) | übernimmt alle 18 Servos und **speichert sofort**; Dateien mit `version` 1 (`center_us` = Puls bei 0°) werden umgerechnet |
 | `GET /api/camera` | – | Einstellungen, verfügbare Auflösungen, `sensor`, `awake` (Kamera wach) |
@@ -34,6 +34,10 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 | `GET /api/wifi/scan` | – | `running`, `networks` [{ssid, rssi, channel, secure}] |
 | `GET /api/battery` | – | Akkuwerte und Schalter |
 | `POST /api/battery` | `{"enabled","deep_sleep"}` (Teilmenge) | Akkuüberwachung / Tiefschlaf schalten (persistent) |
+| `GET /api/leds` | – | Augen-LEDs: `mode` (`auto`/`single`/`off`), `brightness` (5–100 %), `board` (`boot`/`mirror`/`off`), `single` {color, effect}, `states` (einstellbar: ap, idle, torque, stand, walk, arms, gesture) und `fixed` (boot, wifi, bat_warn, bat_low, estop) je {id, color `#rrggbb`, effect}, `state` (gerade aktiv) |
+| `POST /api/leds` | Teilmenge: `mode`, `brightness`, `board`, `single` {color?, effect?}, `state`+`color?`+`effect?`, `reset`, `preview` (zeigt den geänderten Stil 2,5 s) | wie GET; gespeichert. Effekte: `off`, `solid`, `breathe`, `blink`, `pulse`, `wink` (Blinzeln), `alternate`, `rainbow` |
+| `GET /api/pad` | – | Controller: `enabled` (Bluetooth), `addr` (gekoppelt), `deadzone`, `expo`, `speed` (0..1), `invert_y`, `map` {Taste: Aktion}, `buttons`, `actions` (siehe [controller.md](controller.md)) |
+| `POST /api/pad` | Teilmenge: `enabled`, `deadzone`, `expo`, `speed`, `invert_y`, `map` {Taste: Aktion}, `pair`, `forget`, `reset` | wie GET; gespeichert. `pair` schaltet Bluetooth ein und sucht 60 s |
 | `GET /api/kinematics` | – | Beinmaße, Montagepunkte, Grenzen der Körperhaltung (`limits`) und der Gangparameter (`gait_limits`), `placeholder` |
 | `GET /api/i2c` | – | letzter I²C-Scan: `devices` (gefunden), `missing` (erwartet, fehlt) |
 | `POST /api/i2c/scan` | `{}` | I²C-Bus neu scannen (0x08–0x77), Antwort wie GET |
@@ -68,6 +72,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `gesture` | `name`: `circle`/`nod`/`shake`/`pushup`/`dance`/`stop` | Geste abspielen bzw. weich beenden (nur im Stand, Vorderbeine unten), siehe [kinematik.md](kinematik.md#körper-bewegen-und-gesten) |
 | `arms` | `up` (bool) | Vorderbeine heben (Gewicht nach hinten, dann heben; nur im Stillstand) bzw. absetzen, siehe [kinematik.md](kinematik.md#vorderbeine) |
 | `arm` | `lx`, `lz`, `rx`, `rz`, `reach`? (je −1…1) | Vorderfüße steuern (l = Bein 1, r = Bein 4): x = um die Coxa schwenken, + = nach innen/vorne; z = hoch (+)/runter; `reach` = beide weiter weg (+)/heran. Nur wenn oben; der Fuß geht so weit, wie das Bein reicht. **Ohne Antwort**, etwa alle 100 ms senden; ohne Befehl kehren sie nach 0,6 s in die Bereitstellung zurück |
+| `pad` | `lx`, `ly`, `rx`, `ry` (−1…1, y oben +), `lt`, `rt` (0…1), `b` (Tasten-Bits: a, b, x, y, lb, rb, view, menu, xbox, ls, rs, up, down, left, right, share, p1–p4) | Gamepad im Browser, wertet die Firmware wie einen Bluetooth-Controller aus. **Ohne Antwort**, etwa alle 50 ms senden; nach 0,3 s ohne Befehl gilt er als getrennt |
 | `alive` | `on` (bool) | „Lebendig“: im Stand ab und zu kleine zufällige Bewegungen, siehe [kinematik.md](kinematik.md#lebendig); wird gespeichert |
 | `wave` | – | rechtes Vorderbein winkt (nur wenn oben) |
 | `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wirkt im Stillstand |
@@ -117,6 +122,9 @@ Beispiel:
                       "max_speed": 125, "max_side": 95, "max_turn": 39, "nominal": 125, "cadence": 1.0},
              "arms": "down", "gesture": "nod", "body": true, "offset_limited": true,
              "unreachable": [], "clamped": []},
+  "led":   "stand",
+  "pad":   {"src": "ble", "mode": "walk", "speed": 60, "ble": "connected", "name": "Xbox Wireless Controller",
+            "bat": 80, "in": {"lx": 0, "ly": 0.5, "rx": 0, "ry": 0, "lt": 0, "rt": 0, "b": 0}, "msg": "Modus: Laufen", "seq": 3},
   "wifi":  {"mode": "sta", "rssi": -58},
   "cam":   {"clients": 1, "awake": true, "fps": 12.4, "kb": 23, "kbps": 2300, "err": 0,
             "wake_ms": 640, "wakes": 3},
@@ -139,7 +147,10 @@ Reichweitengrenze (ist `max_speed` deutlich kleiner, schränkt die Haltung das L
 `down`, `shift_back`, `raise`, `up`, `lower`, `shift_forward`; `motion.gesture` nur während einer
 Geste; `motion.body` solange der Körper-Joystick wirkt, `offset_limited` wenn er bzw. ein Vorderbein an
 der Reichweitengrenze ist. `motion.alive`: Einstellung `on`, `act` = laufende Aktion (`look`, `shift`,
-`tilt`, `lift`, `tap`, `shuffle`). `motion.level`: Lageausgleich `on`, `active`
+`tilt`, `lift`, `tap`, `shuffle`). `led`: Zustand der Augen-LEDs (wie `GET /api/leds`). `pad`: Quelle
+(`ble`, `web` oder leer), Modus, Tempo in %, Bluetooth-Zustand (`off`, `idle`, `searching`, `pairing` mit
+`pair_left`, `connecting`, `connected` mit `name`, `bat`), `in` = aktueller Controller-Zustand (nur wenn aktiv),
+`msg`/`seq` = letzte Meldung (neue Meldung = neue `seq`). `motion.level`: Lageausgleich `on`, `active`
 (wirkt gerade), aktuelle Korrektur `roll`/`pitch` in Grad, `fault: true` = wegen falscher
 Sensorrichtung abgeschaltet. `imu`: `pitch`/`roll` nach Abzug des Nullpunkts `level`
 ([Roll, Nick] der schief eingebauten Platine), `acc` im Körpersystem, `mount`/`flip` =

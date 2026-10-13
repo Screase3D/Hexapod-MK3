@@ -7,6 +7,7 @@ Kann auch ohne PlatformIO aufgerufen werden:  python scripts/embed_web.py
 
 import gzip
 import os
+import sys
 
 MIME_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -31,7 +32,14 @@ def c_ident(path):
     return "asset_" + "".join(c if c.isalnum() else "_" for c in path.strip("/"))
 
 
+def ui_version(root):
+    sys.path.insert(0, os.path.join(root, "scripts"))
+    from version import version_info  # noqa: E402  (Datei liegt neben diesem Skript)
+    return version_info(root)["ui"]
+
+
 def build(root):
+    version = ui_version(root).encode()
     web_dir = os.path.join(root, "web")
     out_dir = os.path.join(root, "src", "generated")
     out_file = os.path.join(out_dir, "web_assets.h")
@@ -65,6 +73,7 @@ def build(root):
     for rel, full, _ in files:
         with open(full, "rb") as f:
             raw = f.read()
+        raw = raw.replace(b"__HEXAPOD_UI_VERSION__", version)  # Kennung der Oberfläche
         gz = gzip.compress(raw, compresslevel=9, mtime=0)
         total_raw += len(raw)
         total_gz += len(gz)

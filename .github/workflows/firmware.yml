@@ -38,7 +38,7 @@ jobs:
       - name: Weboberfläche prüfen (JS-Syntax)
         run: node --check firmware/web/app.js
 
-      - name: Kinematik-, Gang-, Lage- und Bewegungs-Tests (PC)
+      - name: Tests auf dem PC (Kinematik, Gang, Lage, Bewegungen, LEDs, Controller)
         working-directory: firmware/test_host
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include \
@@ -57,6 +57,11 @@ jobs:
             ../src/kinematics/alive.cpp ../src/kinematics/gestures.cpp ../src/kinematics/gait.cpp \
             ../src/kinematics/kinematics.cpp -o moves_test
           ./moves_test
+          g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include led_test.cpp ../src/ui/led_fx.cpp -o led_test
+          ./led_test
+          g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include pad_test.cpp ../src/input/pad.cpp \
+            ../src/input/pad_map.cpp -o pad_test
+          ./pad_test
 
       - name: Firmware bauen
         run: pio run -d firmware

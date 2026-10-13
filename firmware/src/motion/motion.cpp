@@ -569,6 +569,24 @@ bool applyGaitJson(JsonVariantConst o, String& err) {
   return true;
 }
 
+const char* cycleGait(int dir) {
+  portENTER_CRITICAL(&g_mux);
+  const int t = (static_cast<int>(g_gait_params.type) + dir % gait::NUM_TYPES + gait::NUM_TYPES) % gait::NUM_TYPES;
+  g_gait_params.type = static_cast<gait::Type>(t);
+  markDirty();
+  portEXIT_CRITICAL(&g_mux);
+  return gait::typeName(static_cast<gait::Type>(t));
+}
+
+bool nudgeHeight(float dz, String& note) {
+  portENTER_CRITICAL(&g_mux);
+  const float z = g_target.pose.z;
+  portEXIT_CRITICAL(&g_mux);
+  JsonDocument d;
+  d["z"] = z + dz;
+  return applyPoseJson(d.as<JsonVariantConst>(), note);
+}
+
 // ---- Körper-Joystick, Vorderbeine, Gesten (Befehle aus dem Web-Task) ----
 
 namespace {
@@ -941,6 +959,22 @@ void update(float dt) {
     markDirty();
   }
   portEXIT_CRITICAL(&g_mux);
+}
+
+Activity activity() {
+  portENTER_CRITICAL(&g_mux);
+  Activity a;
+  a.pose = g_mode == Mode::Pose;
+  a.standing = a.pose && g_posture == posture::State::Standing;
+  a.sitting = a.pose && g_posture == posture::State::Sitting;
+  a.walking = a.pose && g_status.walking;
+  a.arms = a.pose && g_arms_state != arms::State::Down;
+  a.arms_up = a.pose && g_arms_state == arms::State::Up;
+  a.gesture = a.pose && g_gesture != gestures::Type::None;
+  a.alive = g_alive;
+  a.leveling = g_leveling;
+  portEXIT_CRITICAL(&g_mux);
+  return a;
 }
 
 void toJson(JsonObject obj) {

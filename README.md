@@ -16,6 +16,7 @@ später erweitert um KI-Funktionen mit der Kamera.
 | 3 | Gangarten (Dreifuß, Ripple, Welle) mit weichen Fußbahnen, Touch-Joysticks und Tastatur in der UI, Verbindungs-Watchdog | ✅ läuft am Roboter; jetzt mit richtungsabhängiger Reichweitengrenze, bis 125 mm/s und mitwachsender Schrittdauer beim langsamen Laufen ([docs/kinematik.md](docs/kinematik.md#laufen)) – noch nicht am Roboter getestet |
 | 3b | Körper-Joystick (Schwerpunkt verlagern, neigen), Gesten (Kreisen, Ja, Nein, Liegestütz, Tanzen), **Vorderbeine** heben und steuern, Winken | ✅ läuft am Roboter; Vorderbeine jetzt mit großem, IK-geprüftem Arbeitsraum (schwenken, 15–160 mm hoch, ausstrecken) – noch nicht am Roboter getestet |
 | 3c | **Lebendig**: im Stand ab und zu kleine zufällige Bewegungen (umschauen, Gewicht verlagern, Bein heben, tippen, Füße neu setzen, atmen) | 🟡 implementiert und auf dem PC getestet – noch nicht am Roboter |
+| 3d | **Version** in den Einstellungen, **LED-Einstellungen** (Farbe/Effekt der Augen je Zustand), **Xbox-Controller** direkt per Bluetooth oder über den Browser ([docs/controller.md](docs/controller.md)) | 🟡 implementiert und auf dem PC getestet – Bluetooth-Controller noch nicht mit echter Hardware getestet |
 | 4 | Lagesensor-Kalibrierung (Einbaulage, Nullpunkt, Gyro) und **Lageausgleich** (Körper waagerecht halten); Geländeanpassung | 🟡 Lageausgleich implementiert und auf dem PC getestet – noch nicht am Roboter; Geländeanpassung geplant |
 | 5 | Kamera/KI: Objekterkennung (auf dem ESP32-S3 oder am PC über den Stream), Folgen, OTA-Updates | Ideen |
 
@@ -31,7 +32,10 @@ docs/
   beingeometrie.svg/.png             Maßzeichnung Bein + Körper (erzeugt von beingeometrie.py)
   montagelehre.pdf                   Lehre 1:1 zum Aufstecken der Servohörner (montagelehre.py)
   api.md                             REST-, WebSocket- und Stream-Schnittstellen
+  controller.md                      Xbox-Controller koppeln und belegen
+CHANGELOG.md                         Änderungen je Version
 firmware/                            PlatformIO-Projekt
+  VERSION                            Firmware-Version (wird mit dem Git-Stand eingebettet)
   platformio.ini
   include/config.h                   alle Pins, Adressen, Grenzwerte
   include/robot_geometry.h           Beinmaße und Montagepunkte (für die IK)
@@ -41,10 +45,11 @@ firmware/                            PlatformIO-Projekt
   src/motion/                        Körperhaltung + Gang → IK → Servos (IK-Modus)
   src/sensors/                       Akku, MPU6050, I²C-Scan
   src/net/                           WLAN, HTTP/WebSocket, Kamera, Befehle
-  src/ui/                            Status-LEDs (Augen)
+  src/ui/                            Augen-LEDs: Zustände, Farben, Effekte, Einstellungen
+  src/input/                         Xbox-Controller: Bluetooth (NimBLE), Belegung, Ausführung
   web/                               Weboberfläche (HTML/CSS/JS, wird in die Firmware eingebettet)
   tools/mock_server.py               Oberfläche am PC ohne Roboter testen
-  test_host/                         Tests, die auf dem PC laufen (Kinematik, Gangarten)
+  test_host/                         Tests, die auf dem PC laufen (Kinematik, Gang, Bewegungen, LEDs, Controller)
 .github/workflows/firmware.yml       CI: Tests + Firmware-Build bei jedem Push
 ```
 
@@ -193,7 +198,9 @@ oben rechts. Jede Seite hat eine eigene Adresse, z. B. `http://hexapod.local/#ka
 | **Steuerung** | Kamerastream (Vollbild, Lage als künstlicher Horizont im Bild, Kameraeinstellungen über ⚙), Karte *Bewegung* mit drei Modi für die Joysticks: *Laufen* (bzw. W/A/S/D/Q/E, R/F: Höhe), *Körper* (verschieben/neigen, Gesten) und *Vorderbeine* (heben, steuern, winken), Schalter *Lebendig*; Aufstehen/Hinsetzen, Körperhaltung (IK) mit Lageausgleich und Hinweisen bei unerreichbarer Haltung, Lage mit Nullpunkt, Torque |
 | **Kalibrierung & Justierung** | *Kalibrieren*: Servo für Servo (Rohmodus, Montagestellung, Referenz, Grenzen, Test); *Justieren*: alle 18 Gelenke auf einen Blick; Speichern, Export/Import |
 | **Systemübersicht** | Kennzahlen (Akku, WLAN, Regelung, Kamera, Speicher, Laufzeit), Komponenten, I²C-Scan, Neustart |
-| **Einstellungen** | WLAN, Servo-Stellgeschwindigkeit, Lagesensor (Einbaulage, Nullpunkt, Gyro), Akkuüberwachung, Farbschema (automatisch/dunkel/hell), Tastenkürzel |
+| **LEDs** | Augen: Farbe und Effekt je Zustand (Servos aus, steht, läuft, Vorderbeine, Geste, …), eine Farbe für alles oder aus, Helligkeit, Board-LED; Vorschau |
+| **Controller** | Xbox-Controller per Bluetooth am Roboter (koppeln, vergessen) oder am Handy/PC über den Browser, Live-Test, Tempo/Totzone/Kennlinie, Tastenbelegung |
+| **Einstellungen** | WLAN, Servo-Stellgeschwindigkeit, Lagesensor (Einbaulage, Nullpunkt, Gyro), Akkuüberwachung, Farbschema (automatisch/dunkel/hell), Tastenkürzel, Version (Firmware, Git-Stand, Build-Datum) |
 
 ## Oberfläche ohne Roboter entwickeln
 
