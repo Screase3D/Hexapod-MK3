@@ -26,7 +26,7 @@ state = {
     "us": [1500.0] * 18,
     "cal": [],
     "camera": {"ok": True, "framesize": 10, "quality": 12, "vflip": False, "hmirror": False,
-               "max_fps": 15, "rotation": 0, "xclk_mhz": 20, "xclk_active_mhz": 20, "clients": 0, "port": 81, "sensor": "OV5640 (Mock)", "awake": False, "idle_sleep_s": 10},
+               "max_fps": 15, "rotation": 0, "xclk_mhz": 20, "xclk_active_mhz": 20, "bt_framesize": 6, "clients": 0, "port": 81, "sensor": "OV5640 (Mock)", "awake": False, "idle_sleep_s": 10},
     "start": time.time(),
     "mode": "manual",
     "pose": {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0, "stance": 100},
@@ -127,9 +127,9 @@ def wifi_json():
             ap["off_in_s"] = int(state["wifi_ap_off_at"] - time.time())
     sta = {"state": state["wifi_sta"], "ssid": state["wifi_ssid"]}
     if connected:
-        sta.update(ip="192.168.178.57", rssi=-52)
+        sta.update(ip="192.168.178.57", rssi=-52, channel=6, tries=2, connect_ms=4200)
     if state["wifi_sta"] == "failed":
-        sta["reason"] = state["wifi_reason"]
+        sta.update(reason=state["wifi_reason"], retry_in=8)
     return {"mode": ("ap+sta" if connected else "ap") if state["wifi_ap"] else "sta",
             "ip": "192.168.178.57" if connected else "192.168.4.1", "host": "hexapod.local",
             "saved_ssid": state["wifi_ssid"], "ap": ap, "sta": sta}
@@ -259,7 +259,8 @@ def telemetry():
                   "deg": [deg_of(i) for i in range(18)], "boards": [True, True]},
         "imu": imu_tel(t),
         "ctl": {"hz": 50.0, "max_us": 1830},
-        "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3},
+        "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3,
+                **({"bt_fs": state["camera"]["bt_framesize"]} if PAD["enabled"] and state["camera"]["bt_framesize"] else {})},
         "motion": motion_tel(), "led": led_state(), "pad": pad_tel(), "log": log_tel(),
         "wifi": wifi_tel(), "heap": 182000, "ws": 1,
     }

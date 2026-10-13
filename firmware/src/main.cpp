@@ -130,7 +130,18 @@ void watchEvents() {
   const bool ap_now = wifi::isAccessPoint();
   const bool imu_now = imu.ok();
   const bool lvl_now = motion::activity().level_fault;
-  const padble::State ble_now = padble::status().state;
+  const padble::Status ble_st = padble::status();
+  const padble::State ble_now = ble_st.state;
+  // Controller-Akku: einmal warnen, wenn er unter 15 % fällt (erneut erst nach Aufladen über 25 %)
+  static bool pad_bat_low = false;
+  if (ble_st.battery >= 0) {
+    if (!pad_bat_low && ble_st.battery <= 15) {
+      pad_bat_low = true;
+      EV_WARN("Controller-Akku schwach: %d %%", ble_st.battery);
+    } else if (pad_bat_low && ble_st.battery >= 25) {
+      pad_bat_low = false;
+    }
+  }
   if (!first) {
     if (estop_now != estop) {
       if (estop_now) EV_WARN("Not-Aus ausgelöst");
@@ -144,7 +155,11 @@ void watchEvents() {
         EV_INFO("Akku wieder in Ordnung: %.2f V", battery.voltage());
     }
     if (sta_now != sta) {
-      if (sta_now) EV_INFO("WLAN verbunden: %s (%s, %d dBm)", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
+      if (sta_now) {
+        EV_INFO("WLAN verbunden: %s (%s, %d dBm) nach %.1f s, %d Anl%s", WiFi.SSID().c_str(),
+                WiFi.localIP().toString().c_str(), WiFi.RSSI(), wifi::lastConnectMs() / 1000.0f, wifi::lastConnectTries(),
+                wifi::lastConnectTries() == 1 ? "auf" : "äufe");
+      }
       else {
         const int reason = wifi::lastDisconnectReason();
         EV_WARN("WLAN getrennt: %s (Code %d)", wifi::disconnectText(reason), reason);
@@ -241,9 +256,15 @@ void setup() {
   if (!imu_ok) EV_ERROR("Lagesensor (MPU6050) nicht gefunden");
   if (!cam_ok) EV_ERROR("Kamera nicht gefunden");
   if (wifi::staConnected()) {
-    EV_INFO("WLAN verbunden: %s (%s, %d dBm)", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    EV_INFO("WLAN verbunden: %s (%s, %d dBm) nach %.1f s, %d Anl%s", WiFi.SSID().c_str(),
+            WiFi.localIP().toString().c_str(), WiFi.RSSI(), wifi::lastConnectMs() / 1000.0f, wifi::lastConnectTries(),
+            wifi::lastConnectTries() == 1 ? "auf" : "äufe");
   } else if (wifi::isAccessPoint()) {
     EV_INFO("Access Point aktiv (%s)", WiFi.softAPIP().toString().c_str());
+    if (!wifi::savedSsid().isEmpty()) {
+      EV_WARN("Heimnetz „%s“ beim Start nicht erreicht: %s – nächster Versuch in %u s", wifi::savedSsid().c_str(),
+              wifi::failReason().c_str(), (unsigned)wifi::nextRetryS());
+    }
   }
 }
 

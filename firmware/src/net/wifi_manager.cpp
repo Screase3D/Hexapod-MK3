@@ -56,6 +56,24 @@ uint32_t g_connect_started = 0;
 uint32_t g_lost_since = 0;
 uint32_t g_last_retry = 0;
 uint32_t g_ap_off_at = 0;
+
+// Laufender Verbindungsversuch (nur loop()/begin()). Ein Versuch besteht aus mehreren
+// WiFi.begin(): Direkt nach einem Neustart lehnt der Router die erste Anmeldung oft ab
+// (AUTH_EXPIRE, Handshake-Timeout – er kennt die alte Sitzung noch); ein zweiter Anlauf
+// eine Sekunde später klappt dann. Erst mehrere Ablehnungen in Folge heißen „Passwort falsch“.
+constexpr uint32_t RETRY_GAP_MS = 1000;      // Pause zwischen zwei Anläufen
+constexpr int AUTH_FAILS_WRONG_PASS = 3;     // so viele Ablehnungen in Folge -> Passwort falsch
+constexpr uint32_t AP_RETRY_FIRST_MS = 10000;  // im AP-Modus: erster neuer Versuch, dann doppelt so lang
+constexpr uint32_t AP_RETRY_WITH_CLIENTS_MS = 180000;  // mit Geräten am AP seltener (Kanalwechsel stört sie)
+std::atomic<int> g_disc_events{0};  // Zähler der Trennungen (Ereignis-Task)
+int g_disc_seen = 0;
+String g_try_ssid, g_try_pass;
+uint32_t g_connect_timeout = 0;
+uint32_t g_next_begin = 0;     // nächster Anlauf (0 = keiner geplant)
+int g_tries = 0, g_auth_fails = 0;
+uint32_t g_ap_retry_ms = AP_RETRY_FIRST_MS;
+std::atomic<int> g_last_tries{0};
+std::atomic<uint32_t> g_last_connect_ms{0};
 bool g_user_connect = false;  // Versuch kam aus der Oberfläche (nicht automatisch)
 String g_target_ssid;  // Netz des laufenden/letzten Verbindungsversuchs
 String g_fail_reason;
@@ -101,10 +119,12 @@ void startMdns() {
 const char* reasonText(int reason) {
   switch (reason) {
     case WIFI_REASON_AUTH_FAIL:
+      return "Anmeldung abgelehnt";
     case WIFI_REASON_AUTH_EXPIRE:
+      return "Anmeldung abgelaufen (Router kannte evtl. noch die alte Sitzung)";
     case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
     case WIFI_REASON_HANDSHAKE_TIMEOUT:
-      return "Anmeldung abgelehnt – Passwort falsch?";
+      return "Schlüsselaustausch fehlgeschlagen (Handshake-Timeout)";
     case WIFI_REASON_NO_AP_FOUND:
       return "Netz nicht gefunden (Name falsch, zu weit weg oder 5-GHz-Netz?)";
     case WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY:
@@ -130,6 +150,7 @@ void onWifiEvent(arduino_event_id_t event, arduino_event_info_t info) {
   if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
     g_last_reason = info.wifi_sta_disconnected.reason;
     g_disconnect_reason = info.wifi_sta_disconnected.reason;
+    ++g_disc_events;
   }
 }
 
@@ -158,9 +179,19 @@ void stopAccessPoint() {
   Serial.println("[WiFi] Access Point beendet");
 }
 
-void beginConnect(const String& ssid, const String& pass) {
+void beginConnect(const String& ssid, const String& pass, uint32_t timeout_ms) {
+  // Wiederholungen steuert stepConnecting() selbst (die automatischen des Arduino-Kerns
+  // würden dazwischenfunken); nach dem Verbinden übernimmt wieder der Kern.
+  WiFi.setAutoReconnect(false);
   WiFi.disconnect(false);
   g_last_reason = 0;
+  g_disc_seen = g_disc_events;
+  g_try_ssid = ssid;
+  g_try_pass = pass;
+  g_tries = 1;
+  g_auth_fails = 0;
+  g_next_begin = 0;
+  g_connect_timeout = timeout_ms;
   WiFi.begin(ssid.c_str(), pass.c_str());
   lock();
   g_target_ssid = ssid;
@@ -174,6 +205,11 @@ void beginConnect(const String& ssid, const String& pass) {
 void onConnected() {
   g_sta = StaState::Connected;
   g_lost_since = 0;
+  g_last_tries = g_tries;
+  g_last_connect_ms = millis() - g_connect_started;
+  g_ap_retry_ms = AP_RETRY_FIRST_MS;
+  g_try_pass = "";
+  if (!g_ap) WiFi.setAutoReconnect(true);  // Aussetzer im Betrieb überbrückt der Arduino-Kern
   Serial.printf("[WiFi] Verbunden mit \"%s\", IP %s, RSSI %d dBm\n", WiFi.SSID().c_str(),
                 WiFi.localIP().toString().c_str(), WiFi.RSSI());
   if (g_ap) {
@@ -189,7 +225,13 @@ void onConnected() {
 
 void onFailed() {
   int reason = g_last_reason;
+  // Ablehnungen nur dann als „Passwort falsch?“ melden, wenn sie sich wiederholt haben
   const char* text = reasonText(reason);
+  if (isAuthFailure(reason) && reason != WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY) {
+    text = g_auth_fails >= AUTH_FAILS_WRONG_PASS ? "Anmeldung mehrfach abgelehnt – Passwort falsch?"
+                                                 : "Router hat die Anmeldung nicht angenommen (Signal schwach?)";
+  }
+  g_try_pass = "";
   lock();
   g_fail_reason = text ? text : "Zeitüberschreitung beim Verbinden";
   if (!text && reason) g_fail_reason += " (Code " + String(reason) + ")";
@@ -199,6 +241,34 @@ void onFailed() {
   WiFi.disconnect(false);  // keine weiteren Versuche, AP-Kanal bleibt stabil
   g_last_retry = millis();
   Serial.printf("[WiFi] Verbindung fehlgeschlagen: %s\n", msg.c_str());
+}
+
+// Laufenden Verbindungsversuch weiterführen: verbunden? neuer Anlauf? aufgeben?
+void stepConnecting(uint32_t now) {
+  if (WiFi.status() == WL_CONNECTED) {
+    onConnected();
+    return;
+  }
+  const int ev = g_disc_events;
+  if (ev != g_disc_seen) {  // Anlauf gescheitert -> gleich noch einmal
+    g_disc_seen = ev;
+    // ASSOC_LEAVE = selbst getrennt (WiFi.disconnect vor einem neuen Anlauf): kein Fehlschlag
+    if (g_last_reason != WIFI_REASON_ASSOC_LEAVE) {
+      g_auth_fails = isAuthFailure(g_last_reason) ? g_auth_fails + 1 : 0;
+      g_next_begin = now + RETRY_GAP_MS;
+    }
+  }
+  if (g_auth_fails >= AUTH_FAILS_WRONG_PASS || now - g_connect_started > g_connect_timeout) {
+    onFailed();
+    return;
+  }
+  if (g_next_begin && (int32_t)(now - g_next_begin) >= 0) {
+    g_next_begin = 0;
+    ++g_tries;
+    Serial.printf("[WiFi] Anlauf %d (vorher: Code %d)\n", g_tries, g_last_reason.load());
+    WiFi.disconnect(false);
+    WiFi.begin(g_try_ssid.c_str(), g_try_pass.c_str());
+  }
 }
 
 void processScan() {
@@ -258,18 +328,17 @@ void begin() {
     statusLeds.setState(ledfx::State::WifiConnect);
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(sleepMode());  // ohne Bluetooth: geringere Latenz für Steuerung und Stream
-    WiFi.setAutoReconnect(true);
-    beginConnect(ssid, pass);
-    while (WiFi.status() != WL_CONNECTED && millis() - g_connect_started < WIFI_STA_TIMEOUT_MS &&
-           !isAuthFailure(g_last_reason)) {
+    // Alle Kanäle absuchen und den stärksten Zugangspunkt nehmen (Repeater/Mesh mit
+    // gleichem Namen); sonst nimmt der ESP den zuerst gefundenen, evtl. weit entfernten
+    WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+    WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+    beginConnect(ssid, pass, WIFI_STA_TIMEOUT_MS);
+    while (g_sta == StaState::Connecting) {
+      stepConnecting(millis());
       statusLeds.update();
-      delay(100);
+      delay(50);
     }
-    if (WiFi.status() == WL_CONNECTED) {
-      onConnected();
-      return;
-    }
-    onFailed();
+    if (g_sta == StaState::Connected) return;
     Serial.println("[WiFi] -> Access Point, Heimnetz wird im Hintergrund weiter versucht");
   }
   WiFi.setSleep(sleepMode());
@@ -286,17 +355,16 @@ void loop() {
     String ssid = g_req_ssid, pass = g_req_pass;
     unlock();
     g_user_connect = true;
-    beginConnect(ssid, pass);
+    beginConnect(ssid, pass, WIFI_CONNECT_TIMEOUT_MS);
   }
 
   wl_status_t st = WiFi.status();
   switch (g_sta.load()) {
     case StaState::Connecting:
-      if (st == WL_CONNECTED) {
-        onConnected();
-      } else if (now - g_connect_started > WIFI_CONNECT_TIMEOUT_MS ||
-                 (isAuthFailure(g_last_reason) && now - g_connect_started > 2000)) {
-        onFailed();
+      stepConnecting(now);
+      if (g_sta == StaState::Failed && g_ap && !g_user_connect) {
+        // automatischer Versuch im AP-Modus gescheitert: nächster etwas später (bis 60 s)
+        g_ap_retry_ms = g_ap_retry_ms * 2 > WIFI_RETRY_PERIOD_MS ? WIFI_RETRY_PERIOD_MS : g_ap_retry_ms * 2;
       }
       break;
     case StaState::Connected:
@@ -319,15 +387,19 @@ void loop() {
       }
       break;
     case StaState::Failed:
-      // Im Access-Point-Modus regelmäßig erneut versuchen – aber nur, solange
-      // niemand mit dem AP verbunden ist (ein Versuch wechselt den Kanal).
-      if (g_ap && now - g_last_retry > WIFI_RETRY_PERIOD_MS && WiFi.softAPgetStationNum() == 0) {
-        String ssid, pass;
-        if (loadCredentials(ssid, pass)) {
-          g_user_connect = false;
-          beginConnect(ssid, pass);
-        } else {
-          g_last_retry = now;
+      // Im Access-Point-Modus erneut versuchen: zuerst nach 10 s, dann immer seltener
+      // (bis 60 s). Sind Geräte mit dem AP verbunden, nur alle 3 min – ein Versuch
+      // wechselt den Funkkanal, die Geräte verlieren kurz die Verbindung.
+      if (g_ap) {
+        const uint32_t wait = WiFi.softAPgetStationNum() > 0 ? AP_RETRY_WITH_CLIENTS_MS : g_ap_retry_ms;
+        if (now - g_last_retry > wait) {
+          String ssid, pass;
+          if (loadCredentials(ssid, pass)) {
+            g_user_connect = false;
+            beginConnect(ssid, pass, WIFI_CONNECT_TIMEOUT_MS);
+          } else {
+            g_last_retry = now;
+          }
         }
       }
       break;
@@ -345,12 +417,31 @@ void loop() {
 
 bool isAccessPoint() { return g_ap; }
 
+bool bluetoothActive() { return g_bt_active; }
+
 void setBluetoothActive(bool on) {
   g_bt_active = on;
   WiFi.setSleep(sleepMode());
 }
 
 int lastDisconnectReason() { return g_disconnect_reason; }
+
+int lastConnectTries() { return g_last_tries; }
+uint32_t lastConnectMs() { return g_last_connect_ms; }
+
+String failReason() {
+  lock();
+  String r = g_fail_reason;
+  unlock();
+  return r;
+}
+
+uint32_t nextRetryS() {
+  if (!g_ap || g_sta != StaState::Failed) return 0;
+  const uint32_t wait = WiFi.softAPgetStationNum() > 0 ? AP_RETRY_WITH_CLIENTS_MS : g_ap_retry_ms;
+  const uint32_t el = millis() - g_last_retry;
+  return el >= wait ? 0 : (wait - el + 999) / 1000;
+}
 
 const char* disconnectText(int reason) {
   const char* t = reasonText(reason);
@@ -388,7 +479,15 @@ void toJson(JsonObject obj) {
   if (sta) {
     s["ip"] = WiFi.localIP().toString();
     s["rssi"] = WiFi.RSSI();
+    s["channel"] = WiFi.channel();
   }
+  if (g_last_tries) {  // letzte erfolgreiche Verbindung: Anläufe und Dauer
+    s["tries"] = g_last_tries.load();
+    s["connect_ms"] = g_last_connect_ms.load();
+  }
+  if (g_sta == StaState::Connecting) s["try"] = g_tries;
+  const uint32_t retry = nextRetryS();
+  if (retry) s["retry_in"] = retry;
 }
 
 void requestScan() { g_req_scan = true; }

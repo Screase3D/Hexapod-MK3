@@ -268,7 +268,10 @@ function renderConnection() {
   const down = wsDown();
   setPill('pill-conn', S.wsOpen ? (slow ? 'Verbindung langsam' : 'Verbunden') : (down ? 'Getrennt' : 'Verbinde …'),
     S.wsOpen ? (slow ? 'pill-warn' : 'pill-ok') : (down ? 'pill-bad' : 'pill-warn'));
-  $('pill-conn').title = S.wsOpen ? `Antwortzeit ${rtt || '–'} ms${slow ? ' – Steuerung reagiert verzögert (WLAN-Empfang?)' : ''}` : '';
+  const rssi = S.tel && S.tel.wifi && S.tel.wifi.rssi;
+  $('pill-conn').title = S.wsOpen
+    ? `Antwortzeit ${rtt || '–'} ms${rssi ? ` · WLAN ${rssi} dBm (${signalBars(rssi)})` : ''}${slow ? ' – Steuerung reagiert verzögert (WLAN-Empfang?)' : ''}`
+    : '';
   $('sb-conn').classList.toggle('on', S.wsOpen);
   $('sb-conn-text').textContent = S.wsOpen ? `Verbunden · ${location.hostname}${rtt ? ` · ${rtt} ms` : ''}` : (down ? 'Getrennt' : 'Verbinde …');
   renderBanner();
@@ -1414,6 +1417,10 @@ function renderCamStats(t) {
   }
   if (c.fps !== undefined) camRetries = 0;  // Stream läuft wieder
   const parts = [`${(c.fps || 0).toFixed(1)} fps`, `${c.kb || 0} KB/Bild`, `${((c.kbps || 0) / 1000).toFixed(1)} Mbit/s`];
+  if (c.bt_fs) {  // Bluetooth an: kleinere Auflösung
+    const f = ((S.camera && S.camera.framesizes) || []).find((x) => x.id === c.bt_fs);
+    parts.push(`Bluetooth: ${f ? f.name.split(' ')[0] : 'kleiner'}`);
+  }
   if (c.wake_ms) parts.push(`Start ${c.wake_ms} ms`);
   if (t.wifi && t.wifi.rssi !== undefined) parts.push(`WLAN ${t.wifi.rssi} dBm`);
   if (c.err) parts.push(`Kamera-Aussetzer ${c.err}`);
@@ -1476,6 +1483,12 @@ function renderCamera() {
     for (const f of c.framesizes || []) sel.add(new Option(f.name, f.id));
   }
   sel.value = c.framesize;
+  const bt = $('cam-btfs');
+  if (!bt.options.length) {
+    bt.add(new Option('wie oben', 0));
+    for (const f of c.framesizes || []) bt.add(new Option(`höchstens ${f.name}`, f.id));
+  }
+  bt.value = c.bt_framesize || 0;
   $('cam-q').value = c.quality;
   $('cam-q-val').textContent = c.quality;
   $('cam-fps').value = c.max_fps;
@@ -1543,6 +1556,7 @@ function bindCamera() {
   };
   $('cam-xclk').onchange = (e) => setCamera({ xclk_mhz: +e.target.value });
   $('cam-fs').onchange = (e) => setCamera({ framesize: +e.target.value });
+  $('cam-btfs').onchange = (e) => setCamera({ bt_framesize: +e.target.value });
   $('cam-q').oninput = (e) => { $('cam-q-val').textContent = e.target.value; };
   $('cam-q').onchange = (e) => setCamera({ quality: +e.target.value });
   $('cam-fps').oninput = (e) => { $('cam-fps-val').textContent = `${e.target.value} fps`; };
@@ -2007,21 +2021,40 @@ function renderLogState(l) {
 }
 
 function logText() {
-  return EV.entries.map((e) => `${fmtTime(e.at)} [${e.lvl}] ${e.text}`).join('\n');
+  const st = S.status;
+  const head = st ? `Hexapod MK3 · Firmware ${st.fw} (${st.git}) · läuft seit ${Math.round((st.uptime || 0) / 60)} min\n` : '';
+  return head + EV.entries.map((e) => `${fmtTime(e.at)} [${e.lvl}] ${e.text}`).join('\n');
+}
+
+// In die Zwischenablage: Clipboard-API gibt es nur mit HTTPS; über http (der Roboter)
+// geht es mit einem versteckten Textfeld. Klappt beides nicht: als Datei anbieten.
+async function copyText(text, fileName) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) { /* weiter mit dem Textfeld */ }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  if (ok) return true;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  a.download = fileName;
+  a.click();
+  return false;
 }
 
 function bindLog() {
   $('log-copy').onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(logText());
-      toast('Ereignisse kopiert');
-    } catch (e) {
-      // ohne HTTPS gibt es keine Zwischenablage-API: als Datei anbieten
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([logText()], { type: 'text/plain' }));
-      a.download = 'hexapod-ereignisse.txt';
-      a.click();
-    }
+    if (await copyText(logText(), 'hexapod-ereignisse.txt')) toast('Ereignisse kopiert – z. B. in den Chat einfügen');
+    else toast('Als Datei gespeichert (Zwischenablage nicht verfügbar)');
   };
 }
 
@@ -2927,16 +2960,20 @@ function renderWifi(w) {
   const sta = w.sta;
   let cur;
   if (sta.state === 'connected') {
-    cur = `Verbunden mit „${sta.ssid}“ (${sta.rssi} dBm), Adresse ${sta.ip}.`;
+    const q = sta.rssi >= -55 ? 'sehr gut' : sta.rssi >= -65 ? 'gut' : sta.rssi >= -75 ? 'mäßig' : 'schwach';
+    cur = `Verbunden mit „${sta.ssid}“ – Signal ${signalBars(sta.rssi)} ${q} (${sta.rssi} dBm${sta.channel ? `, Kanal ${sta.channel}` : ''}), Adresse ${sta.ip}.`;
+    if (sta.connect_ms) {
+      cur += ` Verbunden nach ${(sta.connect_ms / 1000).toFixed(1)} s${sta.tries > 1 ? ` (${sta.tries} Anläufe)` : ''}.`;
+    }
     if (w.ap.active) {
       cur += ' Access Point läuft noch' + (w.ap.off_in_s != null ? ` (aus in ${Math.max(0, w.ap.off_in_s)} s).` : '.');
     }
   } else if (sta.state === 'connecting') {
-    cur = `Verbinde mit „${sta.ssid}“ …`;
+    cur = `Verbinde mit „${sta.ssid}“ …${sta.try > 1 ? ` (Anlauf ${sta.try})` : ''}`;
   } else {
     cur = `Access-Point-Modus („${w.ap.ssid}“, ${w.ap.ip}). `;
     cur += w.saved_ssid
-      ? `Gespeichertes Netz: „${w.saved_ssid}“${sta.reason ? ` – ${sta.reason}` : ''}.`
+      ? `Gespeichertes Netz: „${w.saved_ssid}“${sta.reason ? ` – ${sta.reason}` : ''}.${sta.retry_in ? ` Nächster Versuch in ${sta.retry_in} s.` : ''}`
       : 'Noch kein Heimnetz eingerichtet.';
   }
   $('wifi-current').textContent = cur;

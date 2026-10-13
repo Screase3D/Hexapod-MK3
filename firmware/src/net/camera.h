@@ -27,6 +27,9 @@ struct Settings {
   int max_fps;    // Bildratenbegrenzung des Streams
   int rotation;   // 0/90/180/270 Grad im Uhrzeigersinn (Einbaulage der Kamera)
   int xclk_mhz;   // Kamera-Takt 10/16/20 MHz (wirkt beim nächsten Aufwecken)
+  // Höchstens diese Auflösung, solange Bluetooth an ist (0 = keine Anpassung): WLAN und
+  // Bluetooth teilen sich die Antenne, große Bilder kämen dann nur mit 4–5 Bildern/s an
+  int bt_framesize;
 };
 
 bool begin();

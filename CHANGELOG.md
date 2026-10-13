@@ -2,7 +2,24 @@
 
 Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird beim Build
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
-Seitenleiste, z. B. `v0.8.1`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+Seitenleiste, z. B. `v0.8.2`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+
+## 0.8.2
+
+- **WLAN beim Start zuverlässig und schnell:** Lehnte der Router die erste Anmeldung ab (typisch direkt nach
+  einem Neustart: „Anmeldung abgelaufen“ / Handshake-Timeout – er kennt noch die alte Sitzung), hielt die
+  Firmware das für ein falsches Passwort, startete den Access Point und versuchte es erst nach 60 s wieder.
+  Jetzt: mehrere Anläufe innerhalb von 20 s, „Passwort falsch?“ erst nach drei Ablehnungen in Folge;
+  im Access-Point-Modus neue Versuche nach 10, 20, 40 s, dann jede Minute (mit Geräten am AP alle 3 min);
+  bei Repeatern/Mesh der stärkste Zugangspunkt.
+- Ereignisprotokoll: „WLAN verbunden … nach 4,2 s, 2 Anläufe“, beim Start der Grund, falls das Heimnetz
+  nicht erreicht wurde. *Einstellungen → WLAN* zeigt Signalqualität, Kanal, Anläufe und den nächsten Versuch.
+- **Kamera mit Bluetooth:** Solange Bluetooth an ist, streamt sie höchstens in CIF (400×296) – statt 4–5
+  kommen so deutlich mehr Bilder pro Sekunde an. Einstellbar unter ⚙ an der Kamera (*Mit Bluetooth*);
+  die Statistik unter dem Bild zeigt, wenn die kleinere Auflösung aktiv ist.
+- Warnung im Ereignisprotokoll, wenn der Controller-Akku unter 15 % fällt.
+- *Kopieren* im Ereignisprotokoll klappt jetzt auch am Handy (ohne HTTPS) und setzt Firmware-Version und
+  Laufzeit an den Anfang. WLAN-Signal im Tooltip der Verbindungsanzeige.
 
 ## 0.8.1
 

@@ -8,6 +8,7 @@
 #include <freertos/semphr.h>
 
 #include "config.h"
+#include "net/wifi_manager.h"
 
 namespace camera {
 namespace {
@@ -22,7 +23,8 @@ constexpr const char* NVS_NAMESPACE = "camera";
 bool g_ok = false;  // beim Start erkannt
 httpd_handle_t g_httpd = nullptr;
 std::atomic<int> g_stream_clients{0};
-Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0, CAM_XCLK_HZ / 1000000};
+Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0, CAM_XCLK_HZ / 1000000, FRAMESIZE_CIF};
+bool g_bt_applied = false;  // Bluetooth-Auflösung gerade aktiv (unter g_mutex)
 int g_xclk_active_mhz = 0;  // beim letzten Aufwecken tatsächlich verwendeter Takt
 
 // Ruhemodus: g_mutex schützt Treiber-Init/Deinit, g_awake und g_users
@@ -75,6 +77,8 @@ void loadSettings() {
   g_settings.rotation = (rot == 90 || rot == 180 || rot == 270) ? rot : 0;
   int xclk = p.getInt("xclk", g_settings.xclk_mhz);
   if (validXclk(xclk)) g_settings.xclk_mhz = xclk;
+  int btfs = p.getInt("btfs", g_settings.bt_framesize);
+  g_settings.bt_framesize = btfs == 0 || validFramesize(btfs) ? btfs : g_settings.bt_framesize;
   p.end();
 }
 
@@ -88,13 +92,21 @@ void saveSettings() {
   p.putInt("fps", g_settings.max_fps);
   p.putInt("rot", g_settings.rotation);
   p.putInt("xclk", g_settings.xclk_mhz);
+  p.putInt("btfs", g_settings.bt_framesize);
   p.end();
 }
+
+// Tatsächliche Auflösung: mit Bluetooth höchstens bt_framesize
+bool btReduces() {
+  return wifi::bluetoothActive() && g_settings.bt_framesize > 0 && g_settings.framesize > g_settings.bt_framesize;
+}
+int activeFramesize() { return btReduces() ? g_settings.bt_framesize : g_settings.framesize; }
 
 void applyToSensor() {
   sensor_t* s = esp_camera_sensor_get();
   if (!s) return;
-  s->set_framesize(s, (framesize_t)g_settings.framesize);
+  g_bt_applied = btReduces();
+  s->set_framesize(s, (framesize_t)activeFramesize());
   s->set_quality(s, g_settings.quality);
   // 180° = in beide Richtungen spiegeln; 270° = 180° hier + 90° in der UI
   bool flip180 = g_settings.rotation == 180 || g_settings.rotation == 270;
@@ -339,6 +351,8 @@ void loop() {
   // Nicht blockieren, falls gerade ein Stream die Kamera weckt
   if (xSemaphoreTake(g_mutex, 0) != pdTRUE) return;
   if (g_awake && g_users == 0 && millis() - g_last_use_ms >= CAM_IDLE_SLEEP_MS) sleepLocked();
+  // Bluetooth an/aus: Auflösung anpassen (läuft der Stream, sofort)
+  if (g_awake && btReduces() != g_bt_applied) applyToSensor();
   xSemaphoreGive(g_mutex);
 }
 
@@ -409,6 +423,14 @@ bool applyJson(JsonVariantConst obj, String& err) {
     }
     next.rotation = rot;
   }
+  if (obj["bt_framesize"].is<int>()) {
+    int fs = obj["bt_framesize"];
+    if (fs != 0 && !validFramesize(fs)) {
+      err = "ungültige Auflösung für Bluetooth";
+      return false;
+    }
+    next.bt_framesize = fs;
+  }
   // Nicht gleichzeitig mit Aufwecken/Schlafenlegen; schläft die Kamera,
   // gelten die Werte beim nächsten Aufwecken
   xSemaphoreTake(g_mutex, portMAX_DELAY);
@@ -429,6 +451,8 @@ void toJson(JsonObject obj) {
   obj["rotation"] = g_settings.rotation;
   obj["xclk_mhz"] = g_settings.xclk_mhz;
   obj["xclk_active_mhz"] = g_xclk_active_mhz;
+  obj["bt_framesize"] = g_settings.bt_framesize;
+  obj["framesize_active"] = activeFramesize();
   obj["clients"] = g_stream_clients.load();
   obj["port"] = STREAM_PORT;
   JsonArray sizes = obj["framesizes"].to<JsonArray>();
@@ -450,6 +474,7 @@ void statsToJson(JsonObject obj) {
   obj["awake"] = g_awake.load();
   obj["wake_ms"] = g_wake_ms.load();
   obj["wakes"] = g_wake_count.load();
+  if (btReduces()) obj["bt_fs"] = g_settings.bt_framesize;  // Bluetooth: kleinere Auflösung aktiv
   if (clients == 0) return;
   obj["fps"] = roundf(g_stat_fps.load() * 10.0f) / 10.0f;
   obj["kb"] = (g_stat_avg_bytes.load() + 512) / 1024;

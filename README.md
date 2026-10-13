@@ -169,8 +169,12 @@ Toolchain:
       (z. B. `http://192.168.178.57`). Das Gerät wieder mit dem Heimnetz verbinden und diese
       Adresse öffnen – am besten als Lesezeichen. Der Access Point schaltet sich danach ab.
 
-   Die Zugangsdaten bleiben gespeichert. Ist das Heimnetz beim Start nicht erreichbar, startet
-   wieder der Access Point; der Hexapod versucht das Heimnetz im Hintergrund weiter.
+   Die Zugangsdaten bleiben gespeichert. Beim Start versucht der Hexapod das Heimnetz bis zu 20 s
+   lang (mehrere Anläufe – direkt nach einem Neustart lehnt der Router die erste Anmeldung oft
+   ab) und nimmt bei mehreren Zugangspunkten mit gleichem Namen den stärksten. Klappt es nicht,
+   startet der Access Point und der Hexapod versucht es nach 10, 20, 40 s und dann jede Minute
+   erneut (mit Geräten am Access Point alle 3 min). Grund, Anläufe und Dauer stehen im
+   Ereignisprotokoll und unter *Einstellungen → WLAN*.
    Alternativ zur IP funktioniert oft auch `http://hexapod.local`.
 2. Zum Bewegen der Servos braucht es den Akku: USB abziehen, SW1 ein, dann über WLAN
    weiterarbeiten.

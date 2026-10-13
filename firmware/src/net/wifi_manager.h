@@ -26,8 +26,13 @@ bool isAccessPoint();  // Access Point aktiv
 // Bluetooth muss das WLAN Modem-Sleep nutzen (Antenne wird geteilt), ohne bleibt
 // er für die geringste Latenz aus.
 void setBluetoothActive(bool on);
+bool bluetoothActive();
 int lastDisconnectReason();             // letzter Trennungsgrund (WIFI_REASON_*)
 const char* disconnectText(int reason);  // Klartext (nie nullptr)
+int lastConnectTries();     // Anläufe bis zur letzten Verbindung (1 = sofort)
+uint32_t lastConnectMs();   // Dauer bis zur letzten Verbindung
+String failReason();        // warum der letzte Verbindungsversuch scheiterte
+uint32_t nextRetryS();      // AP-Modus: Sekunden bis zum nächsten Versuch (0 = keiner geplant/läuft)
 bool staConnected();   // mit dem Heimnetz verbunden
 String ip();           // Heimnetz-IP, sonst Access-Point-IP
 void toJson(JsonObject obj);
