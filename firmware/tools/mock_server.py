@@ -303,6 +303,9 @@ def handle(cmd):
     c = cmd.get("cmd", "")
     if c == "ping":
         return {"type": "pong"}
+    if c == "client_log":  # wie die Firmware: ins Ereignisprotokoll, ohne Antwort
+        ev("warn", "Oberfläche: " + str(cmd.get("text", ""))[:100])
+        return None
     if c == "walk":  # wie die Firmware: ohne Antwort
         state["mode"] = "pose"
         state["walk"] = [float(cmd.get(k, 0)) for k in ("vx", "vy", "turn")]

@@ -54,6 +54,22 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     out["type"] = "pong";
     return;
   }
+  if (strcmp(cmd, "client_log") == 0) {
+    // Meldung der Oberfläche (z. B. Grund eines Verbindungsabbruchs), höchstens alle 10 s
+    static uint32_t last = 0;
+    static uint32_t suppressed = 0;
+    const uint32_t now = millis();
+    if (last && now - last < 10000) {
+      ++suppressed;
+      return;
+    }
+    const char* text = in["text"] | "";
+    if (suppressed) EV_WARN("Oberfläche: %.100s (+%u weitere)", text, (unsigned)suppressed);
+    else EV_WARN("Oberfläche: %.100s", text);
+    last = now ? now : 1;
+    suppressed = 0;
+    return;  // ohne Antwort
+  }
   if (strcmp(cmd, "walk") == 0) {
     // Joystick, ca. 10 Hz: ohne Antwort, um den Funk nicht zu fluten
     motion::walk(in["vx"] | 0.0f, in["vy"] | 0.0f, in["turn"] | 0.0f);

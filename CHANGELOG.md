@@ -2,7 +2,20 @@
 
 Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird beim Build
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
-Seitenleiste, z. B. `v0.7.2`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+Seitenleiste, z. B. `v0.7.3`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+
+## 0.7.3
+
+- **„Keine Verbindung“ im Sekundentakt bei eingeschaltetem Bluetooth:** Stockt das WLAN (Bluetooth teilt
+  sich die Antenne), schickte der Webserver WebSocket-Nachrichten unter Umständen nur halb – der Browser
+  verwarf die Verbindung dann. Jetzt wird jede Nachricht ganz oder gar nicht gesendet; hängt eine
+  Verbindung, wird sie sauber geschlossen und protokolliert.
+- Die Oberfläche verbindet nach einem Abbruch sofort neu und zeigt „Keine Verbindung“ erst nach 2,5 s
+  (vorher „Verbinde …“). Den Grund jedes Abbruchs schreibt sie ins Ereignisprotokoll des Roboters.
+- Bluetooth: wieder 15–30 ms Intervall (mit 30–50 ms riss die Verbindung beim Koppeln ständig ab,
+  Code 520 = Funk-Timeout), Timeout 2 s statt 1 s, Verbindungsaufbau mit halber Funkzeit, Pausen nach
+  Fehlversuchen (1 → 8 s), Sendeleistung fest +9 dBm. Signalstärke des Controllers im Protokoll,
+  Fehlercodes mit Klartext.
 
 ## 0.7.2
 

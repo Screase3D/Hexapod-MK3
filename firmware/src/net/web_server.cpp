@@ -2,7 +2,9 @@
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <errno.h>
 #include <esp_http_server.h>
+#include <sys/socket.h>
 
 #include "config.h"
 #include "generated/web_assets.h"
@@ -327,8 +329,48 @@ esp_err_t rebootHandler(httpd_req_t* req) {
 
 // --- WebSocket ------------------------------------------------------------------
 
+constexpr uint32_t WS_SEND_DEADLINE_MS = 4000;
+
+// Senden ohne halbe Frames. lwIP gibt bei stockendem WLAN nach dem Sende-Timeout auch
+// teilweise Schreibvorgänge zurück; der HTTP-Server wertet die als Erfolg und schickt den
+// nächsten Frame mitten in den Rest des vorigen – der Browser bricht die Verbindung dann
+// mit einem Protokollfehler ab. Hier: alles senden oder Fehler (Verbindung wird geschlossen).
+int wsSend(httpd_handle_t, int fd, const char* buf, size_t len, int flags) {
+  const uint32_t start = millis();
+  size_t sent = 0;
+  while (sent < len) {
+    const int r = send(fd, buf + sent, len - sent, flags);
+    if (r > 0) {
+      sent += r;
+      continue;
+    }
+    const bool again = r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR);
+    if (!again) return HTTPD_SOCK_ERR_FAIL;
+    if (millis() - start >= WS_SEND_DEADLINE_MS) return HTTPD_SOCK_ERR_TIMEOUT;
+  }
+  return (int)len;
+}
+
+// Fehler beim Senden ins Ereignisprotokoll (höchstens alle 10 s)
+void logWsSendFailure(const char* what, esp_err_t err) {
+  static uint32_t last = 0;
+  static uint32_t suppressed = 0;
+  const uint32_t now = millis();
+  if (last && now - last < 10000) {
+    ++suppressed;
+    return;
+  }
+  if (suppressed) EV_WARN("WebSocket: %s fehlgeschlagen (%s) – Verbindung geschlossen (+%u weitere)", what, esp_err_to_name(err), (unsigned)suppressed);
+  else EV_WARN("WebSocket: %s fehlgeschlagen (%s) – Verbindung geschlossen", what, esp_err_to_name(err));
+  last = now ? now : 1;
+  suppressed = 0;
+}
+
 esp_err_t wsHandler(httpd_req_t* req) {
-  if (req->method == HTTP_GET) return ESP_OK;  // Handshake abgeschlossen
+  if (req->method == HTTP_GET) {  // Handshake abgeschlossen
+    httpd_sess_set_send_override(req->handle, httpd_req_to_sockfd(req), wsSend);
+    return ESP_OK;
+  }
 
   httpd_ws_frame_t frame = {};
   frame.type = HTTPD_WS_TYPE_TEXT;
@@ -367,7 +409,9 @@ esp_err_t wsHandler(httpd_req_t* req) {
   resp.type = HTTPD_WS_TYPE_TEXT;
   resp.payload = (uint8_t*)reply.c_str();
   resp.len = reply.length();
-  return httpd_ws_send_frame(req, &resp);
+  const esp_err_t sent = httpd_ws_send_frame(req, &resp);
+  if (sent != ESP_OK) logWsSendFailure("Antwort", sent);  // Fehler -> Server schließt die Verbindung
+  return sent;
 }
 
 struct BroadcastJob {
@@ -388,7 +432,13 @@ void broadcastWork(void* arg) {
       f.type = HTTPD_WS_TYPE_TEXT;
       f.payload = (uint8_t*)job->data;
       f.len = job->len;
-      httpd_ws_send_frame_async(g_server, fds[i], &f);
+      const esp_err_t err = httpd_ws_send_frame_async(g_server, fds[i], &f);
+      if (err != ESP_OK) {
+        // evtl. nur ein Teil des Frames gesendet -> Verbindung ist unbrauchbar
+        logWsSendFailure("Telemetrie", err);
+        httpd_sess_trigger_close(g_server, fds[i]);
+        continue;
+      }
       ++ws;
     }
   }

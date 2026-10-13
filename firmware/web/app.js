@@ -14,6 +14,11 @@ const $ = (id) => document.getElementById(id);
 const S = {
   ws: null,
   wsOpen: false,
+  wsOpenedAt: 0,
+  wsDownSince: Date.now(),  // seit wann keine Verbindung (Banner erst nach WS_BANNER_DELAY_MS)
+  wsRetries: 0,
+  wsStale: false,           // selbst geschlossen, weil nichts mehr kam
+  wsLastClose: null,        // Beschreibung des letzten Abbruchs (geht nach dem Neuverbinden ins Protokoll)
   lastMsg: 0,
   tel: null,
   cal: new Array(NUM_SERVOS).fill(null),
@@ -134,22 +139,52 @@ function statusEl(cls, text) {
 
 // ------------------------------------------------------------- WebSocket ----
 
+const WS_RETRY_FIRST_MS = 300;    // nach einem Abbruch sofort neu verbinden ...
+const WS_RETRY_MS = 1500;         // ... danach in Abständen
+const WS_BANNER_DELAY_MS = 2500;  // kurze Aussetzer nicht als „Keine Verbindung“ melden
+const WS_STALE_MS = 5000;         // so lange nichts empfangen -> Verbindung hängt
+
+// Keine Verbindung (länger als ein kurzer Aussetzer)
+const wsDown = () => !S.wsOpen && Date.now() - S.wsDownSince >= WS_BANNER_DELAY_MS;
+
+function describeClose(ev) {
+  const now = Date.now();
+  const open = ((now - S.wsOpenedAt) / 1000).toFixed(1);
+  const idle = ((now - S.lastMsg) / 1000).toFixed(1);
+  const codes = { 1000: 'normal', 1001: 'Seite verlassen', 1002: 'Protokollfehler', 1006: 'abgerissen', 1009: 'zu groß', 1011: 'Serverfehler' };
+  const why = S.wsStale ? `${WS_STALE_MS / 1000} s keine Daten`
+    : `${codes[ev.code] || 'Code'} ${ev.code}${ev.reason ? ' ' + ev.reason : ''}`;
+  return `Verbindung getrennt (${why}) nach ${open} s, letzte Nachricht vor ${idle} s`;
+}
+
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
   const ws = new WebSocket(proto + location.host + '/ws');
   S.ws = ws;
   ws.onopen = () => {
     S.wsOpen = true;
-    S.lastMsg = Date.now();
+    S.wsOpenedAt = S.lastMsg = Date.now();
+    S.wsDownSince = 0;
+    S.wsRetries = 0;
+    S.wsStale = false;
     renderConnection();
+    if (S.wsLastClose) {  // Grund des letzten Abbruchs ins Ereignisprotokoll des Roboters
+      send('client_log', { text: S.wsLastClose });
+      S.wsLastClose = null;
+    }
     send('cal_get');
     checkVersion();
     if (OTA.rebooting) location.reload();  // neue Firmware = neue Oberfläche
   };
-  ws.onclose = () => {
+  ws.onclose = (ev) => {
+    if (S.wsOpen && !document.hidden) S.wsLastClose = describeClose(ev);  // Handy gesperrt: kein Fehler
     S.wsOpen = false;
+    if (!S.wsDownSince) {
+      S.wsDownSince = Date.now();
+      setTimeout(renderConnection, WS_BANNER_DELAY_MS + 50);
+    }
     renderConnection();
-    setTimeout(connect, 1500);
+    setTimeout(connect, S.wsRetries++ ? WS_RETRY_MS : WS_RETRY_FIRST_MS);
   };
   ws.onerror = () => ws.close();
   ws.onmessage = (ev) => {
@@ -173,7 +208,10 @@ setInterval(() => {
   if (!S.wsOpen) return;
   S.pingAt = performance.now();
   S.ws.send('{"cmd":"ping"}');
-  if (Date.now() - S.lastMsg > 5000) S.ws.close();  // Verbindung hängt -> neu aufbauen
+  if (Date.now() - S.lastMsg > WS_STALE_MS) {  // Verbindung hängt -> neu aufbauen
+    S.wsStale = true;
+    S.ws.close();
+  }
 }, 1500);
 
 function onMessage(m) {
@@ -227,11 +265,12 @@ function renderConnection() {
   if (!S.wsOpen) S.rtt = 0;
   const rtt = S.rtt ? Math.round(S.rtt) : 0;
   const slow = S.wsOpen && rtt > RTT_SLOW_MS;
-  setPill('pill-conn', S.wsOpen ? (slow ? 'Verbindung langsam' : 'Verbunden') : 'Getrennt',
-    S.wsOpen ? (slow ? 'pill-warn' : 'pill-ok') : 'pill-bad');
+  const down = wsDown();
+  setPill('pill-conn', S.wsOpen ? (slow ? 'Verbindung langsam' : 'Verbunden') : (down ? 'Getrennt' : 'Verbinde …'),
+    S.wsOpen ? (slow ? 'pill-warn' : 'pill-ok') : (down ? 'pill-bad' : 'pill-warn'));
   $('pill-conn').title = S.wsOpen ? `Antwortzeit ${rtt || '–'} ms${slow ? ' – Steuerung reagiert verzögert (WLAN-Empfang?)' : ''}` : '';
   $('sb-conn').classList.toggle('on', S.wsOpen);
-  $('sb-conn-text').textContent = S.wsOpen ? `Verbunden · ${location.hostname}${rtt ? ` · ${rtt} ms` : ''}` : 'Getrennt';
+  $('sb-conn-text').textContent = S.wsOpen ? `Verbunden · ${location.hostname}${rtt ? ` · ${rtt} ms` : ''}` : (down ? 'Getrennt' : 'Verbinde …');
   renderBanner();
 }
 
@@ -244,9 +283,11 @@ function renderBanner() {
   let cls = '';
   let act = null;
 
-  if (!S.wsOpen) {
+  if (wsDown()) {
     msg = 'Keine Verbindung zum Hexapod – verbinde neu …';
     cls = 'info';
+  } else if (!S.wsOpen) {
+    // kurzer Aussetzer: gleich wieder da, kein Banner
   } else if (t && t.servo.estop) {
     msg = 'NOT-AUS aktiv – alle Servos stromlos';
     cls = 'danger';

@@ -17,13 +17,18 @@ constexpr uint16_t SCAN_IDLE_INTERVAL_MS = 300, SCAN_IDLE_WINDOW_MS = 30;
 constexpr uint32_t TASK_PERIOD_MS = 20;
 constexpr uint32_t CONNECT_TIMEOUT_MS = 5000;
 constexpr uint32_t ENCRYPT_WAIT_MS = 4000;
-// Verbindungsintervall in 1,25-ms-Schritten: 30..50 ms. Controller wünschen sich 7,5 ms –
-// dann belegt Bluetooth die gemeinsame Antenne so oft, dass das WLAN kaum noch durchkommt.
-// 30 ms nutzt auch ein iPhone; für Sticks reicht das (Steuerung läuft mit 50 Hz).
-constexpr uint16_t CONN_ITVL_MIN = 24, CONN_ITVL_MAX = 40;
-// Abbruch nach 1 s ohne Funkkontakt erkennen (Standard 4 s): der Controller meldet nur
-// Änderungen, ein gehaltener Stick gilt bis dahin weiter
-constexpr uint16_t CONN_SUPERVISION_10MS = 100;
+// Verbindungsintervall in 1,25-ms-Schritten: 15..30 ms. Der Controller wünscht sich 7,5 ms –
+// das wird abgelehnt (Bluetooth belegte die gemeinsame Antenne dann sehr oft). Längere
+// Intervalle (30..50 ms) rissen dagegen schon beim Koppeln ständig ab (Funk-Timeout).
+constexpr uint16_t CONN_ITVL_MIN = 12, CONN_ITVL_MAX = 24;
+// Abbruch nach 2 s ohne Funkkontakt erkennen (Standard 4 s): der Controller meldet nur
+// Änderungen, ein gehaltener Stick gilt bis dahin weiter. 1 s war neben dem WLAN zu knapp.
+constexpr uint16_t CONN_SUPERVISION_10MS = 200;
+// Verbindungsaufbau: Suche nach dem Controller mit 50 % statt 100 % der Funkzeit
+constexpr uint16_t CONN_SCAN_ITVL = 32, CONN_SCAN_WINDOW = 16;
+// Nach Fehlversuchen kurz Pause (WLAN entlasten), wachsend bis 8 s
+constexpr uint32_t RETRY_BASE_MS = 1000, RETRY_MAX_MS = 8000;
+constexpr int8_t TX_POWER_DBM = 9;
 // Trennt der Controller so kurz nach einem abgelehnten Intervall, bekommt er künftig seinen Wunsch
 constexpr uint32_t REJECT_DROP_MS = 15000;
 const NimBLEUUID UUID_HID("1812");
@@ -51,6 +56,7 @@ uint32_t g_seen = 0, g_seen_xbox = 0;  // Kopplung: empfangene Meldungen / davon
 bool g_found = false;         // Suche hat den Controller gefunden (Adresse in g_found_addr)
 char g_found_name[32] = "";
 NimBLEAddress g_found_addr;   // nur kopieren (keine Speicheranforderung)
+int8_t g_found_rssi = 0;
 
 // --- aus den NimBLE-Rückrufen ---
 std::atomic<int> g_disc_reason{0};          // letzter Trennungsgrund (NimBLE-Code)
@@ -65,6 +71,21 @@ bool g_inited = false;
 bool g_scan_fast = false;
 
 // Ausgabebericht? (Report Reference: Typ 2). Ohne Beschreibung: beschreibbar und ohne Benachrichtigung
+// Klartext zu NimBLE-/HCI-Fehlercodes (die Bibliothek liefert hier keine Texte)
+const char* bleErrText(int rc) {
+  switch (rc) {
+    case BLE_HS_HCI_ERR(BLE_ERR_CONN_SPVN_TMO):      return "Funkkontakt abgerissen (Timeout)";
+    case BLE_HS_HCI_ERR(BLE_ERR_REM_USER_CONN_TERM): return "vom Controller beendet";
+    case BLE_HS_HCI_ERR(BLE_ERR_CONN_TERM_LOCAL):    return "vom Roboter beendet";
+    case BLE_HS_HCI_ERR(BLE_ERR_LMP_LL_RSP_TMO):     return "Controller antwortet nicht";
+    case BLE_HS_HCI_ERR(BLE_ERR_CONN_ESTABLISHMENT): return "Verbindungsaufbau gescheitert";
+    case BLE_HS_HCI_ERR(BLE_ERR_PINKEY_MISSING):     return "Schlüssel passt nicht (neu koppeln)";
+    case BLE_HS_ETIMEOUT:                            return "Zeitüberschreitung";
+    case BLE_HS_ENOTCONN:                            return "nicht verbunden";
+    default:                                         return "";
+  }
+}
+
 // Verbindung weg: kurz nach einer Ablehnung? Dann verträgt der Controller sie nicht
 void checkRejectedDrop() {
   const uint32_t t = g_rejected_ms.exchange(0);
@@ -117,10 +138,12 @@ class ScanCallbacks : public NimBLEScanCallbacks {
     char name[32];
     copyStr(name, sizeof(name), d->haveName() ? d->getName().c_str() : "Xbox-Controller");
     const NimBLEAddress a = d->getAddress();
+    const int8_t rssi = d->getRSSI();
     portENTER_CRITICAL(&g_mux);
     if (!g_found) {  // der Task holt Adresse und Namen gemeinsam ab
       g_found_addr = a;
       memcpy(g_found_name, name, sizeof(name));
+      g_found_rssi = rssi;
       g_found = true;
     }
     portEXIT_CRITICAL(&g_mux);
@@ -193,13 +216,14 @@ bool connectTo(const NimBLEAddress& a, bool pairing) {
     g_client = NimBLEDevice::createClient();
     g_client->setClientCallbacks(&g_client_cb, false);
     g_client->setConnectTimeout(CONNECT_TIMEOUT_MS);
-    g_client->setConnectionParams(CONN_ITVL_MIN, CONN_ITVL_MAX, 0, CONN_SUPERVISION_10MS);
+    g_client->setConnectionParams(CONN_ITVL_MIN, CONN_ITVL_MAX, 0, CONN_SUPERVISION_10MS, CONN_SCAN_ITVL,
+                                  CONN_SCAN_WINDOW);
   }
   g_upd_logged = false;
   g_rejected_ms = 0;
   if (!g_client->connect(a)) {
     const int err = g_client->getLastError();
-    EV_WARN("Controller: Verbindung fehlgeschlagen (%d: %s)", err, NimBLEUtils::returnCodeToString(err));
+    EV_WARN("Controller: Verbindung fehlgeschlagen (%d %s)", err, bleErrText(err));
     if (pairing) NimBLEDevice::deleteBond(a);
     return false;
   }
@@ -212,7 +236,7 @@ bool connectTo(const NimBLEAddress& a, bool pairing) {
       vTaskDelay(pdMS_TO_TICKS(50));
     }
     if (!g_client->isConnected() || !g_client->getConnInfo().isEncrypted()) {
-      EV_WARN("Controller: Verschlüsselung/Kopplung fehlgeschlagen (%d: %s)", err, NimBLEUtils::returnCodeToString(err));
+      EV_WARN("Controller: Verschlüsselung/Kopplung fehlgeschlagen (%d %s)", err, bleErrText(err));
       disconnect();
       if (pairing) NimBLEDevice::deleteBond(a);
       return false;
@@ -247,8 +271,8 @@ bool connectTo(const NimBLEAddress& a, bool pairing) {
   }
   {
     const NimBLEConnInfo ci = g_client->getConnInfo();
-    EV_INFO("Bluetooth-Verbindung: Intervall %.1f ms, %s, Speicher frei %u KB (größter Block %u KB)",
-            ci.getConnInterval() * 1.25f, ci.isEncrypted() ? "verschlüsselt" : "unverschlüsselt",
+    EV_INFO("Bluetooth-Verbindung: Intervall %.1f ms, Signal %d dBm, %s, Speicher frei %u KB (größter Block %u KB)",
+            ci.getConnInterval() * 1.25f, g_client->getRssi(), ci.isEncrypted() ? "verschlüsselt" : "unverschlüsselt",
             (unsigned)(ESP.getFreeHeap() / 1024), (unsigned)(ESP.getMaxAllocHeap() / 1024));
   }
   const std::string addr = a.toString();
@@ -277,6 +301,21 @@ void shutdown() {
 void task(void*) {
   uint16_t last_itvl = 0;  // zuletzt gesehenes Verbindungsintervall (1,25 ms)
   uint8_t itvl_check = 0;
+  uint8_t fails = 0;       // Fehlversuche in Folge
+  uint32_t retry_at = 0;   // vorher nicht erneut suchen/verbinden
+  // Verbindungsversuch mit Pause nach Fehlschlag
+  auto attempt = [&](const NimBLEAddress& addr, bool pairing) {
+    if (connectTo(addr, pairing)) {
+      fails = 0;
+      return true;
+    }
+    checkRejectedDrop();
+    if (fails < 8) ++fails;
+    uint32_t wait = RETRY_BASE_MS << (fails - 1);
+    const uint32_t cap = pairing ? 2000 : RETRY_MAX_MS;
+    retry_at = millis() + (wait > cap ? cap : wait);
+    return false;
+  };
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(TASK_PERIOD_MS));
     portENTER_CRITICAL(&g_mux);
@@ -285,6 +324,7 @@ void task(void*) {
     g_req_pair = g_req_forget = false;
     const bool found = g_found;
     const NimBLEAddress found_addr = g_found_addr;
+    const int found_rssi = g_found_rssi;
     g_found = false;
     const bool have_addr = g_addr[0] != 0;
     State st = g_state;
@@ -306,6 +346,7 @@ void task(void*) {
       vTaskDelay(pdMS_TO_TICKS(50));
       NimBLEDevice::init("Hexapod MK3");
       NimBLEDevice::setSecurityAuth(true, false, true);  // koppeln (Bond), ohne PIN, LE Secure Connections
+      NimBLEDevice::setPower(TX_POWER_DBM);
       g_inited = true;
       EV_INFO("Bluetooth an (WLAN im Energiesparmodus, freier Speicher %u KB)", (unsigned)(ESP.getFreeHeap() / 1024));
       st = have_addr ? State::Searching : State::Idle;
@@ -325,6 +366,8 @@ void task(void*) {
     }
     if (req_pair) {
       disconnect();
+      fails = 0;
+      retry_at = 0;
       portENTER_CRITICAL(&g_mux);
       g_pair_until = millis() + PAIRING_MS;
       g_state = State::Pairing;
@@ -358,11 +401,11 @@ void task(void*) {
         }
         break;
       case State::Pairing:
-        if (found) {
-          EV_INFO("Controller gefunden (%s) – verbinde", found_addr.toString().c_str());
-          if (!connectTo(found_addr, true)) {
-            checkRejectedDrop();
-            setState(State::Pairing);  // weiter versuchen
+        if (found && !pair_over) {
+          EV_INFO("Controller gefunden (%s, Signal %d dBm) – verbinde", found_addr.toString().c_str(), found_rssi);
+          if (!attempt(found_addr, true)) {
+            stopScan();
+            setState(State::Pairing);  // nach der Pause weiter versuchen
           }
         } else if (pair_over) {
           stopScan();
@@ -378,17 +421,18 @@ void task(void*) {
           } else {
             EV_WARN("Kopplung beendet: Xbox-Gerät gesehen, aber nicht verbunden (siehe Einträge davor)");
           }
-        } else {
+        } else if ((int32_t)(millis() - retry_at) >= 0) {
           startScan(true);
         }
         break;
       case State::Searching:
         if (found) {
-          if (!connectTo(found_addr, false)) {
-            checkRejectedDrop();
+          if (fails == 0) EV_INFO("Controller in Reichweite (Signal %d dBm) – verbinde", found_rssi);
+          if (!attempt(found_addr, false)) {
+            stopScan();
             setState(State::Searching);
           }
-        } else {
+        } else if ((int32_t)(millis() - retry_at) >= 0) {
           startScan(false);
         }
         break;
@@ -404,14 +448,11 @@ void task(void*) {
 }  // namespace
 
 const char* disconnectText() {
-  switch (g_disc_reason.load()) {
-    case BLE_HS_HCI_ERR(BLE_ERR_CONN_SPVN_TMO):      return "Funkkontakt abgerissen (außer Reichweite oder Funk überlastet)";
-    case BLE_HS_HCI_ERR(BLE_ERR_REM_USER_CONN_TERM): return "vom Controller beendet (ausgeschaltet?)";
-    case BLE_HS_HCI_ERR(BLE_ERR_CONN_TERM_LOCAL):    return "vom Roboter beendet";
-    case BLE_HS_HCI_ERR(BLE_ERR_LMP_LL_RSP_TMO):     return "Controller antwortet nicht mehr";
-    case BLE_HS_HCI_ERR(BLE_ERR_CONN_ESTABLISHMENT): return "Verbindungsaufbau gescheitert";
-    default:                                         return "unbekannter Grund";
-  }
+  const int rc = g_disc_reason.load();
+  if (rc == BLE_HS_HCI_ERR(BLE_ERR_REM_USER_CONN_TERM)) return "vom Controller beendet (ausgeschaltet?)";
+  if (rc == BLE_HS_HCI_ERR(BLE_ERR_CONN_SPVN_TMO)) return "Funkkontakt abgerissen (außer Reichweite oder Funk überlastet)";
+  const char* t = bleErrText(rc);
+  return *t ? t : "unbekannter Grund";
 }
 
 const char* stateName(State s) {
