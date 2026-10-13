@@ -7,7 +7,7 @@
 namespace evlog {
 namespace {
 constexpr int CAPACITY = 48;
-constexpr size_t TEXT_LEN = 112;
+constexpr size_t TEXT_LEN = 160;  // Bytes (Umlaute zählen doppelt)
 
 struct Entry {
   uint32_t seq;

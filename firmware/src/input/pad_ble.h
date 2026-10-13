@@ -40,5 +40,6 @@ void rumble(uint8_t strength, uint16_t ms);  // kurze Vibration (Rückmeldung)
 
 // Nach erfolgreichem Koppeln einmal true mit der neuen Adresse (zum Speichern)
 bool takePairedAddress(char out[18]);
+const char* disconnectText();  // Grund der letzten Trennung (Klartext)
 
 }  // namespace padble

@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include <atomic>
 #include "net/wifi_manager.h"
 #include "sys/evlog.h"
 #include <string.h>
@@ -15,8 +16,22 @@ constexpr uint16_t SCAN_PAIR_INTERVAL_MS = 90, SCAN_PAIR_WINDOW_MS = 30;
 constexpr uint16_t SCAN_IDLE_INTERVAL_MS = 300, SCAN_IDLE_WINDOW_MS = 30;
 constexpr uint32_t TASK_PERIOD_MS = 20;
 constexpr uint32_t CONNECT_TIMEOUT_MS = 5000;
+constexpr uint32_t ENCRYPT_WAIT_MS = 4000;
+// Verbindungsintervall in 1,25-ms-Schritten: 30..50 ms. Controller wünschen sich 7,5 ms –
+// dann belegt Bluetooth die gemeinsame Antenne so oft, dass das WLAN kaum noch durchkommt.
+// 30 ms nutzt auch ein iPhone; für Sticks reicht das (Steuerung läuft mit 50 Hz).
+constexpr uint16_t CONN_ITVL_MIN = 24, CONN_ITVL_MAX = 40;
+// Abbruch nach 1 s ohne Funkkontakt erkennen (Standard 4 s): der Controller meldet nur
+// Änderungen, ein gehaltener Stick gilt bis dahin weiter
+constexpr uint16_t CONN_SUPERVISION_10MS = 100;
+// Trennt der Controller so kurz nach einem abgelehnten Intervall, bekommt er künftig seinen Wunsch
+constexpr uint32_t REJECT_DROP_MS = 15000;
 const NimBLEUUID UUID_HID("1812");
 const NimBLEUUID UUID_BATTERY("180f");
+const NimBLEUUID UUID_REPORT("2a4d");         // HID-Bericht (Eingabe bzw. Ausgabe)
+const NimBLEUUID UUID_BATTERY_LEVEL("2a19");
+const NimBLEUUID UUID_REPORT_REF("2908");     // Beschreibung eines Berichts: ID, Typ
+constexpr uint8_t REPORT_TYPE_OUTPUT = 2;
 
 portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
 // --- geschützt durch g_mux (keine Speicheranforderung im kritischen Abschnitt!) ---
@@ -37,11 +52,34 @@ bool g_found = false;         // Suche hat den Controller gefunden (Adresse in g
 char g_found_name[32] = "";
 NimBLEAddress g_found_addr;   // nur kopieren (keine Speicheranforderung)
 
+// --- aus den NimBLE-Rückrufen ---
+std::atomic<int> g_disc_reason{0};          // letzter Trennungsgrund (NimBLE-Code)
+std::atomic<bool> g_upd_logged{false};      // Wunsch nach anderem Intervall schon gemeldet
+std::atomic<uint32_t> g_rejected_ms{0};     // Zeitpunkt der letzten Ablehnung (0 = keine)
+std::atomic<bool> g_allow_fast{false};      // Rückfall: Controller verträgt keine Ablehnung
+
 // --- nur im BLE-Task ---
 NimBLEClient* g_client = nullptr;
 NimBLERemoteCharacteristic* g_out = nullptr;  // Ausgabebericht (Vibration)
 bool g_inited = false;
 bool g_scan_fast = false;
+
+// Ausgabebericht? (Report Reference: Typ 2). Ohne Beschreibung: beschreibbar und ohne Benachrichtigung
+// Verbindung weg: kurz nach einer Ablehnung? Dann verträgt der Controller sie nicht
+void checkRejectedDrop() {
+  const uint32_t t = g_rejected_ms.exchange(0);
+  if (!t || g_allow_fast || millis() - t > REJECT_DROP_MS) return;
+  g_allow_fast = true;
+  EV_WARN("Controller trennt nach abgelehntem Intervall – bekommt es ab jetzt (WLAN wird langsamer)");
+}
+
+bool isOutputReport(NimBLERemoteCharacteristic* ch) {
+  if (ch->canNotify() || !(ch->canWrite() || ch->canWriteNoResponse())) return false;
+  NimBLERemoteDescriptor* ref = ch->getDescriptor(UUID_REPORT_REF);
+  if (!ref) return true;
+  const NimBLEAttValue v = ref->readValue();
+  return v.size() < 2 || v[1] == REPORT_TYPE_OUTPUT;
+}
 
 void setState(State s) {
   portENTER_CRITICAL(&g_mux);
@@ -92,6 +130,18 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 class ClientCallbacks : public NimBLEClientCallbacks {
   void onPassKeyEntry(NimBLEConnInfo& info) override { NimBLEDevice::injectPassKey(info, 0); }
   void onConfirmPasskey(NimBLEConnInfo& info, uint32_t) override { NimBLEDevice::injectConfirmPasskey(info, true); }
+  void onDisconnect(NimBLEClient*, int reason) override { g_disc_reason = reason; }
+  // Der Controller fragt nach dem Verbinden nach einem kürzeren Intervall: ablehnen, wenn es
+  // schneller als 30 ms werden könnte (das WLAN braucht die Funkzeit)
+  bool onConnParamsUpdateRequest(NimBLEClient*, const ble_gap_upd_params* p) override {
+    const bool ok = g_allow_fast || p->itvl_min >= CONN_ITVL_MIN;
+    if (!ok) g_rejected_ms = millis() | 1;
+    if (!g_upd_logged.exchange(true)) {
+      EV_INFO("Controller wünscht Intervall %.1f–%.1f ms: %s", p->itvl_min * 1.25f, p->itvl_max * 1.25f,
+              ok ? "angenommen" : "abgelehnt (WLAN braucht die Funkzeit)");
+    }
+    return ok;
+  }
 } g_client_cb;
 
 void onReport(NimBLERemoteCharacteristic* ch, uint8_t* data, size_t len, bool) {
@@ -143,33 +193,50 @@ bool connectTo(const NimBLEAddress& a, bool pairing) {
     g_client = NimBLEDevice::createClient();
     g_client->setClientCallbacks(&g_client_cb, false);
     g_client->setConnectTimeout(CONNECT_TIMEOUT_MS);
-    // Abbruch nach 1 s ohne Funkkontakt erkennen (Standard 4 s):
-    // der Controller meldet nur Änderungen, ein gehaltener Stick gilt bis dahin weiter
-    // 15..30 ms lassen dem WLAN mehr Funkzeit als die üblichen 7,5 ms und reichen für Sticks
-    g_client->setConnectionParams(12, 24, 0, 100);
+    g_client->setConnectionParams(CONN_ITVL_MIN, CONN_ITVL_MAX, 0, CONN_SUPERVISION_10MS);
   }
+  g_upd_logged = false;
+  g_rejected_ms = 0;
   if (!g_client->connect(a)) {
-    EV_WARN("Controller: Verbindung fehlgeschlagen (Fehler %d)", g_client->getLastError());
+    const int err = g_client->getLastError();
+    EV_WARN("Controller: Verbindung fehlgeschlagen (%d: %s)", err, NimBLEUtils::returnCodeToString(err));
     if (pairing) NimBLEDevice::deleteBond(a);
     return false;
   }
-  if (!g_client->secureConnection()) EV_WARN("Controller: Verschlüsselung/Kopplung fehlgeschlagen");
+  if (!g_client->secureConnection()) {
+    // Xbox-Controller starten die Kopplung oft selbst; dann kann der eigene Versuch scheitern,
+    // während die Verschlüsselung trotzdem zustande kommt -> kurz darauf warten
+    const int err = g_client->getLastError();
+    const uint32_t t0 = millis();
+    while (g_client->isConnected() && !g_client->getConnInfo().isEncrypted() && millis() - t0 < ENCRYPT_WAIT_MS) {
+      vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    if (!g_client->isConnected() || !g_client->getConnInfo().isEncrypted()) {
+      EV_WARN("Controller: Verschlüsselung/Kopplung fehlgeschlagen (%d: %s)", err, NimBLEUtils::returnCodeToString(err));
+      disconnect();
+      if (pairing) NimBLEDevice::deleteBond(a);
+      return false;
+    }
+  }
   bool report = false;
   g_out = nullptr;
   for (NimBLERemoteService* svc : g_client->getServices(true)) {
     const bool hid = svc->getUUID() == UUID_HID;
     if (!hid && svc->getUUID() != UUID_BATTERY) continue;
     for (NimBLERemoteCharacteristic* ch : svc->getCharacteristics(true)) {
-      if (ch->canRead()) {  // Lesen löst bei Bedarf die Verschlüsselung aus
+      // nur Berichte (Eingabe/Ausgabe) und Akkustand – nicht Report Map, Control Point, ...
+      const NimBLEUUID& uuid = ch->getUUID();
+      if (hid ? uuid != UUID_REPORT : uuid != UUID_BATTERY_LEVEL) continue;
+      if (!hid && ch->canRead()) {
         NimBLEAttValue v = ch->readValue();
-        if (!hid && v.size() >= 1) {
+        if (v.size() >= 1) {
           portENTER_CRITICAL(&g_mux);
           g_battery = v[0];
           portEXIT_CRITICAL(&g_mux);
         }
       }
       if (ch->canNotify() && ch->subscribe(true, onReport, true) && hid) report = true;
-      if (hid && !g_out && (ch->canWrite() || ch->canWriteNoResponse())) g_out = ch;
+      if (hid && !g_out && isOutputReport(ch)) g_out = ch;  // Vibration
     }
   }
   if (!report || !g_client->isConnected()) {
@@ -177,6 +244,12 @@ bool connectTo(const NimBLEAddress& a, bool pairing) {
     disconnect();
     if (pairing) NimBLEDevice::deleteBond(a);
     return false;
+  }
+  {
+    const NimBLEConnInfo ci = g_client->getConnInfo();
+    EV_INFO("Bluetooth-Verbindung: Intervall %.1f ms, %s, Speicher frei %u KB (größter Block %u KB)",
+            ci.getConnInterval() * 1.25f, ci.isEncrypted() ? "verschlüsselt" : "unverschlüsselt",
+            (unsigned)(ESP.getFreeHeap() / 1024), (unsigned)(ESP.getMaxAllocHeap() / 1024));
   }
   const std::string addr = a.toString();
   portENTER_CRITICAL(&g_mux);
@@ -202,6 +275,8 @@ void shutdown() {
 }
 
 void task(void*) {
+  uint16_t last_itvl = 0;  // zuletzt gesehenes Verbindungsintervall (1,25 ms)
+  uint8_t itvl_check = 0;
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(TASK_PERIOD_MS));
     portENTER_CRITICAL(&g_mux);
@@ -230,7 +305,7 @@ void task(void*) {
       wifi::setBluetoothActive(true);
       vTaskDelay(pdMS_TO_TICKS(50));
       NimBLEDevice::init("Hexapod MK3");
-      NimBLEDevice::setSecurityAuth(true, false, false);  // koppeln (Bond), ohne PIN
+      NimBLEDevice::setSecurityAuth(true, false, true);  // koppeln (Bond), ohne PIN, LE Secure Connections
       g_inited = true;
       EV_INFO("Bluetooth an (WLAN im Energiesparmodus, freier Speicher %u KB)", (unsigned)(ESP.getFreeHeap() / 1024));
       st = have_addr ? State::Searching : State::Idle;
@@ -262,8 +337,20 @@ void task(void*) {
       case State::Connected:
         if (!g_client || !g_client->isConnected()) {
           g_out = nullptr;
+          last_itvl = 0;
+          checkRejectedDrop();
           setState(State::Searching);  // Controller aus oder außer Reichweite: wieder suchen
-        } else if (rumble_ms && g_out) {
+          break;
+        }
+        if (++itvl_check >= 50) {  // etwa jede Sekunde: hat sich das Intervall geändert?
+          itvl_check = 0;
+          const uint16_t itvl = g_client->getConnInfo().getConnInterval();
+          if (itvl && itvl != last_itvl) {
+            if (last_itvl) EV_INFO("Bluetooth-Intervall jetzt %.1f ms", itvl * 1.25f);
+            last_itvl = itvl;
+          }
+        }
+        if (rumble_ms && g_out) {
           // Vibration: Hauptmotoren (Bits 0, 1), Stärke 0..100, Dauer in 10 ms
           const uint8_t p = rumble_strength > 100 ? 100 : rumble_strength;
           uint8_t rep[8] = {0x03, 0, 0, p, p, (uint8_t)(rumble_ms / 10 > 255 ? 255 : rumble_ms / 10), 0, 0};
@@ -273,7 +360,10 @@ void task(void*) {
       case State::Pairing:
         if (found) {
           EV_INFO("Controller gefunden (%s) – verbinde", found_addr.toString().c_str());
-          if (!connectTo(found_addr, true)) setState(State::Pairing);  // weiter versuchen
+          if (!connectTo(found_addr, true)) {
+            checkRejectedDrop();
+            setState(State::Pairing);  // weiter versuchen
+          }
         } else if (pair_over) {
           stopScan();
           setState(have_addr ? State::Searching : State::Idle);
@@ -294,7 +384,10 @@ void task(void*) {
         break;
       case State::Searching:
         if (found) {
-          if (!connectTo(found_addr, false)) setState(State::Searching);
+          if (!connectTo(found_addr, false)) {
+            checkRejectedDrop();
+            setState(State::Searching);
+          }
         } else {
           startScan(false);
         }
@@ -309,6 +402,17 @@ void task(void*) {
   }
 }
 }  // namespace
+
+const char* disconnectText() {
+  switch (g_disc_reason.load()) {
+    case BLE_HS_HCI_ERR(BLE_ERR_CONN_SPVN_TMO):      return "Funkkontakt abgerissen (außer Reichweite oder Funk überlastet)";
+    case BLE_HS_HCI_ERR(BLE_ERR_REM_USER_CONN_TERM): return "vom Controller beendet (ausgeschaltet?)";
+    case BLE_HS_HCI_ERR(BLE_ERR_CONN_TERM_LOCAL):    return "vom Roboter beendet";
+    case BLE_HS_HCI_ERR(BLE_ERR_LMP_LL_RSP_TMO):     return "Controller antwortet nicht mehr";
+    case BLE_HS_HCI_ERR(BLE_ERR_CONN_ESTABLISHMENT): return "Verbindungsaufbau gescheitert";
+    default:                                         return "unbekannter Grund";
+  }
+}
 
 const char* stateName(State s) {
   switch (s) {

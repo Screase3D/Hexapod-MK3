@@ -2,7 +2,19 @@
 
 Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird beim Build
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
-Seitenleiste, z. B. `v0.7.1`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+Seitenleiste, z. B. `v0.7.2`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+
+## 0.7.2
+
+- **Bluetooth-Controller und WLAN gleichzeitig:** Der Controller wünscht sich nach dem Verbinden
+  ein Intervall von wenigen Millisekunden; damit belegt Bluetooth die gemeinsame Antenne so oft, dass
+  das WLAN kaum noch durchkommt. Der Roboter lehnt jetzt alles unter 30 ms ab (verbindet mit 30–50 ms,
+  so wie ein iPhone). Trennt der Controller daraufhin, bekommt er sein Intervall doch (steht im Protokoll).
+- Koppeln zuverlässiger: Startet der Controller die Verschlüsselung selbst, wartet der Roboter darauf,
+  statt abzubrechen; LE Secure Connections erlaubt.
+- Vibration geht an den Ausgabebericht des Controllers (vorher evtl. an ein falsches Merkmal).
+- Ereignisprotokoll: Intervall, Speicher und Verschlüsselung beim Verbinden, Wunsch des Controllers
+  nach anderem Intervall, Grund einer Bluetooth-Trennung; längere Einträge.
 
 ## 0.7.1
 

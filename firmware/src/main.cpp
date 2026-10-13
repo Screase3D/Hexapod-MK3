@@ -162,7 +162,7 @@ void watchEvents() {
         case padble::State::Connected: EV_INFO("Controller verbunden: %s", st.name); break;
         case padble::State::Pairing:   EV_INFO("Controller: Kopplung gestartet"); break;
         case padble::State::Searching:
-          if (ble == padble::State::Connected) EV_WARN("Controller getrennt");
+          if (ble == padble::State::Connected) EV_WARN("Controller getrennt: %s", padble::disconnectText());
           break;
         case padble::State::Off:       EV_INFO("Bluetooth aus"); break;
         default: break;
