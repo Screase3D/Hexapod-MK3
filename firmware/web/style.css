@@ -400,6 +400,15 @@ details.fold[open] summary { margin-bottom: 4px; }
 .cam-toolbar { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); }
 .cam-stats { flex: 1; min-width: 0; margin: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cam-settings { padding: 4px 18px 14px; border-top: 1px solid var(--border); }
+.cam-image { margin-top: 10px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.cam-settings .form-grid { grid-template-columns: 9.5rem minmax(0, 1fr); }
+.cam-rec.recording { width: auto; padding: 0 9px; gap: 5px; color: #fff; background: var(--danger); border-color: var(--danger); }
+#cam-rec-time { font-size: 0.8rem; font-weight: 700; }
+.cam-rec.recording .ic { animation: rec-blink 1s steps(2, start) infinite; }
+@keyframes rec-blink { to { visibility: hidden; } }
+.cam-view.recording::after { content: 'REC'; position: absolute; top: 10px; right: 12px; padding: 2px 8px; border-radius: 6px;
+  background: var(--danger); color: #fff; font: 700 0.75rem/1.4 var(--mono, monospace); letter-spacing: 0.05em; }
+.cam-image .row { margin: 6px 0 8px; }
 @media (max-width: 520px) {
   .cam-toolbar { flex-wrap: wrap; gap: 4px; }
   .cam-toolbar .btn-icon { width: 36px; }
@@ -727,6 +736,35 @@ rect.pc-paddle { fill: transparent; stroke-dasharray: 3 3; }
 
 /* =========================================================== Ereignisse */
 .span-all { grid-column: 1 / -1; }
+/* Verlauf (Systemübersicht): je Messgröße Wert + Linie */
+.hist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.hist { position: relative; padding: 10px 12px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.hist-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.hist-name { font-size: 0.82rem; color: var(--muted); }
+.hist-now { font-size: 1.25rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.hist-now small { font-size: 0.78rem; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.hist-svg { display: block; width: 100%; height: 58px; margin: 6px 0 2px; overflow: visible; touch-action: pan-y; }
+.hist-svg:focus { outline: none; }
+.hist-svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.hist-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.hist-area { fill: var(--accent); opacity: 0.12; stroke: none; }
+.hist-grid-line { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hist-cross { stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hist-pt { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
+  border: 2px solid var(--surface-2); transform: translate(-50%, -50%); pointer-events: none; }
+.hist-foot { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hist-tip { position: absolute; top: 34px; padding: 4px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); font-size: 0.78rem; white-space: nowrap; pointer-events: none; transform: translateX(-50%); }
+.hist-tip b { font-variant-numeric: tabular-nums; }
+.hist-tip span { color: var(--muted); margin-left: 6px; }
+.hist-empty { font-size: 0.82rem; color: var(--muted); padding: 18px 0; }
+.hist-table-wrap { margin-top: 10px; }
+.hist-table-wrap summary { cursor: pointer; color: var(--muted); }
+.table-scroll { max-height: 260px; overflow: auto; margin-top: 6px; }
+.hist-table { border-collapse: collapse; font-size: 0.8rem; font-variant-numeric: tabular-nums; width: 100%; }
+.hist-table th, .hist-table td { padding: 3px 10px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.hist-table th { position: sticky; top: 0; background: var(--surface); color: var(--muted); font-weight: 600; }
+.hist-table td:first-child, .hist-table th:first-child { text-align: left; }
 .evlog { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; font-size: 0.86rem; }
 .evlog li { display: grid; grid-template-columns: 5.2rem 1.2rem minmax(0, 1fr); gap: 8px; padding: 6px 0;
   border-top: 1px solid var(--border); align-items: baseline; }

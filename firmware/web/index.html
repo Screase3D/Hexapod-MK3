@@ -32,6 +32,7 @@
       <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
       <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></symbol>
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3.5 8h3.5l1.5-2.5h7L17 8h3.5v11h-17z"/><circle cx="12" cy="13.2" r="3.4"/></symbol>
       <symbol id="i-camera-off" viewBox="0 0 24 24"><path d="M3.5 8h3.5l1.5-2.5h7L17 8h3.5v11h-17z"/><circle cx="12" cy="13.2" r="3.4"/><path d="M3 3l18 18"/></symbol>
@@ -143,6 +144,8 @@
                     <svg class="ic"><use id="cam-toggle-ic" href="#i-play"/></svg><span id="cam-toggle-text">Stream starten</span></button>
                   <a id="cam-snap" class="btn btn-ghost btn-icon" target="_blank" rel="noopener" title="Foto in voller Auflösung">
                     <svg class="ic"><use href="#i-camera"/></svg></a>
+                  <button id="cam-rec" class="btn btn-ghost btn-icon cam-rec" type="button" title="Video aufnehmen (im Browser, als Datei speichern)">
+                    <svg class="ic"><use href="#i-rec"/></svg><span id="cam-rec-time" class="mono" hidden></span></button>
                   <button id="cam-hud" class="btn btn-ghost btn-icon" type="button" aria-pressed="false" title="Lage im Bild einblenden (HUD)">
                     <svg class="ic"><use href="#i-hud"/></svg></button>
                   <button id="cam-fpv" class="btn btn-ghost btn-icon" type="button" title="Fahrer-Ansicht: Kamera im Vollbild mit Joysticks">
@@ -179,6 +182,40 @@
                     <p id="cam-xclk-note" class="warn-text small span-2" hidden>Der Kamera-Takt wirkt beim nächsten Start der Kamera (Stream stoppen, gut 10&nbsp;s warten, wieder starten).</p>
                     <label class="check"><input id="cam-vflip" type="checkbox"> Vertikal spiegeln</label>
                     <label class="check"><input id="cam-hmirror" type="checkbox"> Horizontal spiegeln</label>
+                  </div>
+                  <div class="cam-image">
+                    <div class="row space-between">
+                      <b class="small">Bild</b>
+                      <span class="muted small" id="cam-scene-name"></span>
+                    </div>
+                    <div class="profiles" id="cam-scenes" aria-label="Bild-Vorgaben"></div>
+                    <div class="form-grid">
+                      <label for="cam-br">Helligkeit <span id="cam-br-val" class="muted"></span></label>
+                      <input id="cam-br" type="range" min="-2" max="2" step="1" data-key="brightness">
+                      <label for="cam-ae">Belichtung <span id="cam-ae-val" class="muted"></span></label>
+                      <input id="cam-ae" type="range" min="-2" max="2" step="1" data-key="ae_level"
+                        title="Ziel der Belichtungsautomatik: weniger = kürzere Belichtung, weniger Bewegungsunschärfe">
+                      <label for="cam-gc">Max. Verstärkung <span id="cam-gc-val" class="muted"></span></label>
+                      <input id="cam-gc" type="range" min="0" max="6" step="1" data-key="gainceiling"
+                        title="Wie stark der Sensor bei wenig Licht verstärken darf: mehr = heller, aber mehr Rauschen">
+                      <label for="cam-ct">Kontrast <span id="cam-ct-val" class="muted"></span></label>
+                      <input id="cam-ct" type="range" min="-2" max="2" step="1" data-key="contrast">
+                      <label for="cam-sa">Sättigung <span id="cam-sa-val" class="muted"></span></label>
+                      <input id="cam-sa" type="range" min="-2" max="2" step="1" data-key="saturation">
+                      <label for="cam-sh" class="cam-sharp">Schärfe <span id="cam-sh-val" class="muted"></span></label>
+                      <input id="cam-sh" class="cam-sharp" type="range" min="-2" max="2" step="1" data-key="sharpness">
+                      <label for="cam-wb">Weißabgleich</label>
+                      <select id="cam-wb">
+                        <option value="0">Automatisch</option>
+                        <option value="1">Sonne</option>
+                        <option value="2">Wolken</option>
+                        <option value="3">Büro (Leuchtstoff)</option>
+                        <option value="4">Zuhause (Glühlampe)</option>
+                      </select>
+                      <label class="check"><input id="cam-aec2" type="checkbox" data-key="aec2"> Nachtmodus (längere Belichtung)</label>
+                      <label class="check"><input id="cam-lenc" type="checkbox" data-key="lenc"> Linsenkorrektur (dunkle Ränder)</label>
+                      <label class="check"><input id="cam-bpc" type="checkbox" data-key="bpc"> Pixelfehler korrigieren</label>
+                    </div>
                   </div>
                   <p class="muted small">Ohne Stream schläft die Kamera nach 10&nbsp;s (spart Strom und Wärme).</p>
                 </div>
@@ -571,6 +608,17 @@
               <p class="muted small">Startet den ESP32 neu. Die Servos werden dabei stromlos, die Seite
                 verbindet sich danach von selbst wieder.</p>
               <button id="sys-reboot" class="btn btn-danger-outline" type="button"><svg class="ic"><use href="#i-power"/></svg>ESP32 neu starten</button>
+            </div>
+            <div class="card span-all">
+              <div class="card-head">
+                <h2><svg class="ic"><use href="#i-pulse"/></svg>Verlauf</h2>
+                <span class="muted small">letzte 30 min, alle 10 s</span>
+              </div>
+              <div class="hist-grid" id="hist-grid"></div>
+              <details class="hist-table-wrap">
+                <summary class="small">Werte als Tabelle (je Minute)</summary>
+                <div class="table-scroll"><table class="hist-table" id="hist-table"></table></div>
+              </details>
             </div>
             <div class="card span-all">
               <div class="card-head">

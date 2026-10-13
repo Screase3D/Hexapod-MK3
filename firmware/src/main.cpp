@@ -20,6 +20,7 @@
 #include "net/web_server.h"
 #include "net/wifi_manager.h"
 #include "sensors/battery.h"
+#include "sys/history.h"
 #include "sensors/i2c_scan.h"
 #include "sensors/imu.h"
 #include "servo/servo_controller.h"
@@ -275,6 +276,7 @@ void loop() {
   uint32_t now = millis();
 
   updateSafety();
+  history::loop();  // Verlauf für die Systemübersicht
 
   if (now - last_telemetry >= TELEMETRY_PERIOD_MS) {
     last_telemetry = now;

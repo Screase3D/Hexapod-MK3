@@ -26,7 +26,9 @@ state = {
     "us": [1500.0] * 18,
     "cal": [],
     "camera": {"ok": True, "framesize": 10, "quality": 12, "vflip": False, "hmirror": False,
-               "max_fps": 15, "rotation": 0, "xclk_mhz": 20, "xclk_active_mhz": 20, "bt_framesize": 6, "clients": 0, "port": 81, "sensor": "OV5640 (Mock)", "awake": False, "idle_sleep_s": 10},
+               "max_fps": 15, "rotation": 0, "xclk_mhz": 20, "xclk_active_mhz": 20, "bt_framesize": 6, "sharpness_ok": True,
+               "image": {"brightness": 0, "contrast": 0, "saturation": 0, "sharpness": 0, "ae_level": 0, "gainceiling": 2,
+                         "wb_mode": 0, "aec2": False, "lenc": True, "bpc": True}, "clients": 0, "port": 81, "sensor": "OV5640 (Mock)", "awake": False, "idle_sleep_s": 10},
     "start": time.time(),
     "mode": "manual",
     "pose": {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0, "stance": 100},
@@ -534,6 +536,16 @@ async def status(_):
     })
 
 
+async def history_get(_):
+    # 30 min Verlauf: Akku sinkt langsam, WLAN schwankt, Temperatur steigt mit der Kamera
+    n = 180
+    bat = [round(7.95 - 0.004 * i + 0.01 * math.sin(i / 7), 2) for i in range(n)]
+    rssi = [None if 60 <= i < 64 else int(-60 + 6 * math.sin(i / 11) - (i % 5)) for i in range(n)]
+    temp = [int(41 + 9 * (1 - math.exp(-i / 50))) for i in range(n)]
+    heap = [int(176 - 4 * math.sin(i / 9)) for i in range(n)]
+    return web.json_response({"period_s": 10, "age_ms": 3000, "bat": bat, "rssi": rssi, "temp": temp, "heap": heap})
+
+
 async def camera_get(_):
     cam = dict(state["camera"])
     cam["framesizes"] = [{"id": 6, "name": "QVGA 320×240"}, {"id": 10, "name": "VGA 640×480"},
@@ -542,7 +554,12 @@ async def camera_get(_):
 
 
 async def camera_post(request):
-    state["camera"].update(await request.json())
+    body = await request.json()
+    img = state["camera"]["image"]
+    for k in list(body):
+        if k in img:
+            img[k] = body.pop(k)
+    state["camera"].update(body)
     return await camera_get(request)
 
 
@@ -899,7 +916,7 @@ def main():
         web.get("/api/battery", battery_get), web.post("/api/battery", battery_post),
         web.get("/api/leds", leds_get), web.post("/api/leds", leds_post),
         web.get("/api/pad", pad_get), web.post("/api/pad", pad_post),
-        web.get("/api/log", log_get), web.post("/api/ota", ota_post),
+        web.get("/api/log", log_get), web.post("/api/ota", ota_post), web.get("/api/history", history_get),
         web.get("/api/kinematics", kinematics),
         web.get("/api/i2c", i2c_get), web.post("/api/i2c/scan", i2c_scan),
         web.post("/api/estop", estop), web.post("/api/reboot", ok),

@@ -64,6 +64,8 @@ jobs:
           ./pad_test
           g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include utf8_test.cpp -o utf8_test
           ./utf8_test
+          g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include history_test.cpp -o history_test
+          ./history_test
 
       - name: Firmware bauen
         run: pio run -d firmware

@@ -16,6 +16,7 @@
 #include "sensors/i2c_scan.h"
 #include "servo/servo_controller.h"
 #include "sys/evlog.h"
+#include "sys/history.h"
 #include "sys/ota.h"
 #include "ui/status_leds.h"
 #include "input/pad_control.h"
@@ -226,6 +227,12 @@ esp_err_t logHandler(httpd_req_t* req) {
   }
   JsonDocument doc;
   evlog::toJson(doc.to<JsonObject>(), since);
+  return sendJson(req, doc);
+}
+
+esp_err_t historyHandler(httpd_req_t* req) {
+  JsonDocument doc;
+  history::toJson(doc.to<JsonObject>());
   return sendJson(req, doc);
 }
 
@@ -499,6 +506,7 @@ bool begin() {
   registerUri("/api/pad", HTTP_GET, padGetHandler);
   registerUri("/api/pad", HTTP_POST, padPostHandler);
   registerUri("/api/log", HTTP_GET, logHandler);
+  registerUri("/api/history", HTTP_GET, historyHandler);
   registerUri("/api/ota", HTTP_POST, otaHandler);
   registerUri("/api/kinematics", HTTP_GET, kinematicsHandler);
   registerUri("/api/i2c", HTTP_GET, i2cGetHandler);

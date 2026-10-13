@@ -23,7 +23,9 @@ constexpr const char* NVS_NAMESPACE = "camera";
 bool g_ok = false;  // beim Start erkannt
 httpd_handle_t g_httpd = nullptr;
 std::atomic<int> g_stream_clients{0};
-Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0, CAM_XCLK_HZ / 1000000, FRAMESIZE_CIF};
+Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0, CAM_XCLK_HZ / 1000000, FRAMESIZE_CIF,
+                       0, 0, 0, 0, 0, GAINCEILING_8X, 0, false, true, true};
+int g_applied_fs = -1;  // zuletzt am Sensor eingestellte Auflösung (-1 = nach dem Aufwecken neu)
 bool g_bt_applied = false;  // Bluetooth-Auflösung gerade aktiv (unter g_mutex)
 int g_xclk_active_mhz = 0;  // beim letzten Aufwecken tatsächlich verwendeter Takt
 
@@ -79,6 +81,16 @@ void loadSettings() {
   if (validXclk(xclk)) g_settings.xclk_mhz = xclk;
   int btfs = p.getInt("btfs", g_settings.bt_framesize);
   g_settings.bt_framesize = btfs == 0 || validFramesize(btfs) ? btfs : g_settings.bt_framesize;
+  g_settings.brightness = constrain(p.getInt("br", 0), -2, 2);
+  g_settings.contrast = constrain(p.getInt("ct", 0), -2, 2);
+  g_settings.saturation = constrain(p.getInt("sa", 0), -2, 2);
+  g_settings.sharpness = constrain(p.getInt("sh", 0), -2, 2);
+  g_settings.ae_level = constrain(p.getInt("ae", 0), -2, 2);
+  g_settings.gainceiling = constrain(p.getInt("gc", g_settings.gainceiling), 0, 6);
+  g_settings.wb_mode = constrain(p.getInt("wb", 0), 0, 4);
+  g_settings.aec2 = p.getBool("aec2", g_settings.aec2);
+  g_settings.lenc = p.getBool("lenc", g_settings.lenc);
+  g_settings.bpc = p.getBool("bpc", g_settings.bpc);
   p.end();
 }
 
@@ -93,6 +105,16 @@ void saveSettings() {
   p.putInt("rot", g_settings.rotation);
   p.putInt("xclk", g_settings.xclk_mhz);
   p.putInt("btfs", g_settings.bt_framesize);
+  p.putInt("br", g_settings.brightness);
+  p.putInt("ct", g_settings.contrast);
+  p.putInt("sa", g_settings.saturation);
+  p.putInt("sh", g_settings.sharpness);
+  p.putInt("ae", g_settings.ae_level);
+  p.putInt("gc", g_settings.gainceiling);
+  p.putInt("wb", g_settings.wb_mode);
+  p.putBool("aec2", g_settings.aec2);
+  p.putBool("lenc", g_settings.lenc);
+  p.putBool("bpc", g_settings.bpc);
   p.end();
 }
 
@@ -106,8 +128,33 @@ void applyToSensor() {
   sensor_t* s = esp_camera_sensor_get();
   if (!s) return;
   g_bt_applied = btReduces();
-  s->set_framesize(s, (framesize_t)activeFramesize());
+  // Auflösung nur bei Änderung setzen: der Sensor stellt dabei neu ein, das Bild hakt kurz
+  const int fs = activeFramesize();
+  if (fs != g_applied_fs) {
+    s->set_framesize(s, (framesize_t)fs);
+    g_applied_fs = fs;
+  }
   s->set_quality(s, g_settings.quality);
+  // Bild: nicht jeder Sensor kann alles (fehlende Funktion -> überspringen)
+  auto set = [s](int (*fn)(sensor_t*, int), int v) {
+    if (fn) fn(s, v);
+  };
+  set(s->set_brightness, g_settings.brightness);
+  set(s->set_contrast, g_settings.contrast);
+  set(s->set_saturation, g_settings.saturation);
+  if (s->id.PID != OV2640_PID) set(s->set_sharpness, g_settings.sharpness);  // OV2640: nicht unterstützt
+  set(s->set_exposure_ctrl, 1);
+  set(s->set_gain_ctrl, 1);
+  set(s->set_ae_level, g_settings.ae_level);
+  set(s->set_aec2, g_settings.aec2 ? 1 : 0);
+  if (s->set_gainceiling) s->set_gainceiling(s, (gainceiling_t)g_settings.gainceiling);
+  set(s->set_whitebal, 1);
+  set(s->set_awb_gain, 1);
+  set(s->set_wb_mode, g_settings.wb_mode);
+  set(s->set_lenc, g_settings.lenc ? 1 : 0);
+  set(s->set_bpc, g_settings.bpc ? 1 : 0);
+  set(s->set_wpc, g_settings.bpc ? 1 : 0);
+  set(s->set_raw_gma, 1);
   // 180° = in beide Richtungen spiegeln; 270° = 180° hier + 90° in der UI
   bool flip180 = g_settings.rotation == 180 || g_settings.rotation == 270;
   s->set_vflip(s, (g_settings.vflip != flip180) ? 1 : 0);
@@ -278,6 +325,7 @@ bool wakeLocked() {
   if (g_awake) return true;
   uint32_t t0 = millis();
   if (!initDriver()) return false;
+  g_applied_fs = -1;  // Sensor neu initialisiert
   sensorStandby(false);  // falls der Sensor-Reset das Bit nicht löscht
   applyToSensor();
   g_awake = true;
@@ -423,6 +471,19 @@ bool applyJson(JsonVariantConst obj, String& err) {
     }
     next.rotation = rot;
   }
+  auto level = [&](const char* key, int& out, int lo, int hi) {
+    if (obj[key].is<int>()) out = constrain(obj[key].as<int>(), lo, hi);
+  };
+  level("brightness", next.brightness, -2, 2);
+  level("contrast", next.contrast, -2, 2);
+  level("saturation", next.saturation, -2, 2);
+  level("sharpness", next.sharpness, -2, 2);
+  level("ae_level", next.ae_level, -2, 2);
+  level("gainceiling", next.gainceiling, 0, 6);
+  level("wb_mode", next.wb_mode, 0, 4);
+  if (obj["aec2"].is<bool>()) next.aec2 = obj["aec2"];
+  if (obj["lenc"].is<bool>()) next.lenc = obj["lenc"];
+  if (obj["bpc"].is<bool>()) next.bpc = obj["bpc"];
   if (obj["bt_framesize"].is<int>()) {
     int fs = obj["bt_framesize"];
     if (fs != 0 && !validFramesize(fs)) {
@@ -452,6 +513,18 @@ void toJson(JsonObject obj) {
   obj["xclk_mhz"] = g_settings.xclk_mhz;
   obj["xclk_active_mhz"] = g_xclk_active_mhz;
   obj["bt_framesize"] = g_settings.bt_framesize;
+  JsonObject img = obj["image"].to<JsonObject>();
+  img["brightness"] = g_settings.brightness;
+  img["contrast"] = g_settings.contrast;
+  img["saturation"] = g_settings.saturation;
+  img["sharpness"] = g_settings.sharpness;
+  img["ae_level"] = g_settings.ae_level;
+  img["gainceiling"] = g_settings.gainceiling;
+  img["wb_mode"] = g_settings.wb_mode;
+  img["aec2"] = g_settings.aec2;
+  img["lenc"] = g_settings.lenc;
+  img["bpc"] = g_settings.bpc;
+  obj["sharpness_ok"] = g_ok && g_pid != OV2640_PID;  // Schärfe einstellbar
   obj["framesize_active"] = activeFramesize();
   obj["clients"] = g_stream_clients.load();
   obj["port"] = STREAM_PORT;

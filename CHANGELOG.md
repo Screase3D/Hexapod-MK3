@@ -2,7 +2,20 @@
 
 Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird beim Build
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
-Seitenleiste, z. B. `v0.8.2`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+
+## 0.9.0
+
+- **Besseres Kamerabild:** Bis jetzt lief der Sensor mit Werkseinstellungen. Neu unter ⚙ an der Kamera:
+  Vorgaben *Automatisch*, *Bewegung* (kürzere Belichtung – weniger Unschärfe beim Laufen), *Innen*,
+  *Draußen*, *Nacht* sowie Regler für Helligkeit, Belichtung, maximale Verstärkung, Kontrast, Sättigung,
+  Schärfe (OV5640), Weißabgleich, Nachtmodus, Linsen- und Pixelfehler-Korrektur. Wird gespeichert und wirkt
+  sofort; die Auflösung wird dabei nur noch bei echten Änderungen neu gesetzt (kein kurzes Haken).
+- **Video aufnehmen:** Knopf ● neben dem Foto – nimmt den Stream im Browser auf und speichert ihn als Datei
+  (WebM, auf dem iPhone MP4). Kostet den ESP nichts zusätzlich; Stream stoppen beendet die Aufnahme.
+- **Verlauf** in der Systemübersicht: Akkuspannung, WLAN-Signal, Chip-Temperatur und freier Speicher der
+  letzten 30 min (alle 10 s), mit Fadenkreuz/Tooltip und Tabelle – z. B. um Akkuverbrauch oder
+  WLAN-Aussetzer beim Laufen zu sehen.
 
 ## 0.8.2
 

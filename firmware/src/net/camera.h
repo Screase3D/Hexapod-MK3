@@ -30,6 +30,14 @@ struct Settings {
   // Höchstens diese Auflösung, solange Bluetooth an ist (0 = keine Anpassung): WLAN und
   // Bluetooth teilen sich die Antenne, große Bilder kämen dann nur mit 4–5 Bildern/s an
   int bt_framesize;
+  // Bild (Sensor): -2..2, 0 = Werkseinstellung
+  int brightness, contrast, saturation, sharpness;  // Schärfe nur OV5640/OV3660
+  int ae_level;     // Belichtungskorrektur
+  int gainceiling;  // größte Verstärkung 0..6 = 2x..128x (mehr = heller, aber mehr Rauschen)
+  int wb_mode;      // Weißabgleich: 0 auto, 1 Sonne, 2 Wolken, 3 Büro, 4 Zuhause
+  bool aec2;        // Nachtmodus: Belichtung über den Bildprozessor (länger, heller)
+  bool lenc;        // Linsenkorrektur (dunkle Ränder ausgleichen)
+  bool bpc;         // Pixelfehler-Korrektur (helle/dunkle Punkte)
 };
 
 bool begin();

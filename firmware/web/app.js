@@ -1341,11 +1341,16 @@ function showTab(name) {
   renderBanner();
   if (name === 'system' || name === 'settings') {
     loadStatus();
-    S.statusTimer = setInterval(loadStatus, 5000);
+    let tick = 0;
+    S.statusTimer = setInterval(() => {
+      loadStatus();
+      if (S.tab === 'system' && ++tick % 2 === 0) loadHistory();  // neue Werte alle 10 s
+    }, 5000);
   }
   if (name === 'system') {
     renderTiles();
     loadLog();
+    loadHistory();
   }
   if (name === 'cal') renderManualValues();
   if (name === 'leds') loadLeds();
@@ -1449,6 +1454,7 @@ function updateStream() {
     img.src = `${camBase()}/stream?t=${Date.now()}`;
     view.classList.add('live');
   } else if (!live) {
+    stopRecording();
     clearTimeout(camRetryTimer);
     camRetryTimer = null;
     camRetries = 0;
@@ -1501,6 +1507,7 @@ function renderCamera() {
   $('cam-vflip').checked = c.vflip;
   $('cam-hmirror').checked = c.hmirror;
   $('cam-info').textContent = c.ok ? (c.sensor || '') : 'Keine Kamera erkannt';
+  renderCamImage(c);
   $('cam-toggle').disabled = !c.ok;
 }
 
@@ -1513,6 +1520,58 @@ async function loadCamera() {
   }
 }
 
+// Bild-Vorgaben (Werte für den Sensor; was nicht passt, zeigt „Eigene Einstellung“)
+const CAM_SCENES = [
+  { id: 'auto', name: 'Automatisch', hint: 'Werkseinstellung des Sensors',
+    v: { brightness: 0, contrast: 0, saturation: 0, sharpness: 0, ae_level: 0, gainceiling: 2, wb_mode: 0, aec2: false } },
+  { id: 'motion', name: 'Bewegung', hint: 'kürzere Belichtung: weniger Unschärfe beim Laufen, etwas mehr Rauschen',
+    v: { brightness: 1, contrast: 1, saturation: 0, sharpness: 1, ae_level: -1, gainceiling: 5, wb_mode: 0, aec2: false } },
+  { id: 'indoor', name: 'Innen', hint: 'heller bei Raumlicht',
+    v: { brightness: 1, contrast: 0, saturation: 0, sharpness: 0, ae_level: 1, gainceiling: 4, wb_mode: 0, aec2: true } },
+  { id: 'outdoor', name: 'Draußen', hint: 'kräftige Farben, kurze Belichtung bei Tageslicht',
+    v: { brightness: 0, contrast: 1, saturation: 1, sharpness: 1, ae_level: -1, gainceiling: 1, wb_mode: 0, aec2: false } },
+  { id: 'night', name: 'Nacht', hint: 'so hell wie möglich – verrauscht, Farben gedämpft',
+    v: { brightness: 2, contrast: 0, saturation: -1, sharpness: 0, ae_level: 2, gainceiling: 6, wb_mode: 0, aec2: true } },
+];
+const CAM_SLIDERS = { 'cam-br': 'brightness', 'cam-ae': 'ae_level', 'cam-gc': 'gainceiling', 'cam-ct': 'contrast',
+  'cam-sa': 'saturation', 'cam-sh': 'sharpness' };
+const fmtLevel = (v) => (v > 0 ? `+${v}` : `${v}`);
+const fmtGain = (v) => `${2 ** (v + 1)}×`;
+
+function camScene(img, sharpOk) {
+  return CAM_SCENES.find((sc) => Object.entries(sc.v).every(([k, v]) => (k === 'sharpness' && !sharpOk) || img[k] === v));
+}
+
+function renderCamImage(c) {
+  const img = c.image;
+  if (!img) return;
+  const box = $('cam-scenes');
+  if (!box.children.length) {
+    for (const sc of CAM_SCENES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'profile';
+      b.dataset.scene = sc.id;
+      b.textContent = sc.name;
+      b.title = sc.hint;
+      b.onclick = () => setCamera(sc.v);
+      box.appendChild(b);
+    }
+  }
+  const active = camScene(img, c.sharpness_ok);
+  box.querySelectorAll('.profile').forEach((b) => b.classList.toggle('active', !!active && b.dataset.scene === active.id));
+  $('cam-scene-name').textContent = active ? active.hint : 'eigene Einstellung';
+  for (const [id, key] of Object.entries(CAM_SLIDERS)) {
+    if (document.activeElement !== $(id)) $(id).value = img[key];
+    $(`${id}-val`).textContent = key === 'gainceiling' ? fmtGain(+$(id).value) : fmtLevel(+$(id).value);
+  }
+  document.querySelectorAll('.cam-sharp').forEach((el) => { el.hidden = !c.sharpness_ok; });
+  $('cam-wb').value = img.wb_mode;
+  $('cam-aec2').checked = img.aec2;
+  $('cam-lenc').checked = img.lenc;
+  $('cam-bpc').checked = img.bpc;
+}
+
 async function setCamera(patch) {
   try {
     S.camera = await api('/api/camera', patch);
@@ -1522,7 +1581,112 @@ async function setCamera(patch) {
   }
 }
 
+// ---- Video aufnehmen: Stream in ein Canvas zeichnen und im Browser aufnehmen (MediaRecorder)
+const REC = { rec: null, chunks: [], raf: 0, timer: 0, start: 0, ext: 'webm' };
+
+function recMime() {
+  if (!window.MediaRecorder) return '';
+  const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+  return types.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+}
+
+async function startRecording() {
+  const img = $('cam-img');
+  const view = img.parentElement;
+  const mime = recMime();
+  if (!mime || !HTMLCanvasElement.prototype.captureStream) {
+    toast('Videoaufnahme wird von diesem Browser nicht unterstützt', true);
+    return;
+  }
+  if (!view.classList.contains('live')) {
+    toast('Erst den Stream starten', true);
+    return;
+  }
+  // Das Bild kommt von Port 81: ohne CORS-Freigabe dürfte das Canvas nicht aufgenommen werden
+  if (img.crossOrigin !== 'anonymous') {
+    img.crossOrigin = 'anonymous';
+    img.src = `${camBase()}/stream?t=${Date.now()}`;
+    const t0 = Date.now();
+    while (!img.naturalWidth && Date.now() - t0 < 4000) await sleep(100);
+  }
+  if (!img.naturalWidth) {
+    toast('Kein Kamerabild für die Aufnahme', true);
+    return;
+  }
+  const rot = (S.camera && S.camera.rotation) || 0;
+  const turn = rot === 90 || rot === 270;  // Sensor liefert 0°/180°, die Oberfläche dreht um 90°
+  const canvas = document.createElement('canvas');
+  const w = img.naturalWidth, h = img.naturalHeight;
+  canvas.width = turn ? h : w;
+  canvas.height = turn ? w : h;
+  const ctx = canvas.getContext('2d');
+  const draw = () => {
+    if (img.naturalWidth) {
+      ctx.save();
+      if (turn) {
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      } else {
+        ctx.drawImage(img, 0, 0, w, h);
+      }
+      ctx.restore();
+    }
+    REC.raf = requestAnimationFrame(draw);
+  };
+  draw();
+  let stream;
+  try {
+    stream = canvas.captureStream(25);
+    REC.rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
+  } catch (e) {
+    cancelAnimationFrame(REC.raf);
+    toast(`Aufnahme nicht möglich: ${e.message}`, true);
+    return;
+  }
+  REC.ext = mime.includes('mp4') ? 'mp4' : 'webm';
+  REC.chunks = [];
+  REC.rec.ondataavailable = (e) => { if (e.data.size) REC.chunks.push(e.data); };
+  REC.rec.onstop = () => {
+    cancelAnimationFrame(REC.raf);
+    clearInterval(REC.timer);
+    const blob = new Blob(REC.chunks, { type: mime });
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
+    a.href = URL.createObjectURL(blob);
+    a.download = `hexapod-${ts}.${REC.ext}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    toast(`Video gespeichert (${(blob.size / 1048576).toFixed(1)} MB)`);
+    REC.rec = null;
+    renderRecording();
+  };
+  REC.rec.start(1000);
+  REC.start = Date.now();
+  REC.timer = setInterval(renderRecording, 500);
+  renderRecording();
+}
+
+function stopRecording() {
+  if (REC.rec && REC.rec.state !== 'inactive') REC.rec.stop();
+}
+
+function renderRecording() {
+  const on = !!REC.rec;
+  const btn = $('cam-rec');
+  btn.classList.toggle('recording', on);
+  btn.title = on ? 'Aufnahme beenden und speichern' : 'Video aufnehmen (im Browser, als Datei speichern)';
+  $('cam-img').parentElement.classList.toggle('recording', on);
+  const t = $('cam-rec-time');
+  t.hidden = !on;
+  if (on) {
+    const s = Math.floor((Date.now() - REC.start) / 1000);
+    t.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  }
+}
+
 function bindCamera() {
+  $('cam-rec').onclick = () => (REC.rec ? stopRecording() : startRecording());
   $('cam-snap').href = `${camBase()}/capture`;
   $('cam-toggle').onclick = () => {
     S.camWanted = !S.camWanted;
@@ -1557,6 +1721,17 @@ function bindCamera() {
   $('cam-xclk').onchange = (e) => setCamera({ xclk_mhz: +e.target.value });
   $('cam-fs').onchange = (e) => setCamera({ framesize: +e.target.value });
   $('cam-btfs').onchange = (e) => setCamera({ bt_framesize: +e.target.value });
+  for (const [id, key] of Object.entries(CAM_SLIDERS)) {
+    $(id).oninput = (e) => {
+      const v = +e.target.value;
+      $(`${id}-val`).textContent = key === 'gainceiling' ? fmtGain(v) : fmtLevel(v);
+    };
+    $(id).onchange = (e) => setCamera({ [key]: +e.target.value });
+  }
+  $('cam-wb').onchange = (e) => setCamera({ wb_mode: +e.target.value });
+  for (const id of ['cam-aec2', 'cam-lenc', 'cam-bpc']) {
+    $(id).onchange = (e) => setCamera({ [e.target.dataset.key]: e.target.checked });
+  }
   $('cam-q').oninput = (e) => { $('cam-q-val').textContent = e.target.value; };
   $('cam-q').onchange = (e) => setCamera({ quality: +e.target.value });
   $('cam-fps').oninput = (e) => { $('cam-fps-val').textContent = `${e.target.value} fps`; };
@@ -2056,6 +2231,160 @@ function bindLog() {
     if (await copyText(logText(), 'hexapod-ereignisse.txt')) toast('Ereignisse kopiert – z. B. in den Chat einfügen');
     else toast('Als Datei gespeichert (Zwischenablage nicht verfügbar)');
   };
+}
+
+// ---- Verlauf (System): Akku, WLAN, Temperatur, Speicher der letzten 30 min
+const HIST = [
+  { key: 'bat', name: 'Akkuspannung', unit: 'V', fmt: (v) => v.toFixed(2), pad: 0.05 },
+  { key: 'rssi', name: 'WLAN-Signal', unit: 'dBm', fmt: (v) => `${v}`, pad: 3, empty: 'nicht im Heimnetz' },
+  { key: 'temp', name: 'Chip-Temperatur', unit: '°C', fmt: (v) => `${v}`, pad: 2 },
+  { key: 'heap', name: 'Freier Speicher', unit: 'KB', fmt: (v) => `${v}`, pad: 4 },
+];
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const HW = 300, HH = 58;  // viewBox der Linien
+
+function histAgo(i, n, period, ageMs) {
+  const s = Math.round((n - 1 - i) * period + ageMs / 1000);
+  if (s < 60) return s <= 5 ? 'gerade eben' : `vor ${s} s`;
+  return `vor ${Math.floor(s / 60)} min ${s % 60 ? `${s % 60} s` : ''}`.trim();
+}
+
+function renderHistory(h) {
+  const grid = $('hist-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const n = (h.heap || []).length;
+  for (const m of HIST) {
+    const vals = h[m.key] || [];
+    const box = document.createElement('div');
+    box.className = 'hist';
+    box.innerHTML = '<div class="hist-head"><span class="hist-name"></span><span class="hist-now"></span></div>';
+    box.querySelector('.hist-name').textContent = m.name;
+    const nums = vals.filter((v) => v !== null && v !== undefined);
+    const now = vals.length ? vals[vals.length - 1] : null;
+    const nowEl = box.querySelector('.hist-now');
+    if (now !== null && now !== undefined) {
+      nowEl.textContent = m.fmt(now);
+      const u = document.createElement('small');
+      u.textContent = m.unit;
+      nowEl.appendChild(u);
+    } else {
+      nowEl.textContent = '–';
+    }
+    grid.appendChild(box);
+    if (nums.length < 2) {
+      const e = document.createElement('div');
+      e.className = 'hist-empty';
+      e.textContent = n < 2 ? 'sammelt Werte …' : (m.empty || 'keine Werte');
+      box.appendChild(e);
+      continue;
+    }
+    let lo = Math.min(...nums) - m.pad, hi = Math.max(...nums) + m.pad;
+    const x = (i) => (n > 1 ? (i / (n - 1)) * HW : HW);
+    const y = (v) => HH - ((v - lo) / (hi - lo)) * HH;
+    // Linie mit Lücken (kein Wert = nicht verbunden o. Ä.)
+    let line = '', area = '', seg = [];
+    const flush = () => {
+      if (seg.length > 1) {
+        line += seg.map(([px, py], k) => `${k ? 'L' : 'M'}${px.toFixed(1)} ${py.toFixed(1)}`).join('');
+        area += `M${seg[0][0].toFixed(1)} ${HH}` + seg.map(([px, py]) => `L${px.toFixed(1)} ${py.toFixed(1)}`).join('')
+          + `L${seg[seg.length - 1][0].toFixed(1)} ${HH}Z`;
+      }
+      seg = [];
+    };
+    vals.forEach((v, i) => (v === null || v === undefined ? flush() : seg.push([x(i), y(v)])));
+    flush();
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${HW} ${HH}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('class', 'hist-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', `${m.name}: ${m.fmt(Math.min(...nums))} bis ${m.fmt(Math.max(...nums))} ${m.unit}`);
+    svg.innerHTML = `<line class="hist-grid-line" x1="0" x2="${HW}" y1="${HH}" y2="${HH}"/>`
+      + `<path class="hist-area" d="${area}"/><path class="hist-line" d="${line}"/>`
+      + '<line class="hist-cross" y1="0" hidden/>';
+    box.appendChild(svg);
+    const foot = document.createElement('div');
+    foot.className = 'hist-foot';
+    foot.innerHTML = '<span>−30 min</span><span></span><span>jetzt</span>';
+    foot.children[1].textContent = `${m.fmt(Math.min(...nums))} … ${m.fmt(Math.max(...nums))} ${m.unit}`;
+    box.appendChild(foot);
+    // Fadenkreuz + Tooltip (Maus, Finger, Tastatur)
+    const tip = document.createElement('div');
+    tip.className = 'hist-tip';
+    tip.hidden = true;
+    box.appendChild(tip);
+    const dot = document.createElement('div');  // HTML statt SVG: die Linie ist gestreckt, ein Kreis wäre oval
+    dot.className = 'hist-pt';
+    dot.hidden = true;
+    box.appendChild(dot);
+    const cross = svg.querySelector('.hist-cross');
+    let ki = n - 1;  // Tastatur: Pfeile links/rechts
+    const show = (i) => {
+      ki = i;
+      const v = vals[i];
+      cross.hidden = false;
+      cross.setAttribute('x1', x(i));
+      cross.setAttribute('x2', x(i));
+      cross.setAttribute('y2', HH);
+      const r = svg.getBoundingClientRect(), br = box.getBoundingClientRect();
+      const px = r.left - br.left + (x(i) / HW) * r.width;
+      dot.hidden = v === null || v === undefined;
+      if (!dot.hidden) {
+        dot.style.left = `${px}px`;
+        dot.style.top = `${r.top - br.top + (y(v) / HH) * r.height}px`;
+      }
+      tip.hidden = false;
+      tip.innerHTML = '<b></b><span></span>';
+      tip.firstChild.textContent = v === null || v === undefined ? (m.empty || 'kein Wert') : `${m.fmt(v)} ${m.unit}`;
+      tip.lastChild.textContent = histAgo(i, n, h.period_s || 10, h.age_ms || 0);
+      tip.style.left = `${Math.max(60, Math.min(br.width - 60, px))}px`;
+    };
+    const hide = () => { cross.hidden = true; dot.hidden = true; tip.hidden = true; };
+    const at = (e) => {
+      const r = svg.getBoundingClientRect();
+      return Math.max(0, Math.min(n - 1, Math.round(((e.clientX - r.left) / r.width) * (n - 1))));
+    };
+    svg.addEventListener('pointerenter', () => { S.histHover = true; });
+    svg.addEventListener('pointermove', (e) => show(at(e)));
+    svg.addEventListener('pointerdown', (e) => show(at(e)));
+    svg.addEventListener('pointerleave', () => { S.histHover = false; hide(); });
+    svg.tabIndex = 0;
+    svg.addEventListener('focus', () => show(ki));
+    svg.addEventListener('blur', hide);
+    svg.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        ki = Math.max(0, Math.min(n - 1, ki + (e.key === 'ArrowLeft' ? -1 : 1)));
+        show(ki);
+        e.preventDefault();
+      }
+    });
+  }
+  // Tabelle: je Minute ein Wert (jeder 6.), neueste oben
+  const t = $('hist-table');
+  t.innerHTML = '';
+  const head = t.insertRow();
+  for (const label of ['Zeit', ...HIST.map((m) => `${m.name} (${m.unit})`)]) {
+    const th = document.createElement('th');
+    th.textContent = label;
+    head.appendChild(th);
+  }
+  const step = Math.max(1, Math.round(60 / (h.period_s || 10)));
+  for (let i = n - 1; i >= 0; i -= step) {
+    const row = t.insertRow();
+    row.insertCell().textContent = histAgo(i, n, h.period_s || 10, h.age_ms || 0);
+    for (const m of HIST) {
+      const v = (h[m.key] || [])[i];
+      row.insertCell().textContent = v === null || v === undefined ? '–' : m.fmt(v);
+    }
+  }
+}
+
+async function loadHistory() {
+  if (S.histHover) return;  // nicht unter dem Zeiger neu zeichnen
+  try {
+    renderHistory(await api('/api/history'));
+  } catch (e) { /* ältere Firmware oder kurz nicht erreichbar */ }
 }
 
 async function loadStatus() {
