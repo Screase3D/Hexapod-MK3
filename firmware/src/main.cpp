@@ -145,7 +145,10 @@ void watchEvents() {
     }
     if (sta_now != sta) {
       if (sta_now) EV_INFO("WLAN verbunden: %s (%s, %d dBm)", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
-      else EV_WARN("WLAN getrennt");
+      else {
+        const int reason = wifi::lastDisconnectReason();
+        EV_WARN("WLAN getrennt: %s (Code %d)", wifi::disconnectText(reason), reason);
+      }
     }
     if (ap_now != ap) EV_INFO("Access Point %s", ap_now ? "an" : "aus");
     if (imu_now != imu_ok) {

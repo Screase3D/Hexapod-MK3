@@ -2,7 +2,16 @@
 
 Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird beim Build
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
-Seitenleiste, z. B. `v0.7.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+Seitenleiste, z. B. `v0.7.1`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+
+## 0.7.1
+
+- **Fehler behoben:** Mit eingeschaltetem *Bluetooth am Roboter* brach das WLAN im Sekundentakt ab und der
+  Controller ließ sich nicht koppeln. Das WLAN lief ohne Energiesparmodus; WLAN und Bluetooth teilen sich
+  aber die Antenne und brauchen dafür den Modem-Sleep. Er wird jetzt nur eingeschaltet, solange Bluetooth
+  an ist (sonst bleibt die Latenz minimal). Suche und Verbindung belegen außerdem weniger Funkzeit.
+- Ereignisprotokoll: Grund bei WLAN-Trennungen; beim Koppeln, ob überhaupt Bluetooth-Geräte bzw. ein
+  Xbox-Controller gesehen wurden.
 
 ## 0.7.0
 

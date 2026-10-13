@@ -31,8 +31,13 @@ Hinweise:
 - Ein Xbox-Controller merkt sich **ein** Bluetooth-Gerät (plus eine Xbox). Nach dem Koppeln mit dem Roboter
   muss er mit dem Handy/PC neu gekoppelt werden und umgekehrt (Doppeltipp auf die Kopplungstaste wechselt
   zwischen den zuletzt gekoppelten Geräten).
-- Bluetooth und WLAN teilen sich die Antenne. Ist Bluetooth aus, wird es gar nicht gestartet (kein Speicher,
-  keine Funkzeit) – dann läuft der Kamerastream am flüssigsten.
+- Bluetooth und WLAN teilen sich die Antenne. Solange Bluetooth an ist, läuft das WLAN deshalb im
+  Energiesparmodus (Modem-Sleep, vom ESP32 für den gemeinsamen Betrieb vorgeschrieben): Antwortzeit und
+  Kamerastream werden etwas träger. Ist Bluetooth aus, wird es gar nicht gestartet (kein Speicher, keine
+  Funkzeit) und das WLAN läuft wieder ohne Energiesparen – dann ist der Kamerastream am flüssigsten.
+- Klappt das Koppeln nicht, steht im **Ereignisprotokoll** (*System*), ob überhaupt Bluetooth-Geräte bzw. ein
+  Xbox-Controller gesehen wurden. „Kein Xbox-Controller gefunden“ heißt meist: Controller-Firmware zu alt
+  oder die Kopplungstaste nicht lange genug gehalten.
 - Bricht die Verbindung ab (Controller aus, außer Reichweite), hält der Roboter nach spätestens ca. 1 s an
   (Bluetooth-Timeout; der Controller meldet nur Änderungen, ein gehaltener Stick gilt bis dahin weiter).
 - Noch nicht mit echter Hardware getestet: Der Bericht des Controllers wird wie bei der Bibliothek

@@ -44,6 +44,14 @@ SemaphoreHandle_t g_mutex = xSemaphoreCreateMutex();
 std::atomic<bool> g_ap{false};
 std::atomic<StaState> g_sta{StaState::Idle};
 std::atomic<int> g_last_reason{0};
+std::atomic<int> g_disconnect_reason{0};  // letzter Trennungsgrund (für das Ereignisprotokoll)
+std::atomic<bool> g_bt_active{false};     // Bluetooth an -> WLAN braucht Modem-Sleep
+
+// Energiesparmodus: ohne Bluetooth aus (geringste Latenz für Steuerung und Stream).
+// Laufen WLAN und Bluetooth gleichzeitig, teilt der ESP32 die gemeinsame Antenne
+// nur auf, wenn das WLAN zwischen den Beacons schlafen darf (Modem-Sleep) – sonst
+// bekommt Bluetooth kaum Funkzeit und das WLAN bricht ständig ab.
+wifi_ps_type_t sleepMode() { return g_bt_active ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE; }
 uint32_t g_connect_started = 0;
 uint32_t g_lost_since = 0;
 uint32_t g_last_retry = 0;
@@ -103,6 +111,10 @@ const char* reasonText(int reason) {
       return "Netz nutzt eine nicht unterstützte Verschlüsselung";
     case WIFI_REASON_CONNECTION_FAIL:
       return "Verbindung fehlgeschlagen";
+    case WIFI_REASON_BEACON_TIMEOUT:
+      return "Funkkontakt zum Router abgerissen (Beacon-Timeout)";
+    case WIFI_REASON_ASSOC_LEAVE:
+      return "vom ESP32 getrennt";
     default:
       return nullptr;
   }
@@ -117,6 +129,7 @@ bool isAuthFailure(int reason) {
 void onWifiEvent(arduino_event_id_t event, arduino_event_info_t info) {
   if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
     g_last_reason = info.wifi_sta_disconnected.reason;
+    g_disconnect_reason = info.wifi_sta_disconnected.reason;
   }
 }
 
@@ -244,7 +257,7 @@ void begin() {
   if (loadCredentials(ssid, pass)) {
     statusLeds.setState(ledfx::State::WifiConnect);
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);  // geringere Latenz für Steuerung und Stream
+    WiFi.setSleep(sleepMode());  // ohne Bluetooth: geringere Latenz für Steuerung und Stream
     WiFi.setAutoReconnect(true);
     beginConnect(ssid, pass);
     while (WiFi.status() != WL_CONNECTED && millis() - g_connect_started < WIFI_STA_TIMEOUT_MS &&
@@ -259,7 +272,7 @@ void begin() {
     onFailed();
     Serial.println("[WiFi] -> Access Point, Heimnetz wird im Hintergrund weiter versucht");
   }
-  WiFi.setSleep(false);
+  WiFi.setSleep(sleepMode());
   startAccessPoint();
   startMdns();
 }
@@ -331,6 +344,18 @@ void loop() {
 }
 
 bool isAccessPoint() { return g_ap; }
+
+void setBluetoothActive(bool on) {
+  g_bt_active = on;
+  WiFi.setSleep(sleepMode());
+}
+
+int lastDisconnectReason() { return g_disconnect_reason; }
+
+const char* disconnectText(int reason) {
+  const char* t = reasonText(reason);
+  return t ? t : "unbekannter Grund";
+}
 
 bool staConnected() { return g_sta == StaState::Connected && WiFi.status() == WL_CONNECTED; }
 

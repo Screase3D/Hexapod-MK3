@@ -21,6 +21,13 @@ void begin();
 void loop();  // regelmäßig aus Arduino-loop() aufrufen
 
 bool isAccessPoint();  // Access Point aktiv
+
+// Bluetooth an/aus (pad_ble): schaltet den WLAN-Energiesparmodus um. Mit
+// Bluetooth muss das WLAN Modem-Sleep nutzen (Antenne wird geteilt), ohne bleibt
+// er für die geringste Latenz aus.
+void setBluetoothActive(bool on);
+int lastDisconnectReason();             // letzter Trennungsgrund (WIFI_REASON_*)
+const char* disconnectText(int reason);  // Klartext (nie nullptr)
 bool staConnected();   // mit dem Heimnetz verbunden
 String ip();           // Heimnetz-IP, sonst Access-Point-IP
 void toJson(JsonObject obj);
