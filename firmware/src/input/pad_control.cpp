@@ -6,6 +6,7 @@
 #include "input/pad_map.h"
 #include "motion/motion.h"
 #include "servo/servo_controller.h"
+#include "sys/utf8.h"
 
 namespace padctl {
 namespace {
@@ -58,7 +59,7 @@ void markDirty() {  // im kritischen Abschnitt aufrufen
 
 void message(const String& m) {
   char buf[sizeof(g_msg)];
-  strlcpy(buf, m.c_str(), sizeof(buf));
+  utf8::copy(buf, sizeof(buf), m.c_str());
   portENTER_CRITICAL(&g_mux);
   memcpy(g_msg, buf, sizeof(buf));
   ++g_msg_seq;
@@ -366,7 +367,11 @@ void telemetry(JsonObject obj) {
   obj["speed"] = (int)lroundf(g_map.speed() * 100.0f);
   const padble::Status b = padble::status();
   obj["ble"] = padble::stateName(b.state);
-  if (b.name[0]) obj["name"] = b.name;
+  // Achtung ArduinoJson 7: ein const-char-Array (b ist const) gilt als String-Literal und wird
+  // nur als Zeiger gespeichert – b existiert beim Serialisieren nicht mehr (Datenmüll im JSON,
+  // der Browser trennt die WebSocket-Verbindung). Als Zeiger übergeben wird kopiert.
+  const char* name = b.name;
+  if (name[0]) obj["name"] = name;
   if (b.battery >= 0) obj["bat"] = b.battery;
   if (b.pairing_left_s) obj["pair_left"] = b.pairing_left_s;
   if (g_src != Src::None) {

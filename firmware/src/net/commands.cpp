@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include "sys/evlog.h"
+#include "sys/utf8.h"
 #include "ui/status_leds.h"
 #include "input/pad_control.h"
 #include "control_stats.h"
@@ -63,9 +64,10 @@ void handle(JsonVariantConst in, JsonDocument& out) {
       ++suppressed;
       return;
     }
-    const char* text = in["text"] | "";
-    if (suppressed) EV_WARN("Oberfläche: %.100s (+%u weitere)", text, (unsigned)suppressed);
-    else EV_WARN("Oberfläche: %.100s", text);
+    char text[101];
+    utf8::copy(text, sizeof(text), in["text"] | "");
+    if (suppressed) EV_WARN("Oberfläche: %s (+%u weitere)", text, (unsigned)suppressed);
+    else EV_WARN("Oberfläche: %s", text);
     last = now ? now : 1;
     suppressed = 0;
     return;  // ohne Antwort

@@ -2,7 +2,18 @@
 
 Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird beim Build
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
-Seitenleiste, z. B. `v0.7.3`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+Seitenleiste, z. B. `v0.7.4`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+
+## 0.7.4
+
+- **Behoben: Verbindung der Oberfläche brach mit verbundenem Controller im Sekundentakt ab.** Ursache war
+  ein Programmfehler, nicht der Funk: Der Name des Controllers kam als Datenmüll in die Telemetrie
+  (ArduinoJson 7 speichert ein `const char[]` nur als Zeiger – auf eine Kopie, die beim Senden schon
+  nicht mehr existierte). Den ungültigen Text verwirft der Browser mitsamt der Verbindung – bei jeder
+  Telemetrie (4× pro Sekunde) aufs Neue.
+- Gekürzte Texte (Meldungen, Ereignisprotokoll) enden nie mitten in einem Umlaut.
+- Sendefehler, weil der Browser die Verbindung schon geschlossen hat (Seite neu geladen, Handy
+  gesperrt), sind keine Warnung mehr; echte Fehler mit Fehlernummer.
 
 ## 0.7.3
 

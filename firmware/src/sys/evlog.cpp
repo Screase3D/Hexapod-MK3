@@ -4,6 +4,8 @@
 #include <esp_system.h>
 #include <stdarg.h>
 
+#include "utf8.h"
+
 namespace evlog {
 namespace {
 constexpr int CAPACITY = 48;
@@ -36,7 +38,7 @@ void add(Level level, const char* fmt, ...) {
   e.level = level;
   va_list ap;
   va_start(ap, fmt);
-  vsnprintf(e.text, sizeof(e.text), fmt, ap);
+  if (vsnprintf(e.text, sizeof(e.text), fmt, ap) >= (int)sizeof(e.text)) utf8::trimIncomplete(e.text);
   va_end(ap);
   portENTER_CRITICAL(&g_mux);
   e.seq = ++g_seq;

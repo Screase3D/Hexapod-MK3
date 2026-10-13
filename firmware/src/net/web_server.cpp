@@ -330,6 +330,7 @@ esp_err_t rebootHandler(httpd_req_t* req) {
 // --- WebSocket ------------------------------------------------------------------
 
 constexpr uint32_t WS_SEND_DEADLINE_MS = 4000;
+int g_ws_errno = 0;  // letzter Sendefehler (nur im HTTP-Server-Task)
 
 // Senden ohne halbe Frames. lwIP gibt bei stockendem WLAN nach dem Sende-Timeout auch
 // teilweise Schreibvorgänge zurück; der HTTP-Server wertet die als Erfolg und schickt den
@@ -344,15 +345,21 @@ int wsSend(httpd_handle_t, int fd, const char* buf, size_t len, int flags) {
       sent += r;
       continue;
     }
-    const bool again = r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR);
+    const int err = r < 0 ? errno : 0;
+    const bool again = err == EAGAIN || err == EWOULDBLOCK || err == EINTR;
+    g_ws_errno = err;
     if (!again) return HTTPD_SOCK_ERR_FAIL;
     if (millis() - start >= WS_SEND_DEADLINE_MS) return HTTPD_SOCK_ERR_TIMEOUT;
   }
   return (int)len;
 }
 
-// Fehler beim Senden ins Ereignisprotokoll (höchstens alle 10 s)
+// Fehler beim Senden ins Ereignisprotokoll (höchstens alle 10 s). Hat der Browser die
+// Verbindung schon geschlossen (Seite neu geladen, Handy gesperrt), ist das kein Fehler.
 void logWsSendFailure(const char* what, esp_err_t err) {
+  const int e = g_ws_errno;
+  g_ws_errno = 0;
+  if (e == ECONNRESET || e == EPIPE || e == ENOTCONN || e == ECONNABORTED || e == EBADF) return;
   static uint32_t last = 0;
   static uint32_t suppressed = 0;
   const uint32_t now = millis();
@@ -360,8 +367,9 @@ void logWsSendFailure(const char* what, esp_err_t err) {
     ++suppressed;
     return;
   }
-  if (suppressed) EV_WARN("WebSocket: %s fehlgeschlagen (%s) – Verbindung geschlossen (+%u weitere)", what, esp_err_to_name(err), (unsigned)suppressed);
-  else EV_WARN("WebSocket: %s fehlgeschlagen (%s) – Verbindung geschlossen", what, esp_err_to_name(err));
+  const char* why = e == EAGAIN || e == EWOULDBLOCK ? "WLAN hängt" : esp_err_to_name(err);
+  if (suppressed) EV_WARN("WebSocket: %s fehlgeschlagen (%s, errno %d) – Verbindung geschlossen (+%u weitere)", what, why, e, (unsigned)suppressed);
+  else EV_WARN("WebSocket: %s fehlgeschlagen (%s, errno %d) – Verbindung geschlossen", what, why, e);
   last = now ? now : 1;
   suppressed = 0;
 }
