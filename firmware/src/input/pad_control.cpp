@@ -18,7 +18,7 @@ constexpr float HEIGHT_STEP_MM = 5.0f;
 constexpr const char* NVS_NAMESPACE = "hexapod";
 constexpr const char* NVS_KEY = "pad";
 constexpr uint32_t BLOB_MAGIC = 0x50414431;  // "PAD1"
-constexpr uint16_t BLOB_VERSION = 1;
+constexpr uint16_t BLOB_VERSION = 2;  // 2: swap_sticks (1 wird weiter gelesen)
 
 struct Blob {
   uint32_t magic;
@@ -27,7 +27,9 @@ struct Blob {
   float deadzone, expo, speed;
   char addr[18];
   uint8_t map[pad::NUM_BUTTONS];
+  uint8_t swap_sticks;  // ab Version 2 (passt in die Füllbytes von Version 1)
 };
+static_assert(sizeof(Blob) == 60, "Version-1-Daten (60 Bytes) müssen lesbar bleiben");
 
 const char* const GESTURES[] = {"circle", "nod", "shake", "pushup", "dance"};
 const char* const GESTURE_TEXT[] = {"Kreisen", "Ja", "Nein", "Liegestütz", "Tanzen"};
@@ -196,12 +198,13 @@ void load() {
   Blob b;
   size_t len = prefs.getBytes(NVS_KEY, &b, sizeof(b));
   prefs.end();
-  if (len != sizeof(b) || b.magic != BLOB_MAGIC || b.version != BLOB_VERSION) return;
+  if (len != sizeof(b) || b.magic != BLOB_MAGIC || b.version < 1 || b.version > BLOB_VERSION) return;
   padmap::Config c = padmap::defaults();
   c.deadzone = isfinite(b.deadzone) ? b.deadzone : c.deadzone;
   c.expo = isfinite(b.expo) ? b.expo : c.expo;
   c.speed = isfinite(b.speed) ? b.speed : c.speed;
   c.invert_y = b.invert_y != 0;
+  c.swap_sticks = b.version >= 2 && b.swap_sticks != 0;
   for (int i = 0; i < pad::NUM_BUTTONS; ++i) {
     if (b.map[i] < padmap::NUM_ACTIONS) c.map[i] = static_cast<padmap::Action>(b.map[i]);
   }
@@ -221,6 +224,7 @@ void save() {
   b.magic = BLOB_MAGIC;
   b.version = BLOB_VERSION;
   b.invert_y = c.invert_y;
+  b.swap_sticks = c.swap_sticks;
   b.deadzone = c.deadzone;
   b.expo = c.expo;
   b.speed = c.speed;
@@ -310,6 +314,7 @@ void configToJson(JsonObject obj) {
   obj["expo"] = round2(c.expo);
   obj["speed"] = round2(c.speed);
   obj["invert_y"] = c.invert_y;
+  obj["swap_sticks"] = c.swap_sticks;
   JsonObject map = obj["map"].to<JsonObject>();
   JsonArray buttons = obj["buttons"].to<JsonArray>();
   for (int i = 0; i < pad::NUM_BUTTONS; ++i) {
@@ -331,6 +336,7 @@ bool applyJson(JsonVariantConst in, String& err) {
   if (in["expo"].is<float>()) c.expo = constrain(in["expo"].as<float>(), 0.0f, 1.0f);
   if (in["speed"].is<float>()) c.speed = constrain(in["speed"].as<float>(), 0.1f, 1.0f);
   if (in["invert_y"].is<bool>()) c.invert_y = in["invert_y"];
+  if (in["swap_sticks"].is<bool>()) c.swap_sticks = in["swap_sticks"];
   if (in["map"].is<JsonObjectConst>()) {
     for (JsonPairConst kv : in["map"].as<JsonObjectConst>()) {
       const int b = pad::buttonFromName(kv.key().c_str());

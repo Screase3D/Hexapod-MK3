@@ -2,7 +2,15 @@
 
 Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird beim Build
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
-Seitenleiste, z. B. `v0.8.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+Seitenleiste, z. B. `v0.8.1`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
+
+## 0.8.1
+
+- **Controller-Seite neu:** Der Controller ist groß abgebildet, an jeder Taste steht ihre Funktion. Antippen
+  (Taste oder Beschriftung) öffnet eine Auswahl nach Themen, die auch zeigt, wo eine Funktion schon liegt.
+  Gedrückte Tasten, Sticks und Trigger bewegen sich live mit; Sticks und Trigger je Modus umschaltbar.
+  Auf dem Handy: Grafik plus Liste zum Antippen.
+- **Sticks tauschen** (z. B. für Linkshänder): rechter Stick fährt, linker dreht – in allen Modi.
 
 ## 0.8.0
 

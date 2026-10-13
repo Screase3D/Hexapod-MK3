@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <utility>
 
 namespace padmap {
 namespace {
@@ -160,6 +161,10 @@ Output Mapper::update(const pad::State& in, float dt) {
   const float inv = cfg_.invert_y ? -1.0f : 1.0f;
   stick(in.lx, in.ly * inv, lx, ly);
   stick(in.rx, in.ry * inv, rx, ry);
+  if (cfg_.swap_sticks) {
+    std::swap(lx, rx);
+    std::swap(ly, ry);
+  }
   const float lt = axis(in.lt), rt = axis(in.rt);
   switch (mode_) {
     case Mode::Walk: {

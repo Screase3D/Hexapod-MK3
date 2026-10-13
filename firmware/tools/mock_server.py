@@ -691,7 +691,8 @@ PAD_MODES = ["walk", "body", "arms"]
 
 
 def pad_defaults():
-    return {"deadzone": 0.12, "expo": 0.35, "speed": 0.6, "invert_y": False, "map": dict(zip(PAD_BUTTONS, PAD_DEFAULT_MAP))}
+    return {"deadzone": 0.12, "expo": 0.35, "speed": 0.6, "invert_y": False, "swap_sticks": False,
+            "map": dict(zip(PAD_BUTTONS, PAD_DEFAULT_MAP))}
 
 
 PAD = {"cfg": pad_defaults(), "enabled": False, "addr": "", "ble": "off", "pair_until": 0.0, "web": None, "web_t": 0.0,
@@ -764,7 +765,7 @@ def pad_tel():
 
 
 def pad_json():
-    return {"enabled": PAD["enabled"], "addr": PAD["addr"], **{k: PAD["cfg"][k] for k in ("deadzone", "expo", "speed", "invert_y")},
+    return {"enabled": PAD["enabled"], "addr": PAD["addr"], **{k: PAD["cfg"][k] for k in ("deadzone", "expo", "speed", "invert_y", "swap_sticks")},
             "map": dict(PAD["cfg"]["map"]), "buttons": PAD_BUTTONS, "actions": PAD_ACTIONS}
 
 
@@ -780,8 +781,9 @@ async def pad_post(request):
     for k, lo, hi in (("deadzone", 0.02, 0.4), ("expo", 0.0, 1.0), ("speed", 0.1, 1.0)):
         if k in body:
             cfg[k] = max(lo, min(hi, float(body[k])))
-    if "invert_y" in body:
-        cfg["invert_y"] = bool(body["invert_y"])
+    for k in ("invert_y", "swap_sticks"):
+        if k in body:
+            cfg[k] = bool(body[k])
     for b, a in body.get("map", {}).items():
         if b not in PAD_BUTTONS or a not in PAD_ACTIONS:
             return web.json_response({"ok": False, "msg": "unbekannte Taste oder Aktion: " + b}, status=400)

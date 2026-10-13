@@ -639,6 +639,25 @@
         </section>
 
         <section id="page-pad" class="page" data-title="Controller">
+          <div class="card pad-diagram-card" id="pad-diagram-card">
+            <div class="card-head wrap">
+              <h2><svg class="ic"><use href="#i-gamepad"/></svg>Belegung<span id="pad-live-tag" class="badge badge-on pad-live-tag" hidden>live</span></h2>
+              <div class="row pad-head-tools">
+                <div class="seg" id="pad-view-mode" role="radiogroup" aria-label="Sticks und Trigger im Modus">
+                  <button type="button" role="radio" data-value="walk">Laufen</button>
+                  <button type="button" role="radio" data-value="body">Körper</button>
+                  <button type="button" role="radio" data-value="arms">Vorderbeine</button>
+                </div>
+                <button id="pad-reset" class="btn btn-small" type="button" title="Standardbelegung und -werte wiederherstellen">Standard</button>
+              </div>
+            </div>
+            <div class="pad-diagram" id="pad-diagram"></div>
+            <div class="pad-list" id="pad-list"></div>
+            <p class="muted small" id="pad-diagram-hint">Taste oder Beschriftung antippen, um die Funktion zu ändern. Gedrückte Tasten leuchten auf,
+              sobald ein Controller aktiv ist. Sticks und Trigger hängen vom Modus ab (Taste Y wechselt ihn). P1–P4 sind die
+              Paddles auf der Rückseite des Elite Series 2.</p>
+          </div>
+
           <div class="grid-2">
             <div class="stack">
               <div class="card">
@@ -678,17 +697,6 @@
                   damit der Browser ihn meldet.</p>
               </div>
 
-              <div class="card">
-                <h2><svg class="ic"><use href="#i-pulse"/></svg>Test</h2>
-                <div class="pad-live">
-                  <div class="pad-stick"><span class="pad-dot" id="pad-ls"></span></div>
-                  <div class="pad-trig"><span>LT</span><span class="pad-bar"><i id="pad-lt"></i></span>
-                    <span>RT</span><span class="pad-bar"><i id="pad-rt"></i></span></div>
-                  <div class="pad-stick"><span class="pad-dot" id="pad-rs"></span></div>
-                </div>
-                <div class="pad-btns" id="pad-btns"></div>
-                <p class="muted small mono" id="pad-live-info">kein Controller aktiv</p>
-              </div>
             </div>
 
             <div class="stack">
@@ -710,19 +718,21 @@
                   <span id="pad-expo-val" class="mono"></span>
                 </label>
                 <label class="check-row"><input id="pad-invert" type="checkbox"> Sticks oben/unten umkehren</label>
-                <p class="muted small"><b>Laufen:</b> linker Stick fahren, rechter drehen, RT schneller (bis 100 %), LT
-                  langsamer. <b>Körper:</b> links verschieben, rechts neigen, LT/RT drehen. <b>Vorderbeine:</b> je ein Stick
-                  pro Bein, RT streckt aus, LT zieht heran (der Modus hebt sie, ein anderer setzt sie ab).</p>
+                <label class="check-row"><input id="pad-swap" type="checkbox"> Sticks tauschen (rechter fährt, linker dreht)</label>
+                <p class="muted small">Was Sticks und Trigger im jeweiligen Modus tun, zeigt die Grafik oben (Modus oben
+                  rechts umschalten). In den Modus <i>Vorderbeine</i> zu wechseln hebt sie, ein anderer setzt sie ab.</p>
               </div>
 
-              <div class="card">
-                <h2><svg class="ic"><use href="#i-gamepad"/></svg>Tasten</h2>
-                <div class="pad-map" id="pad-map"></div>
-                <div class="row wrap">
-                  <button id="pad-reset" class="btn" type="button">Standardbelegung</button>
-                </div>
-                <p class="muted small">P1–P4 sind die Paddles des Elite Series 2 (im Standardprofil des Controllers).</p>
+            </div>
+          </div>
+
+          <div class="pad-pick" id="pad-pick" hidden>
+            <div class="pad-pick-box" role="dialog" aria-modal="true" aria-labelledby="pad-pick-title">
+              <div class="card-head">
+                <h3 id="pad-pick-title">Taste belegen</h3>
+                <button class="btn btn-small" id="pad-pick-close" type="button">Abbrechen</button>
               </div>
+              <div class="pad-pick-list" id="pad-pick-list"></div>
             </div>
           </div>
         </section>

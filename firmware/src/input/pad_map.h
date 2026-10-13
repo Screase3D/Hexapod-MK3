@@ -27,6 +27,7 @@ struct Config {
   float expo = 0.35f;      // Kennlinie: 0 = linear, 1 = sehr fein um die Mitte
   float speed = 0.6f;      // Grundtempo beim Laufen; RT gibt bis 100 %, LT bremst
   bool invert_y = false;   // Sticks oben/unten vertauscht
+  bool swap_sticks = false;  // linker und rechter Stick getauscht (z. B. Linkshänder)
   Action map[pad::NUM_BUTTONS] = {};
 };
 Config defaults();

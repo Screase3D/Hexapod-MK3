@@ -216,7 +216,7 @@ oben rechts. Jede Seite hat eine eigene Adresse, z. B. `http://hexapod.local/#ka
 | **Kalibrierung & Justierung** | *Kalibrieren*: Servo für Servo (Rohmodus, Montagestellung, Referenz, Grenzen, Test); *Justieren*: alle 18 Gelenke auf einen Blick; Speichern, Export/Import |
 | **Systemübersicht** | Kennzahlen (Akku, WLAN mit Antwortzeit, Regelung, Kamera, Speicher, Laufzeit), Komponenten, I²C-Scan, Neustart, **Ereignisse** seit dem Start (Neustartgrund, WLAN, Not-Aus, Akku, Controller, Updates; Punkt im Menü bei neuen Warnungen) |
 | **LEDs** | Augen: Farbe und Effekt je Zustand (Servos aus, steht, läuft, Vorderbeine, Geste, …), eine Farbe für alles oder aus, Helligkeit, Board-LED; Vorschau |
-| **Controller** | Xbox-Controller per Bluetooth am Roboter (koppeln, vergessen) oder am Handy/PC über den Browser, Live-Test, Tempo/Totzone/Kennlinie, Tastenbelegung |
+| **Controller** | Großer Controller mit allen Tasten und ihrer Funktion (antippen zum Umbelegen, Live-Anzeige, Sticks/Trigger je Modus); Xbox-Controller per Bluetooth am Roboter (koppeln, vergessen) oder am Handy/PC über den Browser; Tempo/Totzone/Kennlinie, Sticks tauschen |
 | **Einstellungen** | WLAN, Servo-Stellgeschwindigkeit, Lagesensor (Einbaulage, Nullpunkt, Gyro), Akkuüberwachung, Farbschema (automatisch/dunkel/hell), Tastenkürzel, Version (Firmware, Git-Stand, Build-Datum), **Firmware-Update** |
 
 ## Oberfläche ohne Roboter entwickeln

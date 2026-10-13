@@ -2354,15 +2354,18 @@ function bindLeds() {
 
 // ------------------------------------------------------------- Controller ----
 
-// Reihenfolge wie pad.h (Bit = Index): Name, Beschriftung, Erklärung
+// Reihenfolge wie pad.h (Bit = Index): Name, kurze Beschriftung, lange Beschriftung
 const PAD_BUTTONS = [
-  ['a', 'A', ''], ['b', 'B', ''], ['x', 'X', ''], ['y', 'Y', ''], ['lb', 'LB', 'Schulter links'], ['rb', 'RB', 'Schulter rechts'],
-  ['view', 'View', 'zwei Fenster'], ['menu', 'Menü', 'drei Striche'], ['xbox', 'Xbox', 'Logo-Taste'],
-  ['ls', 'LS', 'linken Stick drücken'], ['rs', 'RS', 'rechten Stick drücken'],
-  ['up', '↑', 'Steuerkreuz'], ['down', '↓', 'Steuerkreuz'], ['left', '←', 'Steuerkreuz'], ['right', '→', 'Steuerkreuz'],
-  ['share', 'Share', 'nur Series X|S'], ['p1', 'P1', 'Paddle oben rechts'], ['p2', 'P2', 'Paddle unten rechts'],
-  ['p3', 'P3', 'Paddle oben links'], ['p4', 'P4', 'Paddle unten links'],
+  ['a', 'A', 'Taste A'], ['b', 'B', 'Taste B'], ['x', 'X', 'Taste X'], ['y', 'Y', 'Taste Y'],
+  ['lb', 'LB', 'LB (Schulter links)'], ['rb', 'RB', 'RB (Schulter rechts)'],
+  ['view', 'View', 'View (zwei Fenster)'], ['menu', 'Menü', 'Menü (drei Striche)'], ['xbox', 'Xbox', 'Xbox-Taste'],
+  ['ls', 'LS', 'Linken Stick drücken'], ['rs', 'RS', 'Rechten Stick drücken'],
+  ['up', '↑', 'Steuerkreuz ↑'], ['down', '↓', 'Steuerkreuz ↓'], ['left', '←', 'Steuerkreuz ←'], ['right', '→', 'Steuerkreuz →'],
+  ['share', 'Share', 'Share (nur Series X|S)'], ['p1', 'P1', 'Paddle P1 (oben rechts)'], ['p2', 'P2', 'Paddle P2 (unten rechts)'],
+  ['p3', 'P3', 'Paddle P3 (oben links)'], ['p4', 'P4', 'Paddle P4 (unten links)'],
 ];
+const PAD_BIT = Object.fromEntries(PAD_BUTTONS.map(([id], i) => [id, i]));
+const PAD_LONG = Object.fromEntries(PAD_BUTTONS.map(([id, , long]) => [id, long]));
 const PAD_ACTIONS = {
   none: '– nichts –', stand_sit: 'Aufstehen / Hinsetzen', stop: 'Stopp', arms: 'Vorderbeine heben/absetzen',
   wave: 'Winken', mode_next: 'Modus wechseln', mode_walk: 'Modus Laufen', mode_body: 'Modus Körper',
@@ -2372,11 +2375,29 @@ const PAD_ACTIONS = {
   shake: 'Geste Nein', pushup: 'Geste Liegestütz', dance: 'Geste Tanzen', torque: 'Servos an/aus', estop: 'Not-Aus',
   pose_reset: 'Haltung zurücksetzen',
 };
+// Auswahl im Dialog, nach Themen
+const PAD_ACTION_GROUPS = [
+  ['Bewegung', ['stand_sit', 'stop', 'arms', 'wave']],
+  ['Modus', ['mode_next', 'mode_walk', 'mode_body', 'mode_arms']],
+  ['Gang und Haltung', ['gait_prev', 'gait_next', 'speed_up', 'speed_down', 'height_up', 'height_down', 'pose_reset', 'leveling', 'alive']],
+  ['Gesten', ['gesture_next', 'circle', 'nod', 'shake', 'pushup', 'dance']],
+  ['System', ['torque', 'estop', 'none']],
+];
 const PAD_MODES = { walk: 'Laufen', body: 'Körper', arms: 'Vorderbeine' };
+// Sticks und Trigger je Modus (fest, siehe pad_map.cpp)
+const PAD_AXES = {
+  walk: { ls: 'Fahren', rs: 'Drehen', lt: 'Langsamer', rt: 'Schneller (bis 100 %)' },
+  body: { ls: 'Verschieben', rs: 'Neigen', lt: 'Nach links drehen', rt: 'Nach rechts drehen' },
+  arms: { ls: 'Linkes Vorderbein', rs: 'Rechtes Vorderbein', lt: 'Beine heranziehen', rt: 'Beine ausstrecken' },
+};
 // Standard-Gamepad im Browser -> Bits wie pad.h (Index im buttons-Feld der Gamepad-API)
 const GP_BUTTONS = [0, 1, 2, 3, 4, 5, 8, 9, 16, 10, 11, 12, 13, 14, 15, 17];
 const PAD_SEND_MS = 50;
-const P = { cfg: null, web: false, timer: null, seq: null, mode: '', src: '', touched: 0, gpName: '' };
+const PAD_LIVE_MS = 1200;  // so lange ohne neue Werte -> Anzeige zurücksetzen
+const P = {
+  cfg: null, web: false, timer: null, seq: null, mode: '', src: '', touched: 0, gpName: '',
+  view: 'walk', liveAt: 0, picking: '',
+};
 
 function gamepad() {
   const list = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter((g) => g && g.connected) : [];
@@ -2424,14 +2445,359 @@ function renderPadWeb() {
   $('pad-web-status').textContent = text;
 }
 
+// --- Grafik: viewBox 0 0 1000 600, Controller in der Mitte, Beschriftungen links/rechts/oben/unten
+const SVGNS = 'http://www.w3.org/2000/svg';
+const PC_BODY = 'M375 175C430 160 570 160 625 175C680 180 712 205 726 255C744 330 760 410 752 455C745 498 705 516 676 '
+  + '492C652 470 628 432 592 424L408 424C372 432 348 470 324 492C295 516 255 498 248 455C240 410 256 330 274 255C288 '
+  + '205 320 180 375 175Z';
+const PC_LS = [365, 262], PC_RS = [565, 345];
+const PC_FACE = { y: [635, 228, '#e3b341'], x: [601, 262, '#4f8fe6'], b: [669, 262, '#e5534b'], a: [635, 296, '#3fb950'] };
+// Beschriftungen: Seite, Höhe (Mitte), Ziel [x, y, Radius], Knickpunkte; kind: stick/trig = je Modus
+const PC_CALLOUTS = [
+  { id: 'lt', kind: 'trig', side: 'l', y: 72, to: [339, 136] },
+  { id: 'lb', side: 'l', y: 122, to: [316, 171] },
+  { id: 'ls', kind: 'stick', side: 'l', y: 262, to: [PC_LS[0], PC_LS[1], 36] },
+  { id: 'up', side: 'l', y: 320, to: [424, 322] },
+  { id: 'left', side: 'l', y: 362, to: [400, 345] },
+  { id: 'right', side: 'l', y: 404, via: [[484, 404]], to: [472, 349] },
+  { id: 'down', side: 'l', y: 446, via: [[435, 446]], to: [435, 380] },
+  { id: 'p3', side: 'l', y: 494, to: [294, 441] },
+  { id: 'p4', side: 'l', y: 540, to: [278, 479] },
+  { id: 'rt', kind: 'trig', side: 'r', y: 72, to: [661, 136] },
+  { id: 'rb', side: 'r', y: 122, to: [684, 171] },
+  { id: 'y', side: 'r', y: 190, to: [...PC_FACE.y.slice(0, 2), 15] },
+  { id: 'x', side: 'r', y: 236, via: [[655, 241]], to: [...PC_FACE.x.slice(0, 2), 15] },
+  { id: 'b', side: 'r', y: 280, to: [...PC_FACE.b.slice(0, 2), 15] },
+  { id: 'a', side: 'r', y: 324, to: [...PC_FACE.a.slice(0, 2), 15] },
+  { id: 'rs', kind: 'stick', side: 'r', y: 392, to: [PC_RS[0], PC_RS[1], 36] },
+  { id: 'p1', side: 'r', y: 486, to: [706, 441] },
+  { id: 'p2', side: 'r', y: 532, to: [722, 479] },
+  { id: 'view', side: 't', x: 335, via: [[335, 66], [446, 66]], to: [458, 254] },
+  { id: 'xbox', side: 't', x: 500, to: [500, 214, 19] },
+  { id: 'menu', side: 't', x: 665, via: [[665, 66], [554, 66]], to: [542, 254] },
+  { id: 'share', side: 'b', x: 500, to: [500, 306] },
+];
+const PC_W = { l: 215, r: 215, t: 150, b: 200 };
+
+function svgEl(tag, attrs, parent, text) {
+  const el = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  if (text !== undefined) el.textContent = text;
+  if (parent) parent.appendChild(el);
+  return el;
+}
+
+// Zeichnung des Controllers (einmal); Tasten tragen data-btn, Sticks/Trigger eigene Klassen
+function buildPadSvg() {
+  const svg = svgEl('svg', { viewBox: '0 0 1000 600', class: 'pc-svg', role: 'img', 'aria-label': 'Xbox-Controller mit Belegung' });
+  const defs = svgEl('defs', {}, svg);
+  const leads = svgEl('g', { class: 'pc-leads' }, svg);
+  const pad = svgEl('g', { class: 'pc-pad' }, svg);
+  // Trigger (hinter dem Gehäuse) mit Füllstand
+  for (const [id, x, rot] of [['lt', 335, -9], ['rt', 593, 9]]) {
+    const g = svgEl('g', { class: 'pc-trig', 'data-axis': id, transform: `rotate(${rot} ${x + 36} 138)` }, pad);
+    const clip = svgEl('clipPath', { id: `pc-clip-${id}` }, defs);
+    svgEl('rect', { x, y: 118, width: 72, height: 40, rx: 12 }, clip);
+    svgEl('rect', { x, y: 118, width: 72, height: 40, rx: 12, class: 'pc-trig-shape' }, g);
+    svgEl('rect', { x, y: 158, width: 72, height: 0, class: 'pc-trig-fill', 'clip-path': `url(#pc-clip-${id})`, id: `pc-fill-${id}` }, g);
+    svgEl('text', { x: x + 36, y: 142, class: 'pc-txt' }, g, id.toUpperCase());
+  }
+  // Schultertasten
+  svgEl('rect', { x: 312, y: 160, width: 116, height: 18, rx: 9, transform: 'rotate(-9 370 169)', class: 'pc-btn', 'data-btn': 'lb' }, pad);
+  svgEl('rect', { x: 572, y: 160, width: 116, height: 18, rx: 9, transform: 'rotate(9 630 169)', class: 'pc-btn', 'data-btn': 'rb' }, pad);
+  svgEl('path', { d: PC_BODY, class: 'pc-body' }, pad);
+  // Paddles (Rückseite): gestrichelt auf den Griffen
+  for (const [id, x, y, rot] of [['p3', 292, 422, 18], ['p4', 276, 460, 18], ['p1', 694, 422, -18], ['p2', 710, 460, -18]]) {
+    svgEl('rect', { x, y, width: 14, height: 36, rx: 7, transform: `rotate(${rot} ${x + 7} ${y + 18})`, class: 'pc-btn pc-paddle', 'data-btn': id }, pad);
+  }
+  // Sticks: Ring + beweglicher Kopf (Drücken = LS/RS)
+  for (const [id, [cx, cy]] of [['ls', PC_LS], ['rs', PC_RS]]) {
+    svgEl('circle', { cx, cy, r: 36, class: 'pc-ring' }, pad);
+    const cap = svgEl('g', { class: 'pc-btn pc-cap', 'data-btn': id, id: `pc-cap-${id}` }, pad);
+    svgEl('circle', { cx, cy, r: 24, class: 'pc-cap-out' }, cap);
+    svgEl('circle', { cx, cy, r: 16, class: 'pc-cap-in' }, cap);
+  }
+  // Steuerkreuz
+  const dp = svgEl('g', { class: 'pc-dpad' }, pad);
+  svgEl('rect', { x: 424, y: 334, width: 22, height: 22, class: 'pc-dpad-c' }, dp);
+  for (const [id, x, y, w, h, arrow] of [
+    ['up', 424, 310, 22, 25, 'M435 316l-5 7h10z'], ['down', 424, 355, 22, 25, 'M435 374l-5 -7h10z'],
+    ['left', 400, 334, 25, 22, 'M406 345l7 -5v10z'], ['right', 445, 334, 25, 22, 'M464 345l-7 -5v10z']]) {
+    const g = svgEl('g', { class: 'pc-btn pc-dir', 'data-btn': id }, dp);
+    svgEl('rect', { x, y, width: w, height: h, rx: 4 }, g);
+    svgEl('path', { d: arrow, class: 'pc-glyph' }, g);
+  }
+  // A B X Y
+  for (const [id, [cx, cy, color]] of Object.entries(PC_FACE)) {
+    const g = svgEl('g', { class: 'pc-btn pc-face', 'data-btn': id }, pad);
+    svgEl('circle', { cx, cy, r: 15 }, g);
+    svgEl('text', { x: cx, y: cy + 5, class: 'pc-face-txt', fill: color }, g, id.toUpperCase());
+  }
+  // View, Menü, Xbox, Share
+  let g = svgEl('g', { class: 'pc-btn pc-small', 'data-btn': 'view' }, pad);
+  svgEl('rect', { x: 450, y: 254, width: 24, height: 16, rx: 5 }, g);
+  svgEl('path', { d: 'M456 259h7v5h-7zM459 261v-4h7v5h-3', class: 'pc-glyph-line' }, g);
+  g = svgEl('g', { class: 'pc-btn pc-small', 'data-btn': 'menu' }, pad);
+  svgEl('rect', { x: 526, y: 254, width: 24, height: 16, rx: 5 }, g);
+  svgEl('path', { d: 'M532 258.5h12M532 262h12M532 265.5h12', class: 'pc-glyph-line' }, g);
+  g = svgEl('g', { class: 'pc-btn pc-xbox', 'data-btn': 'xbox' }, pad);
+  svgEl('circle', { cx: 500, cy: 214, r: 19 }, g);
+  svgEl('path', { d: 'M493 207l14 14M507 207l-14 14', class: 'pc-glyph-line pc-xbox-x' }, g);
+  g = svgEl('g', { class: 'pc-btn pc-small', 'data-btn': 'share' }, pad);
+  svgEl('rect', { x: 489, y: 294, width: 22, height: 13, rx: 5 }, g);
+  svgEl('path', { d: 'M500 297.5v6.5M497 300.5l3 -3l3 3', class: 'pc-glyph-line' }, g);
+
+  // Beschriftungen mit Linien
+  const cos = svgEl('g', { class: 'pc-callouts' }, svg);
+  for (const c of PC_CALLOUTS) {
+    const h = c.kind === 'stick' ? 62 : 40;
+    const w = PC_W[c.side];
+    let bx, by, ax, ay;
+    if (c.side === 'l' || c.side === 'r') {
+      bx = c.side === 'l' ? 12 : 1000 - 12 - w;
+      by = c.y - h / 2;
+      ax = c.side === 'l' ? bx + w : bx;
+      ay = c.y;
+    } else {
+      bx = c.x - w / 2;
+      by = c.side === 't' ? 12 : 600 - 12 - h;
+      ax = c.x;
+      ay = c.side === 't' ? by + h : by;
+    }
+    // Linie: Anker -> Knickpunkte -> Ziel (bei Kreisen bis zum Rand)
+    const pts = [[ax, ay], ...(c.via || [])];
+    const [tx, ty, r] = c.to;
+    let ex = tx, ey = ty;
+    if (r) {
+      const [px, py] = pts[pts.length - 1];
+      const d = Math.hypot(px - tx, py - ty) || 1;
+      ex = tx + ((px - tx) / d) * r;
+      ey = ty + ((py - ty) / d) * r;
+    }
+    pts.push([ex, ey]);
+    svgEl('polyline', { points: pts.map((q) => q.join(',')).join(' '), class: 'pc-lead', 'data-co': c.id }, leads);
+    svgEl('circle', { cx: ex, cy: ey, r: 3, class: 'pc-lead-dot', 'data-co': c.id }, leads);
+
+    const fixed = c.kind === 'trig';
+    const box = svgEl('g', { class: `pc-co${fixed ? ' fixed' : ''}`, 'data-co': c.id }, cos);
+    if (!fixed) {
+      box.setAttribute('data-btn', c.id);
+      box.setAttribute('tabindex', '0');
+      box.setAttribute('role', 'button');
+    }
+    svgEl('rect', { x: bx, y: by, width: w, height: h, rx: 9, class: 'pc-co-box' }, box);
+    const tx0 = bx + 12;
+    svgEl('text', { x: tx0, y: by + 15, class: 'pc-co-title' }, box, '');
+    svgEl('text', { x: tx0, y: by + 32, class: 'pc-co-fn' }, box, '');
+    if (c.kind === 'stick') svgEl('text', { x: tx0, y: by + 51, class: 'pc-co-sub' }, box, '');
+    box.dataset.maxw = w - 24;
+  }
+  return svg;
+}
+
+// Text in die Box einpassen (lange Funktionsnamen schmaler setzen)
+function fitText(el, maxw) {
+  el.removeAttribute('textLength');
+  el.removeAttribute('lengthAdjust');
+  let len = 0;
+  try { len = el.getComputedTextLength(); } catch (e) { return; }
+  if (len > maxw) {
+    el.setAttribute('textLength', maxw);
+    el.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+  }
+}
+
+// Belegung (Texte) in Grafik und Liste eintragen
+function renderPadDiagram() {
+  const c = P.cfg;
+  const root = $('pad-diagram');
+  if (!root.firstChild) {
+    root.appendChild(buildPadSvg());
+    root.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-btn]');
+      if (t) openPadPick(t.dataset.btn);
+    });
+    root.addEventListener('keydown', (e) => {
+      const t = e.target.closest('[data-btn]');
+      if (t && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        openPadPick(t.dataset.btn);
+      }
+    });
+    root.addEventListener('mouseover', (e) => {
+      const t = e.target.closest('[data-co], [data-btn]');
+      padHover(t ? t.dataset.co || t.dataset.btn : '');
+    });
+    root.addEventListener('mouseleave', () => padHover(''));
+    if (window.ResizeObserver) new ResizeObserver(padLayout).observe(root);
+  }
+  padLayout();
+  setSeg('pad-view-mode', P.view);
+  const axes = { ...PAD_AXES[P.view] };
+  if (c && c.swap_sticks) [axes.ls, axes.rs] = [axes.rs, axes.ls];
+  const fn = (id) => PAD_ACTIONS[(c && c.map[id]) || 'none'] || '–';
+  const title = {
+    lt: 'LT (Trigger)', rt: 'RT (Trigger)', ls: 'Linker Stick', rs: 'Rechter Stick', up: 'Steuerkreuz ↑', down: 'Steuerkreuz ↓',
+    left: 'Steuerkreuz ←', right: 'Steuerkreuz →', lb: 'LB', rb: 'RB', a: 'A', b: 'B', x: 'X', y: 'Y', view: 'View',
+    menu: 'Menü', xbox: 'Xbox-Taste', share: 'Share', p1: 'P1 (Paddle hinten)', p2: 'P2 (Paddle hinten)',
+    p3: 'P3 (Paddle hinten)', p4: 'P4 (Paddle hinten)',
+  };
+  root.querySelectorAll('.pc-co').forEach((box) => {
+    const id = box.dataset.co;
+    const [t, f, sub] = box.querySelectorAll('text');
+    t.textContent = id === 'ls' || id === 'rs' || id === 'lt' || id === 'rt' ? `${title[id]} · ${PAD_MODES[P.view]}` : title[id];
+    f.textContent = axes[id] || fn(id);
+    if (sub) sub.textContent = `drücken: ${fn(id)}`;
+    for (const el of [t, f, sub]) if (el) fitText(el, +box.dataset.maxw);
+    box.classList.toggle('unset', !axes[id] && (!c || (c.map[id] || 'none') === 'none'));
+  });
+  // Liste (schmale Bildschirme)
+  const list = $('pad-list');
+  const order = ['a', 'b', 'x', 'y', 'lb', 'rb', 'up', 'down', 'left', 'right', 'view', 'menu', 'xbox', 'share', 'ls', 'rs', 'p1', 'p2', 'p3', 'p4'];
+  const keyOf = Object.fromEntries(PAD_BUTTONS.map(([id, short]) => [id, short]));
+  list.innerHTML = '';
+  const head = (text) => {
+    const h = document.createElement('div');
+    h.className = 'pad-list-head';
+    h.textContent = text;
+    list.appendChild(h);
+  };
+  head(`Sticks und Trigger · ${PAD_MODES[P.view]}`);
+  for (const id of ['ls', 'rs', 'lt', 'rt']) {
+    const row = document.createElement('div');
+    row.className = 'pad-row fixed';
+    row.dataset.co = id;
+    row.innerHTML = '<span class="pad-key"></span><span class="pad-fn"></span>';
+    row.firstChild.textContent = { ls: 'L-Stick', rs: 'R-Stick', lt: 'LT', rt: 'RT' }[id];
+    row.lastChild.textContent = axes[id];
+    list.appendChild(row);
+  }
+  head('Tasten (antippen zum Ändern)');
+  for (const id of order) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'pad-row';
+    row.dataset.btn = id;
+    row.dataset.co = id;
+    row.innerHTML = '<span class="pad-key"></span><span class="pad-fn"></span><span class="pad-chev">›</span>';
+    row.firstChild.textContent = keyOf[id];
+    row.children[1].textContent = fn(id);
+    row.title = PAD_LONG[id];
+    row.onclick = () => openPadPick(id);
+    list.appendChild(row);
+  }
+}
+
+// Breite Ansicht: Controller mit Beschriftungen; schmal: nur Controller + Liste darunter
+function padLayout() {
+  const root = $('pad-diagram');
+  const svg = root.firstChild;
+  if (!svg || !root.clientWidth) return;
+  const compact = root.clientWidth < 720;
+  $('pad-diagram-card').classList.toggle('compact', compact);
+  svg.setAttribute('viewBox', compact ? '232 92 536 432' : '0 0 1000 600');
+}
+
+// Live-Anzeige: gedrückte Tasten, bewegte Sticks und Trigger leuchten (Grafik und Liste)
 function renderPadLive(i, mode) {
-  const pos = (x, y) => `translate(${(x * 33).toFixed(1)}px, ${(-y * 33).toFixed(1)}px)`;
-  $('pad-ls').style.transform = pos(i.lx, i.ly);
-  $('pad-rs').style.transform = pos(i.rx, i.ry);
-  $('pad-lt').style.width = `${Math.round(i.lt * 100)}%`;
-  $('pad-rt').style.width = `${Math.round(i.rt * 100)}%`;
-  $('pad-btns').querySelectorAll('span').forEach((el, bit) => el.classList.toggle('on', !!(i.b & (1 << bit))));
-  $('pad-live-info').textContent = mode ? `Modus ${PAD_MODES[mode] || mode}` : '';
+  const card = $('pad-diagram-card');
+  if (!$('pad-diagram').firstChild) return;
+  P.liveAt = Date.now();
+  $('pad-live-tag').hidden = false;
+  if (mode && mode !== P.liveMode) {  // Modus am Controller gewechselt -> Grafik folgt
+    P.liveMode = mode;
+    if (mode !== P.view) {
+      P.view = mode;
+      renderPadDiagram();
+    }
+  }
+  const b = i.b || 0;
+  const on = new Set(PAD_BUTTONS.filter(([, ,], bit) => b & (1 << bit)).map(([id]) => id));
+  if (Math.hypot(i.lx, i.ly) > 0.2) on.add('ls');
+  if (Math.hypot(i.rx, i.ry) > 0.2) on.add('rs');
+  if (i.lt > 0.1) on.add('lt');
+  if (i.rt > 0.1) on.add('rt');
+  card.querySelectorAll('[data-btn]').forEach((el) => {
+    const bit = PAD_BIT[el.dataset.btn];
+    el.classList.toggle('on', bit !== undefined && !!(b & (1 << bit)) && !el.classList.contains('pc-co'));
+  });
+  card.querySelectorAll('.pc-lead, .pc-lead-dot, .pc-co, .pad-row').forEach((el) => {
+    el.classList.toggle('on', on.has(el.dataset.co));
+  });
+  for (const [id, x, y] of [['ls', i.lx, i.ly], ['rs', i.rx, i.ry]]) {
+    $(`pc-cap-${id}`).setAttribute('transform', `translate(${(x * 12).toFixed(1)} ${(-y * 12).toFixed(1)})`);
+  }
+  for (const id of ['lt', 'rt']) {
+    const v = Math.max(0, Math.min(1, i[id] || 0));
+    const f = $(`pc-fill-${id}`);
+    f.setAttribute('y', 158 - 40 * v);
+    f.setAttribute('height', 40 * v);
+  }
+}
+
+// Zeigen auf Beschriftung, Linie oder Taste hebt alle drei hervor
+function padHover(id) {
+  $('pad-diagram').querySelectorAll('.hl').forEach((el) => el.classList.remove('hl'));
+  if (!id) return;
+  $('pad-diagram').querySelectorAll(`[data-co="${id}"], [data-btn="${id}"]`).forEach((el) => el.classList.add('hl'));
+}
+
+function clearPadLive() {
+  if (!P.liveAt) return;
+  P.liveAt = 0;
+  $('pad-live-tag').hidden = true;
+  renderPadLive({ lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0, b: 0 }, '');
+  P.liveAt = 0;
+  $('pad-live-tag').hidden = true;
+}
+
+// Auswahl-Dialog: Funktion für eine Taste
+function openPadPick(id) {
+  const c = P.cfg;
+  if (!c || PAD_BIT[id] === undefined) return;
+  P.picking = id;
+  $('pad-pick-title').textContent = `${PAD_LONG[id]} belegen`;
+  const list = $('pad-pick-list');
+  list.innerHTML = '';
+  const cur = c.map[id] || 'none';
+  for (const [name, actions] of PAD_ACTION_GROUPS) {
+    const h = document.createElement('div');
+    h.className = 'pad-list-head';
+    h.textContent = name;
+    list.appendChild(h);
+    const wrap = document.createElement('div');
+    wrap.className = 'pad-pick-grid';
+    for (const a of actions) {
+      if (!c.actions.includes(a)) continue;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pad-opt' + (a === cur ? ' active' : '');
+      btn.innerHTML = '<span></span><small></small>';
+      btn.firstChild.textContent = PAD_ACTIONS[a] || a;
+      const others = a === 'none' ? [] : PAD_BUTTONS.filter(([b]) => b !== id && c.map[b] === a).map(([, short]) => short);
+      btn.lastChild.textContent = others.length ? `auch auf ${others.join(', ')}` : '';
+      btn.onclick = async () => {
+        closePadPick();
+        if (a !== cur) {
+          await padPost({ map: { [id]: a } });
+          toast(`${PAD_LONG[id]}: ${PAD_ACTIONS[a] || a}`);
+        }
+      };
+      wrap.appendChild(btn);
+    }
+    list.appendChild(wrap);
+  }
+  $('pad-pick').hidden = false;
+  const active = list.querySelector('.pad-opt.active');
+  (active || list.querySelector('.pad-opt')).focus();
+}
+
+function closePadPick() {
+  $('pad-pick').hidden = true;
+  const id = P.picking;
+  P.picking = '';
+  const back = id && $('pad-diagram').querySelector(`.pc-co[data-co="${id}"]`);
+  if (back && !$('pad-diagram-card').classList.contains('compact')) back.focus();
 }
 
 const BLE_TEXT = {
@@ -2472,7 +2838,7 @@ function renderPad(p) {
   if (p.ble === 'connected' && P.cfg && !P.cfg.addr && S.tab === 'pad') loadPad();  // neue Kopplung
 
   if (S.tab === 'pad' && p.src === 'ble' && p.in) renderPadLive(p.in, p.mode);
-  if (S.tab === 'pad' && !p.src) $('pad-live-info').textContent = 'kein Controller aktiv';
+  if (S.tab === 'pad' && !p.src && Date.now() - P.liveAt > PAD_LIVE_MS) clearPadLive();
 }
 
 const padPostThrottled = throttle((patch) => padPost(patch), 200);
@@ -2480,13 +2846,13 @@ async function padPost(patch) {
   P.touched = Date.now();
   try {
     P.cfg = await api('/api/pad', patch);
-    renderPadCfg(false);
+    renderPadCfg();
   } catch (e) {
     toast(e.message, true);
   }
 }
 
-function renderPadCfg(rebuild) {
+function renderPadCfg() {
   const c = P.cfg;
   if (!c) return;
   const sl = (id, v, fmt) => {
@@ -2497,45 +2863,22 @@ function renderPadCfg(rebuild) {
   sl('pad-deadzone', Math.round(c.deadzone * 100), (v) => `${v} %`);
   sl('pad-expo', Math.round(c.expo * 100), (v) => `${v} %`);
   $('pad-invert').checked = c.invert_y;
+  $('pad-swap').checked = !!c.swap_sticks;
   $('pad-forget').disabled = !c.addr;
-  const map = $('pad-map');
-  if (rebuild || !map.children.length) {
-    map.innerHTML = '';
-    for (const [id, label, hint] of PAD_BUTTONS) {
-      const l = document.createElement('label');
-      l.htmlFor = `pad-map-${id}`;
-      l.innerHTML = '<span></span><small></small>';
-      l.firstChild.textContent = label;
-      l.lastChild.textContent = hint;
-      const sel = document.createElement('select');
-      sel.id = `pad-map-${id}`;
-      for (const a of c.actions) {
-        const o = document.createElement('option');
-        o.value = a;
-        o.textContent = PAD_ACTIONS[a] || a;
-        sel.appendChild(o);
-      }
-      sel.onchange = () => padPost({ map: { [id]: sel.value } });
-      map.append(l, sel);
-    }
-  }
-  for (const [id] of PAD_BUTTONS) {
-    const sel = $(`pad-map-${id}`);
-    if (sel && document.activeElement !== sel) sel.value = c.map[id] || 'none';
-  }
+  renderPadDiagram();
 }
 
 async function loadPad() {
   try {
     P.cfg = await api('/api/pad');
-    renderPadCfg(true);
+    if (P.mode) P.view = P.mode;
+    renderPadCfg();
   } catch (e) {
     toast('Controller-Einstellungen nicht verfügbar', true);
   }
 }
 
 function bindPad() {
-  $('pad-btns').innerHTML = PAD_BUTTONS.map(([, label]) => `<span>${label}</span>`).join('');
   $('pad-ble-on').onchange = (e) => padPost({ enabled: e.target.checked });
   $('pad-pair').onclick = () => padPost({ pair: true });
   $('pad-forget').onclick = () => {
@@ -2552,11 +2895,21 @@ function bindPad() {
   slider('pad-deadzone', 'deadzone');
   slider('pad-expo', 'expo');
   $('pad-invert').onchange = (e) => padPost({ invert_y: e.target.checked });
+  $('pad-swap').onchange = (e) => padPost({ swap_sticks: e.target.checked });
   $('pad-reset').onclick = async () => {
     if (!confirm('Standardbelegung und -werte wiederherstellen?')) return;
     await padPost({ reset: true });
-    renderPadCfg(true);
+    toast('Standardbelegung wiederhergestellt');
   };
+  bindSeg('pad-view-mode', (v) => {
+    P.view = v;
+    renderPadDiagram();
+  });
+  document.body.appendChild($('pad-pick'));  // Overlay über der ganzen Seite
+  $('pad-pick-close').onclick = closePadPick;
+  $('pad-pick').addEventListener('click', (e) => { if (e.target === $('pad-pick')) closePadPick(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('pad-pick').hidden) closePadPick(); });
+  setInterval(() => { if (P.liveAt && Date.now() - P.liveAt > PAD_LIVE_MS) clearPadLive(); }, 500);
   window.addEventListener('gamepadconnected', () => { if (P.web) padTick(); });
   window.addEventListener('gamepaddisconnected', () => { if (P.web) padTick(); });
   let on = false;

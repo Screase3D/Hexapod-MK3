@@ -67,6 +67,7 @@ static void testReport() {
 }
 
 static Output step(Mapper& m, const pad::State& s) { return m.update(s, DT); }
+static pad::State press(int b);
 
 static void testSticks() {
   Mapper m;
@@ -111,6 +112,29 @@ static void testSticks() {
   s.ly = 1.0f;
   o = step(m, s);
   CHECK(o.walk[0] < -0.5f);
+  // Sticks tauschen: rechter Stick fährt, linker dreht
+  c = defaults();
+  c.swap_sticks = true;
+  m.setConfig(c);
+  s = pad::State();
+  s.ry = 1.0f;
+  o = step(m, s);
+  CHECK(o.walk[0] > 0.5f && near(o.walk[2], 0.0f));
+  s = pad::State();
+  s.lx = 1.0f;
+  o = step(m, s);
+  CHECK(o.walk[2] < -0.5f && near(o.walk[0], 0.0f) && near(o.walk[1], 0.0f));
+  // ... auch für die Vorderbeine (linker Fuß folgt dem rechten Stick)
+  Mapper arms;
+  arms.setConfig(c);
+  step(arms, press(pad::BTN_Y));   // Laufen -> Körper
+  step(arms, pad::State());
+  step(arms, press(pad::BTN_Y));   // Körper -> Vorderbeine
+  step(arms, pad::State());
+  s = pad::State();
+  s.rx = 1.0f;
+  o = step(arms, s);
+  CHECK(o.mode == Mode::Arms && o.arm[0] > 0.5f && near(o.arm[2], 0.0f));
 }
 
 static pad::State press(int b) {

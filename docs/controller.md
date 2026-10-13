@@ -45,8 +45,8 @@ Hinweise:
   (Bluetooth-Timeout; der Controller meldet nur Änderungen, ein gehaltener Stick gilt bis dahin weiter).
 - Noch nicht mit echter Hardware getestet: Der Bericht des Controllers wird wie bei der Bibliothek
   [XboxSeriesXControllerESP32](https://github.com/asukiaaa/arduino-XboxSeriesXControllerESP32)
-  ausgewertet (Bluetooth-Stack: [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 2.5.1). Zeigt der
-  *Test* auf der Seite verkehrte Stick-Richtungen, hilft *Sticks oben/unten umkehren*.
+  ausgewertet (Bluetooth-Stack: [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 2.5.1). Bewegen sich
+  die Sticks in der Grafik verkehrt herum, hilft *Sticks oben/unten umkehren*.
 
 ## Controller an diesem Gerät
 
@@ -56,6 +56,18 @@ Zustand alle 50 ms an den Roboter, solange sie geöffnet ist (egal welche Unters
 Elite-Paddles meldet der Browser meist nicht.
 
 ## Belegung
+
+Oben auf der Seite *Controller* ist der Controller groß abgebildet, jede Taste mit ihrer Funktion:
+
+- **Ändern:** Taste oder Beschriftung antippen → Funktion wählen (nach Themen sortiert; „auch auf B“ zeigt,
+  wo eine Funktion schon liegt – mehrere Tasten dürfen dieselbe haben). Wird sofort gespeichert,
+  *Standard* stellt alles zurück.
+- **Live:** Ist ein Controller aktiv (Bluetooth oder Browser), leuchten gedrückte Tasten samt Beschriftung auf,
+  die Sticks bewegen sich mit und die Trigger füllen sich. Wechselt der Modus am Controller, folgt die Grafik.
+- **Sticks und Trigger** sind fest je Modus (gestrichelte Kästen); oben rechts zwischen *Laufen*, *Körper* und
+  *Vorderbeine* umschalten, um ihre Funktion zu sehen. *Sticks tauschen* (Karte *Sticks*) legt das Fahren
+  auf den rechten Stick (z. B. für Linkshänder), in allen Modi.
+- Auf dem Handy steht unter der Grafik eine Liste zum Antippen.
 
 Die Sticks hängen vom **Modus** ab (Taste Y wechselt, die Steuerung zeigt ihn als 🎮-Abzeichen):
 
@@ -67,7 +79,7 @@ Die Sticks hängen vom **Modus** ab (Taste Y wechselt, die Steuerung zeigt ihn a
 
 In den Modus *Vorderbeine* zu wechseln hebt sie (im Stand), ein anderer Modus setzt sie wieder ab.
 
-Tasten (Standard, unter *Tasten* frei änderbar):
+Tasten (Standard, in der Grafik frei änderbar):
 
 | Taste | Aktion |
 |---|---|
