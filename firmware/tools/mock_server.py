@@ -270,6 +270,85 @@ def telemetry():
     }
 
 
+# --- Live-Ansicht (wie commands.cpp buildLive): Gelenkwinkel aus einer einfachen Gangsimulation
+LEG = {"coxa": 41, "femur": 43, "tibia": 94}
+MOUNTS = [(73.5, 38.5, 45), (0, 57, 90), (-73.5, 38.5, 135), (73.5, -38.5, -45), (0, -57, -90), (-73.5, -38.5, -135)]
+LIVE = {"last": None, "odo": [0.0, 0.0, 0.0], "t": 0.0}
+
+
+def leg_ik(leg, p):
+    # wie kinematics.cpp legIk: Fuß im Bein-System -> (coxa, femur, tibia) in Grad, None = unerreichbar
+    mx, my, ma = MOUNTS[leg]
+    a = math.radians(-ma)
+    x, y = p[0] - mx, p[1] - my
+    fx, fy, fz = x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a), p[2]
+    horiz = math.hypot(fx, fy)
+    r = horiz - LEG["coxa"]
+    d = math.hypot(r, fz)
+    F, T = LEG["femur"], LEG["tibia"]
+    if horiz < 1e-3 or d > F + T or d < abs(F - T):
+        return None
+    clamp = lambda v: max(-1.0, min(1.0, v))
+    femur = math.atan2(fz, r) + math.acos(clamp((F * F + d * d - T * T) / (2 * F * d)))
+    knee = math.acos(clamp((F * F + T * T - d * d) / (2 * F * T)))
+    sign = -1 if math.sin(math.radians(ma)) > 0 else 1
+    return (sign * math.degrees(math.atan2(fy, fx)), math.degrees(femur), math.degrees(knee) - 90)
+
+
+def world_to_body(pose, w):
+    cr, sr = math.cos(math.radians(pose[3])), math.sin(math.radians(pose[3]))
+    cp, sp = math.cos(math.radians(-pose[4])), math.sin(math.radians(-pose[4]))
+    cy, sy = math.cos(math.radians(pose[5])), math.sin(math.radians(pose[5]))
+    dx, dy, dz = w[0] - pose[0], w[1] - pose[1], w[2] - pose[2]
+    x1, y1 = cy * dx + sy * dy, -sy * dx + cy * dy
+    x2, z2 = cp * x1 - sp * dz, sp * x1 + cp * dz
+    return (x2, cr * y1 + sr * z2, -sr * y1 + cr * z2)
+
+
+def live_msg():
+    t = time.time()
+    imu = imu_tel(t)
+    msg = {"type": "live", "t": int((t - state["start"]) * 1000), "tq": state["torque"],
+           "i": [round(imu["roll"] * 10), round(imu["pitch"] * 10)]}
+    if state["mode"] != "pose":
+        msg.update(ik=False, j=[round(deg_of(i) * 10) for i in range(18)])
+        return msg
+    ps = posture()
+    pz = state["pose"]["z"]
+    f = min(1.0, (t - state["posture_t"]) / 2.5)
+    z = {"sitting": 22, "standing_up": 22 + (pz - 22) * f, "sitting_down": pz - (pz - 22) * f}.get(ps, pz)
+    stance = state["pose"]["stance"] + (20 if ps == "sitting" else 0)
+    pose = [state["pose"][k] for k in ("x", "y")] + [z] + [state["pose"][k] for k in ("roll", "pitch", "yaw")]
+    g = gait_status()
+    swing = g["swing"]
+    sigma = SWING_FRACTION[g["type"]]
+    cycle = g["swing_s"] * g["cadence"] / sigma
+    phase = (t / cycle) % 1
+    stance_s = (1 - sigma) * cycle
+    j = []
+    for leg, (mx, my, ma) in enumerate(MOUNTS):
+        a = math.radians(ma)
+        n = (mx + stance * math.cos(a), my + stance * math.sin(a))
+        foot = [n[0], n[1], 0.0]
+        if g["walking"]:
+            # Fußgeschwindigkeit gegen den Körper (wie gait.cpp, ohne Rampen)
+            wx = g["vx"] - math.radians(g["wz"]) * n[1]
+            wy = g["vy"] + math.radians(g["wz"]) * n[0]
+            p = (phase - SWING_START[g["type"]][leg]) % 1
+            if p < sigma:  # Schwung: von hinten nach vorne, mit Hub
+                u = p / sigma
+                h = u * u * u * (10 + u * (-15 + 6 * u))
+                k = (h - 0.5) * stance_s
+                foot = [n[0] + wx * k, n[1] + wy * k, g["step_height"] * 16 * (u * (1 - u)) ** 2]
+            else:  # Stand: von vorne nach hinten
+                k = 0.5 * stance_s - (p - sigma) * cycle
+                foot = [n[0] + wx * k, n[1] + wy * k, 0.0]
+        ang = leg_ik(leg, world_to_body(pose, foot)) or (0.0, 30.0, -30.0)
+        j += [round(v * 10) for v in ang]
+    msg.update(ik=True, j=j, b=[round(v, 1) for v in pose], s=swing, v=[g["vx"], g["vy"], g["wz"]])
+    return msg
+
+
 def imu_tel(t):
     # Lage schwingt etwas; der Nullpunkt wird abgezogen
     lr, lp = state["imu_level"]
@@ -519,13 +598,28 @@ async def ws_handler(request):
             await ws.send_str(json.dumps(telemetry()))
             await asyncio.sleep(0.25)
 
+    live_until = [0.0]
+
+    async def push_live():
+        # wie web_server.cpp: 20 Hz, solange die Oberfläche "live" erneuert
+        while not ws.closed:
+            if time.time() < live_until[0]:
+                await ws.send_str(json.dumps(live_msg()))
+            await asyncio.sleep(0.05)
+
     task = asyncio.create_task(push())
+    task_live = asyncio.create_task(push_live())
     async for msg in ws:
         if msg.type == WSMsgType.TEXT:
-            reply = handle(json.loads(msg.data))
+            data = json.loads(msg.data)
+            if data.get("cmd") == "live":
+                live_until[0] = time.time() + 3 if data.get("on", True) else 0
+                continue
+            reply = handle(data)
             if reply is not None:
                 await ws.send_str(json.dumps(reply))
     task.cancel()
+    task_live.cancel()
     return ws
 
 

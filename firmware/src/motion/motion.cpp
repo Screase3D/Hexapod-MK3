@@ -92,6 +92,8 @@ bool g_pending_sit = false;   // Hinsetzen, sobald die Vorderbeine unten sind
 float g_lo[NUM_SERVOS], g_hi[NUM_SERVOS];
 uint32_t g_limits_ms = 0;
 kin::BodyPose g_ik_pose = {0, 0, POSE_LIMITS.height_default, 0, 0, 0};  // Körperlage der letzten IK
+kin::BodyPose g_live_pose = g_ik_pose;  // dieselbe, unter g_mux (Live-Ansicht)
+float g_pose_vel[7] = {0, 0, 0, 0, 0, 0, 0};  // Nachführen der Haltung: x, y, z, Rollen, Nicken, Gieren, Fußabstand
 
 // Vorderbeine: Fußpunkt erreichbar (mit Abstand zu den Gelenkgrenzen)?
 constexpr float ARM_MARGIN_DEG = 3.0f;
@@ -131,6 +133,24 @@ float approach(float cur, float target, float max_step) {
   if (d > max_step) return cur + max_step;
   if (d < -max_step) return cur - max_step;
   return target;
+}
+
+// Folgt dem Ziel mit begrenzter Geschwindigkeit und Beschleunigung: weich anfahren,
+// rechtzeitig abbremsen, ohne Überschwingen (vel = Zustand je Achse)
+float glide(float cur, float target, float& vel, float vmax, float amax, float dt) {
+  if (dt <= 0.0f) return cur;
+  const float d = target - cur;
+  // Bremsgeschwindigkeit im Regeltakt: kommt mit amax genau am Ziel zum Stehen
+  const float ad = amax * dt;
+  const float v_stop = ad * (sqrtf(0.25f + 2.0f * fabsf(d) / (ad * dt)) - 0.5f);
+  const float v_want = copysignf(fminf(vmax, fminf(v_stop, fabsf(d) / dt)), d);
+  vel = approach(vel, v_want, ad);
+  const float next = cur + vel * dt;
+  if ((target - next) * d <= 0.0f) {  // angekommen
+    vel = 0.0f;
+    return target;
+  }
+  return next;
 }
 
 void neutralFeet(float stance, kin::Vec3 out[NUM_LEGS]) {
@@ -770,6 +790,7 @@ void update(float dt) {
     // weichen Übergang aus der bisherigen Stellung.
     bool sitting = collapse || enter_sitting;
     g_current = sitting ? sitState() : target;
+    for (float& v : g_pose_vel) v = 0.0f;
     g_seq.reset(sitting ? posture::State::Sitting : posture::State::Standing);
     neutralFeet(g_current.stance, neutral);
     g_gait.reset(neutral);
@@ -885,19 +906,27 @@ void update(float dt) {
   goal.pose.roll_deg = clampf(goal.pose.roll_deg + g_level.rollDeg(), -LEVEL_TILT_MAX, LEVEL_TILT_MAX);
   goal.pose.pitch_deg = clampf(goal.pose.pitch_deg + g_level.pitchDeg(), -LEVEL_TILT_MAX, LEVEL_TILT_MAX);
 
-  // Haltung mit begrenzter Geschwindigkeit nachführen (fließende Bewegung).
-  // Höhe und Fußabstand aus dem Haltungswechsel direkt (dort schon geglättet bzw.
-  // als Sprung gewollt: die Gangart setzt die Füße dann mit Schritten um).
-  const float lin = POSE_SPEED_MM_PER_S * dt;
-  const float ang = POSE_SPEED_DEG_PER_S * dt;
+  // Haltung mit begrenzter Geschwindigkeit und Beschleunigung nachführen (fließende,
+  // weich beginnende und endende Bewegung). Höhe und Fußabstand aus dem
+  // Haltungswechsel direkt (dort schon geglättet bzw. als Sprung gewollt: die Gangart
+  // setzt die Füße dann mit Schritten um).
+  float* vel = g_pose_vel;
+  const float vl = POSE_SPEED_MM_PER_S, al_ = POSE_ACCEL_MM_PER_S2;
+  const float va = POSE_SPEED_DEG_PER_S, aa = POSE_ACCEL_DEG_PER_S2;
   kin::BodyPose& c = g_current.pose;
-  c.x = approach(c.x, goal.pose.x, lin);
-  c.y = approach(c.y, goal.pose.y, lin);
-  c.z = po.active ? goal.pose.z : approach(c.z, goal.pose.z, lin);
-  c.roll_deg = approach(c.roll_deg, goal.pose.roll_deg, ang);
-  c.pitch_deg = approach(c.pitch_deg, goal.pose.pitch_deg, ang);
-  c.yaw_deg = approach(c.yaw_deg, goal.pose.yaw_deg, ang);
-  g_current.stance = po.active ? goal.stance : approach(g_current.stance, goal.stance, lin);
+  c.x = glide(c.x, goal.pose.x, vel[0], vl, al_, dt);
+  c.y = glide(c.y, goal.pose.y, vel[1], vl, al_, dt);
+  c.roll_deg = glide(c.roll_deg, goal.pose.roll_deg, vel[3], va, aa, dt);
+  c.pitch_deg = glide(c.pitch_deg, goal.pose.pitch_deg, vel[4], va, aa, dt);
+  c.yaw_deg = glide(c.yaw_deg, goal.pose.yaw_deg, vel[5], va, aa, dt);
+  if (po.active) {
+    c.z = goal.pose.z;
+    g_current.stance = goal.stance;
+    vel[2] = vel[6] = 0.0f;
+  } else {
+    c.z = glide(c.z, goal.pose.z, vel[2], vl, al_, dt);
+    g_current.stance = glide(g_current.stance, goal.stance, vel[6], vl, al_, dt);
+  }
   kin::BodyPose pose = c;
   pose.x += go.x;
   pose.y += go.y;
@@ -952,6 +981,7 @@ void update(float dt) {
   g_unreachable = unreachable;
   g_clamped = clamped;
   g_status = st;
+  g_live_pose = pose;
   g_posture = g_seq.state();
   g_arms_state = g_arms.state();
   g_gesture = g_gest.active();
@@ -985,6 +1015,29 @@ Activity activity() {
   a.level_fault = g_level_fault;
   portEXIT_CRITICAL(&g_mux);
   return a;
+}
+
+void liveToJson(JsonObject obj) {
+  portENTER_CRITICAL(&g_mux);
+  const bool ik = g_mode == Mode::Pose;
+  const kin::BodyPose p = g_live_pose;
+  const GaitStatus st = g_status;
+  portEXIT_CRITICAL(&g_mux);
+  auto r1 = [](float v) { return roundf(v * 10.0f) / 10.0f; };
+  obj["ik"] = ik;
+  if (!ik) return;
+  JsonArray b = obj["b"].to<JsonArray>();
+  b.add(r1(p.x));
+  b.add(r1(p.y));
+  b.add(r1(p.z));
+  b.add(r1(p.roll_deg));
+  b.add(r1(p.pitch_deg));
+  b.add(r1(p.yaw_deg));
+  obj["s"] = st.swing;
+  JsonArray v = obj["v"].to<JsonArray>();
+  v.add(roundf(st.vx));
+  v.add(roundf(st.vy));
+  v.add(roundf(st.wz_deg));
 }
 
 void toJson(JsonObject obj) {

@@ -67,6 +67,11 @@ constexpr PoseLimits POSE_LIMITS = {
 // Geschwindigkeit, mit der die Körperhaltung den Vorgaben folgt
 constexpr float POSE_SPEED_MM_PER_S = 80.0f;
 constexpr float POSE_SPEED_DEG_PER_S = 45.0f;
+// Beschleunigung dabei: weich anfahren und abbremsen statt mit voller Geschwindigkeit
+// loszufahren und abrupt zu stoppen (80 mm/s in 0,2 s, 45 °/s in 0,09 s – der
+// Lageausgleich bleibt so praktisch so schnell wie vorher)
+constexpr float POSE_ACCEL_MM_PER_S2 = 400.0f;
+constexpr float POSE_ACCEL_DEG_PER_S2 = 500.0f;
 
 // Sitzen (Körper liegt auf) und Aufstehen/Hinsetzen.
 // SIT_HEIGHT = Höhe der Femur-Achsen über den Fußspitzen, wenn der Körper flach

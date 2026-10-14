@@ -411,6 +411,12 @@ bool ServoController::boardOk(int board) {
   return board >= 0 && board < NUM_BOARDS && boards_[board] && boards_[board]->ok();
 }
 
+void ServoController::anglesDeg(float* deg) {
+  lock();
+  for (int i = 0; i < NUM_SERVOS; ++i) deg[i] = cal_.usToDeg(i, ch_[i].target_us);
+  unlock();
+}
+
 void ServoController::stateToJson(JsonObject obj) {
   lock();
   int active = 0;

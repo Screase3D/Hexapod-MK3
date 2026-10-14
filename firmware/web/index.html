@@ -36,6 +36,7 @@
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3.5 8h3.5l1.5-2.5h7L17 8h3.5v11h-17z"/><circle cx="12" cy="13.2" r="3.4"/></symbol>
       <symbol id="i-camera-off" viewBox="0 0 24 24"><path d="M3.5 8h3.5l1.5-2.5h7L17 8h3.5v11h-17z"/><circle cx="12" cy="13.2" r="3.4"/><path d="M3 3l18 18"/></symbol>
+      <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 2.8l8 4.4v9.6l-8 4.4-8-4.4V7.2z"/><path d="M4 7.2l8 4.5 8-4.5M12 11.7v9.5"/></symbol>
       <symbol id="i-hud" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
       <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
@@ -219,6 +220,29 @@
                   </div>
                   <p class="muted small">Ohne Stream schläft die Kamera nach 10&nbsp;s (spart Strom und Wärme).</p>
                 </div>
+              </div>
+
+              <div class="card o-model" id="model-card">
+                <div class="card-head wrap">
+                  <h2><svg class="ic"><use href="#i-cube"/></svg>3D-Ansicht<span id="model-src" class="badge badge-muted" hidden></span></h2>
+                  <div class="seg model-views" id="model-view" role="radiogroup" aria-label="Blickwinkel">
+                    <button type="button" role="radio" data-value="3d" title="schräg von hinten">3D</button>
+                    <button type="button" role="radio" data-value="top" title="von oben">Oben</button>
+                    <button type="button" role="radio" data-value="side" title="von rechts">Seite</button>
+                    <button type="button" role="radio" data-value="front" title="von vorne">Vorne</button>
+                  </div>
+                </div>
+                <div class="model-wrap" id="model-wrap">
+                  <canvas id="model-canvas" role="img" aria-label="3D-Modell des Roboters mit den aktuellen Gelenkwinkeln"></canvas>
+                  <div class="model-legend small" aria-hidden="true">
+                    <span><i class="key key-stance"></i>Stand</span>
+                    <span><i class="key key-swing"></i>Schwung</span>
+                    <span><i class="key key-area"></i>Standfläche</span>
+                  </div>
+                </div>
+                <p id="model-info" class="muted small model-info"></p>
+                <p class="hint small">Ziehen dreht die Ansicht (mit der Maus auch hoch/runter), Strg + Mausrad zoomt,
+                  Doppelklick setzt zurück. Daten kommen nur, solange die Ansicht sichtbar ist.</p>
               </div>
 
               <div class="sub-grid">

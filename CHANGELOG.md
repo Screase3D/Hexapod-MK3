@@ -4,6 +4,19 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.11.0
+
+- **3D-Ansicht** auf der Steuerungsseite: Der Roboter als Live-Modell, gerechnet aus den aktuellen
+  Gelenkwinkeln (Vorwärtskinematik) und der Körperlage – mit Schatten, Beinen in der Luft (farbig, mit
+  Höhe über dem Boden), der Standfläche der Füße am Boden und dem Lot des Schwerpunkts (grün = sicher,
+  gelb/rot = am bzw. außerhalb des Rands) samt Standreserve in mm. Beim Laufen wandert der Boden mit.
+  Ansichten 3D, Oben, Seite, Vorne; Ziehen dreht, Strg + Mausrad zoomt, Doppelklick setzt zurück. Die
+  Daten kommen mit 20 Hz nur, solange die Ansicht sichtbar ist (`{"cmd":"live"}`), sonst aus der
+  Telemetrie; auch im Handbetrieb (Kalibrierung) zu sehen.
+- **Weichere Körperbewegungen:** Haltung, Körper-Joystick, Profile und Lageausgleich folgen jetzt mit
+  begrenzter Beschleunigung – sanft anfahren, rechtzeitig abbremsen, ohne Überschwingen (vorher mit
+  voller Geschwindigkeit los und abrupt gestoppt).
+
 ## 0.10.0
 
 - **Gangart im Lauf wechseln:** Dreifuß, Ripple und Welle lassen sich jetzt jederzeit umschalten (Oberfläche,

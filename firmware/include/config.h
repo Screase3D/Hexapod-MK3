@@ -123,6 +123,10 @@ constexpr uint32_t    WIFI_STA_LOST_FALLBACK_MS = 60000; // Heimnetz so lange we
 constexpr uint16_t    HTTP_PORT       = 80;
 constexpr uint16_t    STREAM_PORT     = 81;
 constexpr uint32_t    TELEMETRY_PERIOD_MS = 250;
+// Live-Ansicht (3D-Modell): Gelenkwinkel und Körperlage mit 20 Hz, nur an Clients, die
+// {"cmd":"live"} geschickt haben – jeweils für LIVE_HOLD_MS (die Oberfläche erneuert das)
+constexpr uint32_t    LIVE_PERIOD_MS = 50;
+constexpr uint32_t    LIVE_HOLD_MS = 3000;
 
 // LED-Helligkeit begrenzen (Schaltplan: max. 20-30 %)
 constexpr uint8_t LED_MAX_BRIGHTNESS = 64;  // von 255

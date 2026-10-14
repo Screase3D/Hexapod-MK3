@@ -174,6 +174,7 @@ function connect() {
     }
     send('cal_get');
     checkVersion();
+    v3Tick();
     if (OTA.rebooting) location.reload();  // neue Firmware = neue Oberfläche
   };
   ws.onclose = (ev) => {
@@ -221,6 +222,10 @@ function onMessage(m) {
     S.pingAt = 0;
     S.rtt = S.rtt ? S.rtt * 0.7 + rtt * 0.3 : rtt;
     renderConnection();
+    return;
+  }
+  if (m.type === 'live') {
+    v3Live(m);
     return;
   }
   if (m.type === 'telemetry') {
@@ -322,6 +327,7 @@ function renderBanner() {
 function renderTelemetry() {
   const t = S.tel;
   const sv = t.servo;
+  v3Telemetry(t);
   renderPad(t.pad);
   renderLogState(t.log);
   if (FPV.open) renderFpv(t);
@@ -558,7 +564,9 @@ function renderLevel(l) {
 
 async function loadKinematics() {
   try {
-    buildPose(await api('/api/kinematics'));
+    const k = await api('/api/kinematics');
+    if (k.leg && Array.isArray(k.mounts) && k.mounts.length === 6) V3.geo = { leg: k.leg, mounts: k.mounts };
+    buildPose(k);
     if (S.tel) renderPose(S.tel.motion);
   } catch (e) { /* Firmware ohne IK */ }
 }
@@ -1337,6 +1345,7 @@ function showTab(name) {
   document.title = `${page.dataset.title} · Hexapod MK3`;
   setNavOpen(false);
   updateStream();
+  v3Tick();
   clearInterval(S.statusTimer);
   renderBanner();
   if (name === 'system' || name === 'settings') {
@@ -1392,6 +1401,8 @@ function applyTheme(pref) {
   setSeg('theme-seg', pref === 'light' || pref === 'dark' ? pref : 'auto');
   const dark = pref === 'dark' || (pref !== 'light' && !matchMedia('(prefers-color-scheme: light)').matches);
   document.querySelector('meta[name="theme-color"]').content = dark ? '#0d1217' : '#f2f4f7';
+  V3.colors = null;
+  V3.dirty = true;
 }
 
 function bindTheme() {
@@ -3506,6 +3517,562 @@ function bindSystem() {
   };
 }
 
+// ------------------------------------------------------------ 3D-Ansicht --
+// Live-Modell aus den Gelenkwinkeln (Vorwärtskinematik wie kinematics.cpp legFk):
+// Körper, Beine, Schatten und die Standfläche der Füße am Boden; der Boden wandert
+// beim Laufen mit. Daten: {"type":"live"} mit 20 Hz, solange die Ansicht sichtbar ist
+// (die Oberfläche erneuert {"cmd":"live"} alle 1,5 s), sonst aus der Telemetrie (4 Hz).
+
+const D2R = Math.PI / 180;
+// Blickwinkel: Richtung der Kamera um die Hochachse, Höhe über dem Boden (rad), Zoom
+const V3_VIEWS = { '3d': [-2.1, 0.5, 1.05], top: [Math.PI, 1.45, 1.1], side: [-Math.PI / 2, 0.1, 1.3], front: [0, 0.14, 1.35] };
+const V3_GRID = 50;        // mm zwischen den Bodenlinien
+const V3_GRID_N = 8;       // Linien je Richtung
+const V3 = {
+  geo: {  // bis /api/kinematics da ist: Maße wie robot_geometry.h
+    leg: { coxa: 41, femur: 43, tibia: 94 },
+    mounts: [{ x: 73.5, y: 38.5, angle: 45 }, { x: 0, y: 57, angle: 90 }, { x: -73.5, y: 38.5, angle: 135 },
+      { x: 73.5, y: -38.5, angle: -45 }, { x: 0, y: -57, angle: -90 }, { x: -73.5, y: -38.5, angle: -135 }],
+  },
+  tgt: null,     // zuletzt empfangen {j[18] Grad, b[6] Körperlage oder null, s, tq, ik, v[3]}
+  cur: null,     // angezeigt (geglättet)
+  src: '',       // 'live' | 'tel'
+  liveAt: 0, liveN: 0, liveNAt: 0, liveHz: 0,
+  subscribed: false,
+  visible: false,
+  view: '3d', az: V3_VIEWS['3d'][0], el: V3_VIEWS['3d'][1], zoom: 1,
+  odo: { x: 0, y: 0, yaw: 0 },
+  raf: 0, last: 0, dirty: true,
+  colors: null, colorsAt: 0,
+  drag: null,
+  infoAt: 0,
+};
+
+function v3Live(m) {
+  const now = performance.now();
+  V3.liveAt = now;
+  if (++V3.liveN >= 20 || now - V3.liveNAt > 3000) {
+    if (V3.liveNAt) V3.liveHz = V3.liveN * 1000 / Math.max(1, now - V3.liveNAt);
+    V3.liveN = 0;
+    V3.liveNAt = now;
+  }
+  if (!Array.isArray(m.j) || m.j.length < NUM_SERVOS) return;
+  v3Set({ j: m.j.map((v) => v / 10), b: m.ik && m.b ? m.b : null, s: m.s || 0, tq: !!m.tq, ik: !!m.ik,
+    v: m.ik && m.v ? m.v : [0, 0, 0] }, 'live');
+}
+
+function v3Telemetry(t) {
+  if (performance.now() - V3.liveAt < 1000 || !t.servo || !Array.isArray(t.servo.deg)) return;
+  const mo = t.motion || {};
+  const ik = mo.mode === 'pose';
+  const p = mo.pose;
+  const g = mo.gait || {};
+  v3Set({ j: t.servo.deg.slice(), b: ik && p ? [p.x, p.y, p.z, p.roll, p.pitch, p.yaw] : null, s: g.swing || 0,
+    tq: !!t.servo.torque, ik, v: ik && g.walking ? [g.vx || 0, g.vy || 0, g.wz || 0] : [0, 0, 0] }, 'tel');
+}
+
+function v3Set(d, src) {
+  V3.tgt = d;
+  V3.src = src;
+  if (!V3.cur) V3.cur = { ...d, j: d.j.slice(), b: d.b ? d.b.slice() : null };
+  V3.dirty = true;
+}
+
+// Live-Daten anfordern, solange die Ansicht sichtbar ist
+function v3Tick() {
+  const want = S.wsOpen && S.tab === 'control' && !document.hidden && V3.visible;
+  if (want) {
+    S.ws.send('{"cmd":"live","on":true}');
+    V3.subscribed = true;
+  } else if (V3.subscribed && S.wsOpen) {
+    S.ws.send('{"cmd":"live","on":false}');
+    V3.subscribed = false;
+  } else {
+    V3.subscribed = false;
+  }
+  v3Loop();
+}
+
+function v3Loop() {
+  const run = S.tab === 'control' && !document.hidden && V3.visible;
+  if (run && !V3.raf) {
+    V3.last = performance.now();
+    V3.raf = requestAnimationFrame(v3Frame);
+  }
+}
+
+function v3SetView(v) {
+  const p = V3_VIEWS[v] || V3_VIEWS['3d'];
+  V3.view = v;
+  V3.az = p[0];
+  V3.el = p[1];
+  V3.zoom = p[2];
+  V3.dirty = true;
+  setSeg('model-view', v);
+  try { localStorage.setItem('modelView', v); } catch (e) { /* kein Speicher */ }
+}
+
+function v3Colors() {
+  const cs = getComputedStyle(document.documentElement);
+  const g = (n) => cs.getPropertyValue(n).trim();
+  const dark = cs.colorScheme ? cs.colorScheme.includes('dark') : true;
+  return {
+    text: g('--text'), muted: g('--muted'), accent: g('--accent'), soft: g('--accent-soft'), border: g('--border'),
+    s2: g('--surface-2'), s3: g('--surface-3'), surface: g('--surface'), ok: g('--ok'), warn: g('--warn'),
+    danger: g('--danger'), dark,
+    shadow: dark ? 'rgba(0, 0, 0, 0.42)' : 'rgba(16, 24, 40, 0.14)',
+    grid: dark ? '138, 153, 168' : '93, 107, 121',
+  };
+}
+
+// Körper -> Welt (Lauf-System): R = Rz(yaw) * Ry(-pitch) * Rx(roll), dann verschieben
+function v3PoseFn(b) {
+  const cr = Math.cos(b[3] * D2R), sr = Math.sin(b[3] * D2R);
+  const cp = Math.cos(-b[4] * D2R), sp = Math.sin(-b[4] * D2R);
+  const cy = Math.cos(b[5] * D2R), sy = Math.sin(b[5] * D2R);
+  return (p) => {
+    const y1 = cr * p[1] - sr * p[2], z1 = sr * p[1] + cr * p[2];
+    const x2 = cp * p[0] + sp * z1, z2 = -sp * p[0] + cp * z1;
+    return [cy * x2 - sy * y1 + b[0], sy * x2 + cy * y1 + b[1], z2 + b[2]];
+  };
+}
+
+// Punkte eines Beins im Körper-System: Coxa-Achse, Femur-Achse, Knie, Fuß
+function v3LegPoints(leg, a) {
+  const m = V3.geo.mounts[leg];
+  const g = V3.geo.leg;
+  const ma = m.angle * D2R;
+  const c = (Math.sin(ma) > 0 ? -1 : 1) * a[0] * D2R + ma;
+  const f = a[1] * D2R;
+  const td = f + (a[2] + 90) * D2R - Math.PI;  // Richtung der Tibia gegen die Waagerechte
+  const kr = g.coxa + g.femur * Math.cos(f), kz = g.femur * Math.sin(f);
+  const rz = [[0, 0], [g.coxa, 0], [kr, kz], [kr + g.tibia * Math.cos(td), kz + g.tibia * Math.sin(td)]];
+  return rz.map(([r, z]) => [m.x + r * Math.cos(c), m.y + r * Math.sin(c), z]);
+}
+
+function v3Hull(pts) {
+  const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], hi = [];
+  for (const q of p) {
+    while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop();
+    lo.push(q);
+  }
+  for (let i = p.length - 1; i >= 0; --i) {
+    while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], p[i]) <= 0) hi.pop();
+    hi.push(p[i]);
+  }
+  return lo.slice(0, -1).concat(hi.slice(0, -1));  // gegen den Uhrzeigersinn
+}
+
+function v3Frame(now) {
+  V3.raf = 0;
+  if (S.tab !== 'control' || document.hidden || !V3.visible) return;
+  const dt = Math.min(0.1, Math.max(0, (now - V3.last) / 1000));
+  V3.last = now;
+  const t = V3.tgt, c = V3.cur;
+  if (t && c) {
+    // weich nachführen (Live: 20 Hz, Telemetrie: 4 Hz)
+    const k = 1 - Math.exp(-dt / (V3.src === 'live' ? 0.06 : 0.16));
+    let diff = 0;
+    for (let i = 0; i < NUM_SERVOS; ++i) {
+      const d = t.j[i] - c.j[i];
+      c.j[i] += d * k;
+      diff = Math.max(diff, Math.abs(d));
+    }
+    if (t.b && c.b) {
+      for (let i = 0; i < 6; ++i) {
+        const d = t.b[i] - c.b[i];
+        c.b[i] += d * k;
+        diff = Math.max(diff, Math.abs(d));
+      }
+    } else {
+      c.b = t.b ? t.b.slice() : null;
+    }
+    c.s = t.s;
+    c.tq = t.tq;
+    c.ik = t.ik;
+    // Boden mitführen (Lauf-System bewegt sich mit dem Roboter)
+    const fresh = V3.src !== 'live' || now - V3.liveAt < 600;
+    const v = fresh ? t.v : [0, 0, 0];
+    if (v[0] || v[1] || v[2]) {
+      V3.odo.yaw += v[2] * D2R * dt;
+      const cy = Math.cos(V3.odo.yaw), sy = Math.sin(V3.odo.yaw);
+      V3.odo.x += (cy * v[0] - sy * v[1]) * dt;
+      V3.odo.y += (sy * v[0] + cy * v[1]) * dt;
+      V3.dirty = true;
+    }
+    if (diff > 0.02) V3.dirty = true;
+  }
+  if (now - V3.infoAt > 500) v3Info(now);
+  if (V3.dirty) {
+    V3.dirty = false;
+    v3Draw();
+  }
+  V3.raf = requestAnimationFrame(v3Frame);
+}
+
+function v3Draw() {
+  const cv = $('model-canvas');
+  const W = cv.width, H = cv.height;
+  if (!W || !H) return;
+  const ctx = cv.getContext('2d');
+  const now = performance.now();
+  if (!V3.colors || now - V3.colorsAt > 2000) {
+    V3.colors = v3Colors();
+    V3.colorsAt = now;
+  }
+  const col = V3.colors;
+  ctx.clearRect(0, 0, W, H);
+  const c = V3.cur;
+
+  // Gelenke -> Punkte; ohne IK-Lage (Handbetrieb) steht der tiefste Fuß auf dem Boden
+  let legs = null, toWorld = null, body = null;
+  if (c) {
+    const bl = [];
+    for (let leg = 0; leg < 6; ++leg) bl.push(v3LegPoints(leg, c.j.slice(leg * 3, leg * 3 + 3)));
+    body = c.b;
+    if (!body) {
+      let zmin = 0;
+      for (const p of bl) zmin = Math.min(zmin, p[3][2]);
+      body = [0, 0, -zmin, 0, 0, 0];
+    }
+    toWorld = v3PoseFn(body);
+    legs = bl.map((pts) => pts.map(toWorld));
+  }
+  const bodyZ = body ? body[2] : 52;
+
+  // Kamera: kreist um die Körpermitte
+  const tgt = [body ? body[0] : 0, body ? body[1] : 0, bodyZ * 0.45];
+  const dist = 1400 / V3.zoom;  // weit weg: wenig perspektivische Verzerrung
+  const ce = Math.cos(V3.el), se = Math.sin(V3.el);
+  const C = [tgt[0] + dist * ce * Math.cos(V3.az), tgt[1] + dist * ce * Math.sin(V3.az), tgt[2] + dist * se];
+  let f = [tgt[0] - C[0], tgt[1] - C[1], tgt[2] - C[2]];
+  const fl = Math.hypot(...f);
+  f = f.map((v) => v / fl);
+  let r = [f[1], -f[0], 0];  // f x (0,0,1)
+  const rl = Math.hypot(r[0], r[1]) || 1;
+  r = r.map((v) => v / rl);
+  const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+  const focal = Math.min(W * 2.25, H * 3.6);
+  const cx = W / 2, cyS = H * 0.54;
+  const P = (p) => {
+    const d0 = p[0] - C[0], d1 = p[1] - C[1], d2 = p[2] - C[2];
+    const z = Math.max(1, d0 * f[0] + d1 * f[1] + d2 * f[2]);
+    return [cx + focal * (d0 * r[0] + d1 * r[1] + d2 * r[2]) / z, cyS - focal * (d0 * u[0] + d1 * u[1] + d2 * u[2]) / z, z];
+  };
+  const px = (mm, z) => Math.max(1, mm * focal / z);  // Breite in Pixeln in der Tiefe z
+
+  // Boden: Raster, wandert beim Laufen (Boden-System -> Lauf-System)
+  {
+    const o = V3.odo, cy = Math.cos(-o.yaw), sy = Math.sin(-o.yaw);
+    const g2w = (gx, gy) => {
+      const dx = gx - o.x, dy = gy - o.y;
+      return [cy * dx - sy * dy, sy * dx + cy * dy, 0];
+    };
+    const span = V3_GRID * V3_GRID_N;
+    const gx0 = Math.round(o.x / V3_GRID) * V3_GRID, gy0 = Math.round(o.y / V3_GRID) * V3_GRID;
+    const buckets = [[], [], [], [], []];
+    const seg = (a, b) => {
+      const m = [(a[0] + b[0]) / 2 - tgt[0], (a[1] + b[1]) / 2 - tgt[1]];
+      const fade = 1 - Math.hypot(m[0], m[1]) / span;
+      if (fade <= 0) return;
+      buckets[Math.min(4, Math.floor(fade * 5))].push([P(a), P(b)]);
+    };
+    for (let i = -V3_GRID_N; i <= V3_GRID_N; ++i) {
+      for (let k = -V3_GRID_N; k < V3_GRID_N; ++k) {
+        seg(g2w(gx0 + i * V3_GRID, gy0 + k * V3_GRID), g2w(gx0 + i * V3_GRID, gy0 + (k + 1) * V3_GRID));
+        seg(g2w(gx0 + k * V3_GRID, gy0 + i * V3_GRID), g2w(gx0 + (k + 1) * V3_GRID, gy0 + i * V3_GRID));
+      }
+    }
+    ctx.lineWidth = Math.max(1, W / 900);
+    buckets.forEach((list, i) => {
+      if (!list.length) return;
+      ctx.strokeStyle = `rgba(${col.grid}, ${(0.07 + 0.07 * i).toFixed(2)})`;
+      ctx.beginPath();
+      for (const [a, b] of list) {
+        ctx.moveTo(a[0], a[1]);
+        ctx.lineTo(b[0], b[1]);
+      }
+      ctx.stroke();
+    });
+  }
+  if (!legs) return;
+
+  // Standfläche: konvexe Hülle der Füße am Boden, Körpermitte darüber
+  const swing = (leg) => (c.s >> leg) & 1;
+  const planted = [];
+  for (let leg = 0; leg < 6; ++leg) {
+    const ft = legs[leg][3];
+    if (!swing(leg) && ft[2] < 4) planted.push([ft[0], ft[1]]);
+  }
+  const hull = v3Hull(planted);
+  let margin = null;
+  const com = [body[0], body[1]];
+  if (hull.length >= 3) {
+    margin = Infinity;
+    for (let i = 0; i < hull.length; ++i) {
+      const a = hull[i], b = hull[(i + 1) % hull.length];
+      const ex = b[0] - a[0], ey = b[1] - a[1];
+      margin = Math.min(margin, (ex * (com[1] - a[1]) - ey * (com[0] - a[0])) / (Math.hypot(ex, ey) || 1));
+    }
+    ctx.beginPath();
+    hull.forEach((q, i) => {
+      const s = P([q[0], q[1], 0]);
+      if (i) ctx.lineTo(s[0], s[1]);
+      else ctx.moveTo(s[0], s[1]);
+    });
+    ctx.closePath();
+    ctx.fillStyle = col.soft;
+    ctx.fill();
+    ctx.setLineDash([Math.max(3, W / 160), Math.max(3, W / 200)]);
+    ctx.strokeStyle = col.accent;
+    ctx.lineWidth = Math.max(1, W / 600);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  V3.margin = margin;
+  V3.planted = planted.length;
+
+  // Schatten (senkrecht auf den Boden)
+  const ring = [0, 1, 2, 5, 4, 3];  // Beine im Kreis um den Körper
+  const plate = (z, grow) => ring.map((leg) => {
+    const m = V3.geo.mounts[leg];
+    return toWorld([m.x * grow, m.y * grow, z]);
+  });
+  ctx.fillStyle = col.shadow;
+  ctx.strokeStyle = col.shadow;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  plate(0, 1.12).forEach((q, i) => {
+    const s = P([q[0], q[1], 0]);
+    if (i) ctx.lineTo(s[0], s[1]);
+    else ctx.moveTo(s[0], s[1]);
+  });
+  ctx.closePath();
+  ctx.fill();
+  for (const pts of legs) {
+    const sh = pts.map((q) => P([q[0], q[1], 0]));
+    ctx.lineWidth = px(9, sh[2][2]);
+    ctx.beginPath();
+    sh.forEach((s, i) => (i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1])));
+    ctx.stroke();
+  }
+  // Höhe der Schwungfüße: gestrichelt zum Boden
+  ctx.setLineDash([Math.max(2, W / 300), Math.max(2, W / 300)]);
+  ctx.lineWidth = Math.max(1, W / 700);
+  ctx.strokeStyle = col.accent;
+  for (let leg = 0; leg < 6; ++leg) {
+    const ft = legs[leg][3];
+    if (ft[2] < 3) continue;
+    const a = P(ft), b = P([ft[0], ft[1], 0]);
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Körper und Beine, von hinten nach vorne gezeichnet
+  const items = [];
+  const top = plate(9, 1.12), bot = plate(-7, 1.12);
+  const camDir = (p) => [C[0] - p[0], C[1] - p[1], C[2] - p[2]];
+  const face = (pts, shade) => {
+    // nur Flächen, die zur Kamera zeigen (Körper ist konvex)
+    const a = pts[0], b = pts[1], d = pts[2];
+    const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    const cen = [0, 1, 2].map((k) => pts.reduce((s, p) => s + p[k], 0) / pts.length);
+    const v = camDir(cen);
+    if (n[0] * v[0] + n[1] * v[1] + n[2] * v[2] <= 0) return;
+    const nl = Math.hypot(...n) || 1;
+    const light = Math.max(0, (n[0] * 0.3 - n[1] * 0.35 + n[2] * 0.89) / nl);
+    const sp = pts.map(P);
+    items.push({ z: sp.reduce((s, q) => s + q[2], 0) / sp.length, draw() {
+      ctx.beginPath();
+      sp.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])));
+      ctx.closePath();
+      ctx.fillStyle = shade;
+      ctx.fill();
+      ctx.fillStyle = `rgba(0, 0, 0, ${((1 - light) * (col.dark ? 0.45 : 0.22)).toFixed(3)})`;
+      ctx.fill();
+      ctx.strokeStyle = col.border;
+      ctx.lineWidth = Math.max(1, W / 700);
+      ctx.stroke();
+    } });
+  };
+  face(top, col.s3);
+  face(bot.slice().reverse(), col.s3);
+  for (let i = 0; i < 6; ++i) {
+    const j = (i + 1) % 6;
+    face([bot[i], bot[j], top[j], top[i]], col.s2);
+  }
+  // Blickrichtung: Pfeil auf der Oberseite und zwei "Augen" vorne
+  {
+    const pts = [[78, 0, 9.5], [52, 13, 9.5], [52, -13, 9.5]].map(toWorld);
+    const sp = pts.map(P);
+    items.push({ z: Math.min(...sp.map((q) => q[2])) - 0.5, draw() {
+      if (!V3.topVisible) return;
+      ctx.beginPath();
+      sp.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])));
+      ctx.closePath();
+      ctx.fillStyle = col.accent;
+      ctx.fill();
+    } });
+    for (const y of [-15, 15]) {
+      const e = P(toWorld([84, y, 1]));
+      items.push({ z: e[2] - 1, draw() {
+        ctx.beginPath();
+        ctx.arc(e[0], e[1], px(4.5, e[2]), 0, 2 * Math.PI);
+        ctx.fillStyle = col.accent;
+        ctx.fill();
+      } });
+    }
+  }
+  {  // Oberseite sichtbar?
+    const n = toWorld([0, 0, 1]), o = toWorld([0, 0, 0]);
+    const v = camDir(o);
+    V3.topVisible = (n[0] - o[0]) * v[0] + (n[1] - o[1]) * v[1] + (n[2] - o[2]) * v[2] > 0;
+  }
+  const W_MM = [15, 11, 8];  // Coxa, Femur, Tibia
+  for (let leg = 0; leg < 6; ++leg) {
+    const sp = legs[leg].map(P);
+    const color = !c.tq ? col.muted : swing(leg) ? col.accent : col.text;
+    for (let k = 0; k < 3; ++k) {
+      const a = sp[k], b = sp[k + 1];
+      items.push({ z: (a[2] + b[2]) / 2, draw() {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = px(W_MM[k], (a[2] + b[2]) / 2);
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]);
+        ctx.lineTo(b[0], b[1]);
+        ctx.stroke();
+        if (k < 3) {  // Gelenk
+          ctx.beginPath();
+          ctx.arc(b[0], b[1], px(k === 2 ? 4 : 5.5, b[2]), 0, 2 * Math.PI);
+          ctx.fillStyle = k === 2 ? color : col.surface;
+          ctx.fill();
+          ctx.lineWidth = Math.max(1, W / 600);
+          ctx.stroke();
+        }
+      } });
+    }
+  }
+  items.sort((a, b) => b.z - a.z);
+  ctx.lineCap = 'round';
+  for (const it of items) it.draw();
+
+  // Lot der Körpermitte auf den Boden: grün = sicher in der Standfläche
+  const m = P([com[0], com[1], 0]);
+  const top0 = P(toWorld([0, 0, -7]));
+  ctx.setLineDash([Math.max(2, W / 300), Math.max(2, W / 300)]);
+  ctx.strokeStyle = col.muted;
+  ctx.lineWidth = Math.max(1, W / 700);
+  ctx.beginPath();
+  ctx.moveTo(top0[0], top0[1]);
+  ctx.lineTo(m[0], m[1]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(m[0], m[1], px(5, m[2]), 0, 2 * Math.PI);
+  ctx.fillStyle = margin === null ? col.muted : margin > 10 ? col.ok : margin > 0 ? col.warn : col.danger;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, W / 500);
+  ctx.strokeStyle = col.surface;
+  ctx.stroke();
+}
+
+function v3Info(now) {
+  V3.infoAt = now;
+  const el = $('model-info');
+  const badge = $('model-src');
+  const c = V3.cur;
+  const live = now - V3.liveAt < 1000;
+  badge.hidden = !c;
+  badge.textContent = live ? `live · ${Math.round(V3.liveHz || 20)} Hz` : '4 Hz';
+  badge.className = `badge ${live ? 'badge-on' : 'badge-muted'}`;
+  if (!S.wsOpen) {
+    el.textContent = 'Keine Verbindung';
+    return;
+  }
+  if (!c) {
+    el.textContent = 'Warte auf Daten …';
+    return;
+  }
+  const parts = [];
+  if (!c.tq) parts.push('Servos aus – Sollstellung');
+  else if (!c.ik) parts.push('Handbetrieb (Kalibrierung)');
+  const air = [];
+  for (let leg = 0; leg < 6; ++leg) if ((c.s >> leg) & 1) air.push(leg + 1);
+  if (c.ik && c.tq) {
+    parts.push(air.length ? `In der Luft: ${air.length === 1 ? 'Bein' : 'Beine'} ${air.join(', ')}` : 'Alle Füße am Boden');
+  }
+  if (V3.margin !== null && V3.margin !== undefined && c.tq) {
+    parts.push(V3.margin > 0 ? `Standreserve ${Math.round(V3.margin)} mm` : 'Schwerpunkt außerhalb der Standfläche!');
+  }
+  if (c.b) parts.push(`Höhe ${Math.round(c.b[2])} mm`);
+  el.textContent = parts.join(' · ');
+}
+
+function bindModel() {
+  const cv = $('model-canvas');
+  const wrap = $('model-wrap');
+  const fit = () => {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.round(wrap.clientWidth * dpr), h = Math.round(wrap.clientHeight * dpr);
+    if (w && h && (cv.width !== w || cv.height !== h)) {
+      cv.width = w;
+      cv.height = h;
+      V3.dirty = true;
+    }
+  };
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
+  else window.addEventListener('resize', fit);
+  fit();
+  if (window.IntersectionObserver) {
+    new IntersectionObserver((entries) => {
+      V3.visible = entries.some((e) => e.isIntersecting);
+      v3Tick();
+    }).observe($('model-card'));
+  } else {
+    V3.visible = true;
+  }
+  bindSeg('model-view', v3SetView);
+  let v = '3d';
+  try { v = localStorage.getItem('modelView') || '3d'; } catch (e) { /* kein Speicher */ }
+  v3SetView(V3_VIEWS[v] ? v : '3d');
+
+  // Ziehen dreht (Finger nur waagerecht – senkrecht scrollt die Seite), Strg + Rad zoomt
+  cv.addEventListener('pointerdown', (e) => {
+    V3.drag = { x: e.clientX, y: e.clientY, mouse: e.pointerType === 'mouse' };
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    const d = V3.drag;
+    if (!d) return;
+    V3.az -= (e.clientX - d.x) * 0.008;
+    if (d.mouse) V3.el = clamp(V3.el + (e.clientY - d.y) * 0.008, -0.05, 1.48);
+    d.x = e.clientX;
+    d.y = e.clientY;
+    setSeg('model-view', '');
+    V3.dirty = true;
+  });
+  const end = () => { V3.drag = null; };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+  cv.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    V3.zoom = clamp(V3.zoom * Math.exp(-e.deltaY * 0.002), 0.5, 3);
+    V3.dirty = true;
+  }, { passive: false });
+  cv.addEventListener('dblclick', () => v3SetView('3d'));
+  document.addEventListener('visibilitychange', v3Tick);
+  setInterval(v3Tick, 1500);
+}
+
 // ---------------------------------------------------------------- Start -----
 
 function init() {
@@ -3527,6 +4094,7 @@ function init() {
   bindCamera();
   bindSystem();
   bindImu();
+  bindModel();
   selectServo(0);
   showCalView('cal');
   showTab(pageFromHash());

@@ -31,6 +31,42 @@ httpd_handle_t g_server = nullptr;
 volatile uint32_t g_last_cmd_ms = 0;
 volatile int g_ws_clients = 0;
 
+// Clients der Live-Ansicht (nur im HTTP-Server-Task benutzt); g_live_until für loop()
+struct LiveSub {
+  int fd = -1;
+  uint32_t until = 0;
+};
+LiveSub g_live_subs[4];
+volatile uint32_t g_live_until = 0;
+
+bool liveSubscribed(int fd, uint32_t now) {
+  for (const auto& s : g_live_subs) {
+    if (s.fd == fd && (int32_t)(s.until - now) > 0) return true;
+  }
+  return false;
+}
+
+void liveSubscribe(int fd, bool on) {
+  const uint32_t now = millis();
+  LiveSub* slot = nullptr;
+  for (auto& s : g_live_subs) {
+    if (s.fd == fd) slot = &s;
+  }
+  if (!slot) {
+    for (auto& s : g_live_subs) {
+      if (s.fd < 0 || (int32_t)(s.until - now) <= 0) slot = &s;
+    }
+  }
+  if (!slot) return;  // mehr als 4 Live-Ansichten gleichzeitig: die übrigen bekommen nichts
+  slot->fd = fd;
+  slot->until = on ? now + LIVE_HOLD_MS : now;
+  uint32_t until = now;
+  for (const auto& s : g_live_subs) {
+    if (s.fd >= 0 && (int32_t)(s.until - until) > 0) until = s.until;
+  }
+  g_live_until = until;
+}
+
 // --- Hilfsfunktionen ------------------------------------------------------------
 
 esp_err_t sendJson(httpd_req_t* req, const JsonDocument& doc, const char* status = nullptr) {
@@ -410,6 +446,11 @@ esp_err_t wsHandler(httpd_req_t* req) {
   JsonDocument out;
   DeserializationError e = deserializeJson(in, (const char*)buf, frame.len);
   free(buf);
+  if (!e && strcmp(in["cmd"] | "", "live") == 0) {
+    // Live-Ansicht an/aus für diesen Client (ohne Antwort; die Oberfläche erneuert alle 1,5 s)
+    liveSubscribe(httpd_req_to_sockfd(req), in["on"] | true);
+    return ESP_OK;
+  }
   if (e) {
     out["type"] = "ack";
     out["ok"] = false;
@@ -433,6 +474,7 @@ esp_err_t wsHandler(httpd_req_t* req) {
 struct BroadcastJob {
   char* data;
   size_t len;
+  bool live;  // nur an Clients der Live-Ansicht
 };
 
 // Läuft im Kontext des HTTP-Server-Tasks (httpd_queue_work) -> thread-sicher
@@ -441,9 +483,11 @@ void broadcastWork(void* arg) {
   int fds[CONFIG_LWIP_MAX_SOCKETS];
   size_t count = CONFIG_LWIP_MAX_SOCKETS;
   int ws = 0;
+  const uint32_t now = millis();
   if (httpd_get_client_list(g_server, &count, fds) == ESP_OK) {
     for (size_t i = 0; i < count; ++i) {
       if (httpd_ws_get_fd_info(g_server, fds[i]) != HTTPD_WS_CLIENT_WEBSOCKET) continue;
+      if (job->live && !liveSubscribed(fds[i], now)) continue;
       httpd_ws_frame_t f = {};
       f.type = HTTPD_WS_TYPE_TEXT;
       f.payload = (uint8_t*)job->data;
@@ -451,14 +495,14 @@ void broadcastWork(void* arg) {
       const esp_err_t err = httpd_ws_send_frame_async(g_server, fds[i], &f);
       if (err != ESP_OK) {
         // evtl. nur ein Teil des Frames gesendet -> Verbindung ist unbrauchbar
-        logWsSendFailure("Telemetrie", err);
+        logWsSendFailure(job->live ? "Live-Ansicht" : "Telemetrie", err);
         httpd_sess_trigger_close(g_server, fds[i]);
         continue;
       }
       ++ws;
     }
   }
-  g_ws_clients = ws;
+  if (!job->live) g_ws_clients = ws;
   free(job->data);
   delete job;
 }
@@ -518,9 +562,10 @@ bool begin() {
   return true;
 }
 
-void broadcast(const String& msg) {
+static void queueBroadcast(const String& msg, bool live) {
   if (!g_server || msg.isEmpty()) return;
   BroadcastJob* job = new BroadcastJob;
+  job->live = live;
   job->len = msg.length();
   job->data = (char*)malloc(job->len);
   if (!job->data) {
@@ -533,6 +578,10 @@ void broadcast(const String& msg) {
     delete job;
   }
 }
+
+void broadcast(const String& msg) { queueBroadcast(msg, false); }
+void broadcastLive(const String& msg) { queueBroadcast(msg, true); }
+bool liveWanted() { return g_live_until && (int32_t)(g_live_until - millis()) > 0; }
 
 int wsClientCount() { return g_ws_clients; }
 

@@ -271,6 +271,7 @@ void setup() {
 
 void loop() {
   static uint32_t last_telemetry = 0;
+  static uint32_t last_live = 0;
   static uint32_t last_led = 0;
   static uint32_t reboot_at = 0;
   uint32_t now = millis();
@@ -285,6 +286,14 @@ void loop() {
     String msg;
     serializeJson(doc, msg);
     web::broadcast(msg);
+  }
+  if (web::liveWanted() && now - last_live >= LIVE_PERIOD_MS) {
+    last_live = now;
+    JsonDocument doc;
+    commands::buildLive(doc);
+    String msg;
+    serializeJson(doc, msg);
+    web::broadcastLive(msg);
   }
 
   if (now - last_led >= LED_PERIOD_MS) {

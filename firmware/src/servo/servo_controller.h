@@ -39,6 +39,8 @@ class ServoController {
   // Alle 18 Gelenkwinkel auf einmal (ein Lock). Liefert eine Bitmaske der
   // Gelenke, deren Wert auf die Kalibriergrenzen begrenzt werden musste.
   uint32_t setAnglesDeg(const float* deg);
+  // Aktuelle Sollwinkel aller Gelenke (mit Rampe), z. B. für die Live-Ansicht
+  void anglesDeg(float* deg);
   void setAllPulseUs(float us);
   void setAllAngleDeg(float deg);
   void setAllAssembly();  // alle Gelenke in die Montagestellung

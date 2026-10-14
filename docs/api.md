@@ -76,6 +76,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `arms` | `up` (bool) | Vorderbeine heben (Gewicht nach hinten, dann heben; nur im Stillstand) bzw. absetzen, siehe [kinematik.md](kinematik.md#vorderbeine) |
 | `arm` | `lx`, `lz`, `rx`, `rz`, `reach`? (je −1…1) | Vorderfüße steuern (l = Bein 1, r = Bein 4): x = um die Coxa schwenken, + = nach innen/vorne; z = hoch (+)/runter; `reach` = beide weiter weg (+)/heran. Nur wenn oben; der Fuß geht so weit, wie das Bein reicht. **Ohne Antwort**, etwa alle 100 ms senden; ohne Befehl kehren sie nach 0,6 s in die Bereitstellung zurück |
 | `pad` | `lx`, `ly`, `rx`, `ry` (−1…1, y oben +), `lt`, `rt` (0…1), `b` (Tasten-Bits: a, b, x, y, lb, rb, view, menu, xbox, ls, rs, up, down, left, right, share, p1–p4) | Gamepad im Browser, wertet die Firmware wie einen Bluetooth-Controller aus. **Ohne Antwort**, etwa alle 50 ms senden; nach 0,3 s ohne Befehl gilt er als getrennt |
+| `live` | `on` (bool, Standard `true`) | Live-Ansicht: dieser Client bekommt 3 s lang `{"type":"live"}` mit 20 Hz (siehe unten). **Ohne Antwort**; die Oberfläche erneuert das alle 1,5 s, solange die 3D-Ansicht sichtbar ist, `on: false` beendet es sofort |
 | `alive` | `on` (bool) | „Lebendig“: im Stand ab und zu kleine zufällige Bewegungen, siehe [kinematik.md](kinematik.md#lebendig); wird gespeichert |
 | `wave` | – | rechtes Vorderbein winkt (nur wenn oben) |
 | `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wechselt auch im Lauf fließend (`motion.gait.switching` = Übergang läuft) |
@@ -161,3 +162,17 @@ Sensorrichtung abgeschaltet. `imu`: `pitch`/`roll` nach Abzug des Nullpunkts `le
 ([Roll, Nick] der schief eingebauten Platine), `acc` im Körpersystem, `mount`/`flip` =
 Einbaulage; `cal` (`running`/`ok`/`failed`) mit `cal_pct` bzw. `cal_msg` nur während bzw. kurz nach
 einer Kalibrierung.
+
+### Live-Ansicht (ESP32 → Clients mit `live`, alle 50 ms)
+
+```json
+{"type": "live", "t": 123456, "j": [0, 554, -338, …18…], "tq": true, "i": [-12, 8],
+ "ik": true, "b": [0, 0, 52, 0, 0, 0], "s": 21, "v": [100, 0, 15]}
+```
+
+`j` = aktuelle Sollwinkel der 18 Gelenke (mit Rampe) in 0,1° (Bein × 3 + Coxa/Femur/Tibia, Konvention
+wie [kinematik.md](kinematik.md)), `tq` = Torque, `i` = gemessene Lage [Rollen, Nicken] in 0,1° (nur mit
+Lagesensor), `ik` = IK-Betrieb. Nur im IK-Betrieb: `b` = Körperlage der letzten IK [x, y, z in mm, Rollen,
+Nicken, Gieren in Grad] (mit Lageausgleich, Körper-Joystick, Gesten), `s` = Beine in der Luft (Bitmaske),
+`v` = Tempo [vx, vy in mm/s, Drehen in °/s]. Die Oberfläche rechnet daraus mit der Vorwärtskinematik das
+3D-Modell.

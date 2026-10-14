@@ -29,6 +29,10 @@ namespace web {
 bool begin();
 // Sendet eine Textnachricht an alle verbundenen WebSocket-Clients.
 void broadcast(const String& msg);
+// Live-Ansicht: hat ein Client in den letzten LIVE_HOLD_MS {"cmd":"live"} geschickt?
+bool liveWanted();
+// Sendet nur an diese Clients
+void broadcastLive(const String& msg);
 int wsClientCount();
 // Zeit seit der letzten Nachricht eines Clients (für Steuer-Watchdog)
 uint32_t msSinceLastCommand();

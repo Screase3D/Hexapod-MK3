@@ -135,7 +135,9 @@ darüber:
 | Gieren | + = nach links drehen |
 
 Die Haltung folgt den Reglern mit begrenzter Geschwindigkeit (80 mm/s bzw. 45 °/s,
-`POSE_SPEED_*` in `robot_geometry.h`), zusätzlich begrenzen die Servo-Rampen.
+`POSE_SPEED_*` in `robot_geometry.h`) und begrenzter Beschleunigung (400 mm/s² bzw. 500 °/s²,
+`POSE_ACCEL_*`): Sie fährt weich an und bremst rechtzeitig vor dem Ziel ab, ohne Überschwingen.
+Zusätzlich begrenzen die Servo-Rampen.
 
 **Unerreichbare Haltung:** Die Firmware prüft jede neue Haltung, bevor sie gilt
 ([`kin::checkPose`](../firmware/src/kinematics/kinematics.cpp)): Erreichen alle Füße den Boden, und

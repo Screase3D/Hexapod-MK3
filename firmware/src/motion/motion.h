@@ -95,6 +95,9 @@ struct Activity {
 Activity activity();
 
 void toJson(JsonObject obj);          // Telemetrie
+// Live-Ansicht (ca. 20 Hz): "ik" (IK-Betrieb), "b" Körperlage der IK [x, y, z, Rollen,
+// Nicken, Gieren], "s" Beine in der Luft (Bitmaske), "v" Tempo [vx, vy mm/s, Drehen °/s]
+void liveToJson(JsonObject obj);
 void geometryToJson(JsonObject obj);  // Maße und Grenzen für die Oberfläche
 
 }  // namespace motion

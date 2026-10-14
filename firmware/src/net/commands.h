@@ -10,6 +10,8 @@ namespace commands {
 void handle(JsonVariantConst in, JsonDocument& out);
 
 void buildTelemetry(JsonDocument& doc);
+// {"type":"live", ...} für die Live-Ansicht (siehe docs/api.md)
+void buildLive(JsonDocument& doc);
 void buildStatus(JsonDocument& doc);
 
 void requestReboot();

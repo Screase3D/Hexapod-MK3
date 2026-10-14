@@ -287,6 +287,22 @@ void buildTelemetry(JsonDocument& doc) {
   camera::statsToJson(doc["cam"].to<JsonObject>());
 }
 
+void buildLive(JsonDocument& doc) {
+  doc["type"] = "live";
+  doc["t"] = millis();
+  float deg[NUM_SERVOS];
+  servos.anglesDeg(deg);
+  JsonArray j = doc["j"].to<JsonArray>();  // Gelenkwinkel in 0,1° (Bein * 3 + Coxa/Femur/Tibia)
+  for (float d : deg) j.add((int)lroundf(d * 10.0f));
+  doc["tq"] = servos.torqueRequested();
+  if (imu.ok()) {
+    JsonArray i = doc["i"].to<JsonArray>();  // gemessen: Rollen, Nicken in 0,1°
+    i.add((int)lroundf(imu.rollDeg() * 10.0f));
+    i.add((int)lroundf(imu.pitchDeg() * 10.0f));
+  }
+  motion::liveToJson(doc.as<JsonObject>());
+}
+
 void buildStatus(JsonDocument& doc) {
   doc["fw"] = HEXAPOD_FW_VERSION;
   doc["git"] = HEXAPOD_FW_GIT;
