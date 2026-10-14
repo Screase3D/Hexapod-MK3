@@ -144,10 +144,50 @@ static void testEffects() {
   CHECK(scale(col, 2.0f) == col);
 }
 
+// Effekte für die Spielereien
+static void testFunEffects() {
+  const Rgb col{200, 100, 50};
+  Rgb o[2];
+  // Flackern: unruhig, beide Augen verschieden, nie ganz aus
+  int differ = 0, changes = 0;
+  uint8_t last = 0;
+  for (uint32_t t = 0; t < 3000; t += 20) {
+    render({col, Effect::Flicker}, t, o);
+    CHECK(o[0].r >= 59 && o[1].r >= 59);
+    if (!(o[0] == o[1])) ++differ;
+    if (o[0].r != last) ++changes;
+    last = o[0].r;
+  }
+  CHECK(differ > 100 && changes > 30);
+  // Blitzen: an/aus im 160-ms-Takt
+  int on = 0;
+  for (uint32_t t = 0; t < 1600; t += 10) {
+    render({col, Effect::Strobe}, t, o);
+    CHECK(o[0] == o[1]);
+    on += o[0].r ? 1 : 0;
+  }
+  CHECK(on > 50 && on < 70);
+  // Hin und her: links hell, wenn rechts dunkel, und umgekehrt
+  render({col, Effect::Scan}, 0, o);
+  CHECK(o[0].r == 200 && o[1].r == 20);
+  render({col, Effect::Scan}, 800, o);
+  CHECK(o[0].r == 20 && o[1].r == 200);
+  // Müde: gedimmt, schließt einmal je 4 s ganz
+  render({col, Effect::Sleepy}, 1000, o);
+  CHECK(o[0].r == 80);
+  render({col, Effect::Sleepy}, 3100, o);
+  CHECK(o[0].r == 0);
+  for (int i = static_cast<int>(Effect::Flicker); i < NUM_EFFECTS; ++i) {
+    Effect e;
+    CHECK(effectFromName(effectName(static_cast<Effect>(i)), e) && static_cast<int>(e) == i);
+  }
+}
+
 int main() {
   testNames();
   testStyles();
   testEffects();
+  testFunEffects();
   std::printf("%d Prüfungen, %d Fehler\n", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

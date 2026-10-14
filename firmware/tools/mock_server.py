@@ -245,6 +245,14 @@ def pose_range():
             "yaw": [-25, 25]}
 
 
+def eyes_tel():
+    e = state.get("eyes")
+    if not e or time.time() > e["until"]:
+        state["eyes"] = None
+        return {}
+    return {"eyes": {"color": e["color"], "effect": e["effect"]}}
+
+
 def motion_tel():
     g = gait_status()
     m = {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "range": pose_range(), "gait": g,
@@ -281,7 +289,7 @@ def telemetry():
         "ctl": {"hz": 50.0, "max_us": 1830},
         "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3,
                 **({"bt_fs": state["camera"]["bt_framesize"]} if PAD["enabled"] and state["camera"]["bt_framesize"] else {})},
-        "motion": motion_tel(), "led": led_state(), "pad": pad_tel(), "log": log_tel(),
+        "motion": motion_tel(), "led": led_state(), "pad": pad_tel(), "log": log_tel(), **eyes_tel(),
         "wifi": wifi_tel(), "heap": 182000, "ws": 1, "ws_drop": 0,
     }
 
@@ -562,6 +570,15 @@ def handle(cmd):
         # wie die Firmware: Kalibrierung ändern schaltet in den Handbetrieb
         state["mode"] = "manual"
         return handle(cmd)
+    elif c == "eyes":  # wie commands.cpp: Augen kurz vorgeben
+        if cmd.get("reset"):
+            state["eyes"] = None
+        else:
+            if cmd.get("effect", "solid") not in LED_EFFECTS:
+                return {**out, "ok": False, "msg": "unbekannter Effekt"}
+            ms = min(120000, max(100, float(cmd.get("ms", 3000))))
+            state["eyes"] = {"color": cmd.get("color", "#ffffff"), "effect": cmd.get("effect", "solid"),
+                             "until": time.time() + ms / 1000}
     elif c == "cal_get":
         if i is None:
             out["calibration"] = {"version": 3, "servos": state["cal"], "dirty": state["dirty"]}
@@ -736,7 +753,8 @@ LED_FIXED = [("boot", "#666666", "solid"), ("wifi", "#0000ff", "blink"), ("bat_w
 LED_DEFAULT_STATES = [("ap", "#0050ff", "breathe"), ("idle", "#009900", "solid"), ("torque", "#00ffff", "solid"),
                       ("stand", "#00ffff", "wink"), ("walk", "#008cff", "solid"), ("arms", "#aa00ff", "breathe"),
                       ("gesture", "#ff00a0", "rainbow")]
-LED_EFFECTS = ["off", "solid", "breathe", "blink", "pulse", "wink", "alternate", "rainbow"]
+LED_EFFECTS = ["off", "solid", "breathe", "blink", "pulse", "wink", "alternate", "rainbow",
+               "flicker", "strobe", "scan", "sleepy"]
 
 
 def led_defaults():
@@ -835,6 +853,8 @@ def pad_defaults():
 
 PAD = {"cfg": pad_defaults(), "enabled": False, "addr": "", "ble": "off", "pair_until": 0.0, "web": None, "web_t": 0.0,
        "prev_b": 0, "mode": 0, "speed": 0.6, "msg": "", "seq": 0, "src": ""}
+if os.environ.get("MOCK_PAD") == "ble":  # Controller schon gekoppelt und verbunden
+    PAD.update(enabled=True, addr="98:7a:14:00:11:22", ble="connected")
 
 
 def pad_msg(m):

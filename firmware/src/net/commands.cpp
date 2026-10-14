@@ -214,6 +214,26 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     result(out, true);
 
   // --- Kalibrierung ---
+  } else if (strcmp(cmd, "eyes") == 0) {
+    // Augen kurz vorgeben (Spielereien): color, effect, ms (bis 120 s); reset = wieder automatisch
+    if (in["reset"] | false) {
+      statusLeds.showOverride(ledfx::Style(), 0);
+      result(out, true);
+      return;
+    }
+    ledfx::Style st;
+    st.color = {255, 255, 255};
+    if (in["color"].is<const char*>() && !ledfx::parseHex(in["color"], st.color)) {
+      result(out, false, "color muss #rrggbb sein");
+      return;
+    }
+    if (in["effect"].is<const char*>() && !ledfx::effectFromName(in["effect"], st.effect)) {
+      result(out, false, "unbekannter Effekt");
+      return;
+    }
+    const float ms = in["ms"] | 3000.0f;
+    statusLeds.showOverride(st, ms >= 100.0f && ms <= 120000.0f ? (uint32_t)ms : (ms > 120000.0f ? 120000 : 100));
+    result(out, true);
   } else if (strcmp(cmd, "cal_get") == 0) {
     if (in["id"].is<int>()) {
       if (!validId(in, id, out)) return;
@@ -277,6 +297,14 @@ void buildTelemetry(JsonDocument& doc) {
   imu.toJson(doc["imu"].to<JsonObject>());
   motion::toJson(doc["motion"].to<JsonObject>());
   doc["led"] = ledfx::stateName(statusLeds.state());
+  ledfx::Style eyes;
+  if (statusLeds.overrideStyle(eyes)) {  // Vorgabe (Spielereien) bzw. Vorschau
+    char hex[8];
+    ledfx::toHex(eyes.color, hex);
+    JsonObject e = doc["eyes"].to<JsonObject>();
+    e["color"] = hex;
+    e["effect"] = ledfx::effectName(eyes.effect);
+  }
   padctl::telemetry(doc["pad"].to<JsonObject>());
   JsonObject lg = doc["log"].to<JsonObject>();
   lg["seq"] = evlog::seq();

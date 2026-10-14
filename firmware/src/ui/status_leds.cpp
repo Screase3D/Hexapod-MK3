@@ -132,6 +132,22 @@ void StatusLeds::update() {
   write(eyes, board);
 }
 
+void StatusLeds::showOverride(const ledfx::Style& st, uint32_t ms) {
+  portENTER_CRITICAL(&mux_);
+  preview_ = st;
+  const uint32_t until = millis() + ms;
+  preview_until_ = ms ? (until ? until : 1) : 0;
+  portEXIT_CRITICAL(&mux_);
+}
+
+bool StatusLeds::overrideStyle(ledfx::Style& out) {
+  portENTER_CRITICAL(&mux_);
+  const bool on = preview_until_ && (int32_t)(preview_until_ - millis()) > 0;
+  out = preview_;
+  portEXIT_CRITICAL(&mux_);
+  return on && ledfx::configurable(state_);
+}
+
 void StatusLeds::configToJson(JsonObject obj) {
   portENTER_CRITICAL(&mux_);
   const ledfx::Config c = cfg_;

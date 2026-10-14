@@ -1351,23 +1351,47 @@ const FUN_TICK_MS = 100;
 const FUN_GESTURES = { circle: 'Kreisen', nod: 'Ja', shake: 'Nein', pushup: 'Liegestütz', dance: 'Tanzen' };
 const FUN_TYPES = {
   emote: 'Emote', gesture: 'Geste', body: 'Körper', height: 'Höhe', walk: 'Laufen', arms: 'Vorderbeine',
-  wave: 'Winken', pause: 'Pause',
+  wave: 'Winken', eyes: 'Augen', pause: 'Pause',
 };
 // Körper: x vor, y links, roll, pitch (+ Nase hoch), yaw (+ links) in % des Joystick-Ausschlags
 const fb = (x, y, roll, pitch, yaw, s) => ({ t: 'body', x, y, roll, pitch, yaw, s });
 const fh = (dz, s) => ({ t: 'height', dz, s });
+const fe = (color, effect, s = 0) => ({ t: 'eyes', color, effect, s });  // s = 0: bis zum Ende
+const fg = (name) => ({ t: 'gesture', name });
+// n-mal die Schritte steps wiederholen
+const frep = (n, steps) => Array.from({ length: n }, () => steps).flat();
 const FUN_EMOTES = [
-  { id: 'hello', name: 'Hallo', steps: [{ t: 'arms', up: true }, { t: 'wave' }, { t: 'arms', up: false }] },
-  { id: 'bow', name: 'Verbeugen', steps: [fb(20, 0, 0, -100, 0, 1.4), fb(0, 0, 0, 0, 0, 0.8)] },
-  { id: 'happy', name: 'Freuen', steps: [fh(-12, 0.45), fh(0, 0.45), fh(-12, 0.45), fh(0, 0.45),
+  { id: 'hello', name: 'Hallo', steps: [fe('#3fd17a', 'wink'), { t: 'arms', up: true }, { t: 'wave' }, { t: 'arms', up: false }] },
+  { id: 'bow', name: 'Verbeugen', steps: [fe('#ffc46b', 'breathe'), fb(20, 0, 0, -100, 0, 1.4), fb(0, 0, 0, 0, 0, 0.8)] },
+  { id: 'happy', name: 'Freuen', steps: [fe('#ffd400', 'rainbow'), ...frep(2, [fh(-12, 0.45), fh(0, 0.45)]),
     fb(0, 0, 0, 30, 60, 0.4), fb(0, 0, 0, 30, -60, 0.4), fb(0, 0, 0, 30, 60, 0.4), fb(0, 0, 0, 0, 0, 0.5)] },
-  { id: 'look', name: 'Umschauen', steps: [fb(0, 0, 0, 40, 100, 1.2), fb(0, 0, 0, 40, -100, 1.6), fb(0, 0, 0, 0, 0, 0.8)] },
-  { id: 'scared', name: 'Ängstlich', steps: [fh(-18, 0.6), fb(-100, 0, 0, 50, 0, 0.7),
-    fb(-100, 0, 25, 50, 0, 0.15), fb(-100, 0, -25, 50, 0, 0.15), fb(-100, 0, 25, 50, 0, 0.15),
-    fb(-100, 0, -25, 50, 0, 0.15), fb(-100, 0, 0, 50, 0, 0.6), fb(0, 0, 0, 0, 0, 0.6), fh(0, 0.6)] },
-  { id: 'stretch', name: 'Strecken', steps: [fh(25, 1.0), fb(0, 0, 0, 100, 0, 1.2), fb(0, 0, 0, -60, 0, 1.0),
-    fb(0, 0, 0, 0, 0, 0.6), fh(0, 0.8)] },
-  ...Object.entries(FUN_GESTURES).map(([g, name]) => ({ id: g, name, steps: [{ t: 'gesture', name: g }] })),
+  { id: 'look', name: 'Umschauen', steps: [fe('#3fb6ff', 'scan'), fb(0, 0, 0, 40, 100, 1.2), fb(0, 0, 0, 40, -100, 1.6),
+    fb(0, 0, 0, 0, 0, 0.8)] },
+  { id: 'curious', name: 'Neugierig', steps: [fe('#00e0d0', 'scan'), fb(100, 0, 70, -20, 0, 1.2), fb(100, 0, -70, -20, 0, 1.2),
+    fb(100, 0, 0, -40, 0, 0.8), fb(0, 0, 0, 0, 0, 0.7)] },
+  { id: 'angry', name: 'Sauer', steps: [fe('#ff2000', 'flicker'), fh(-8, 0.4), fb(40, 0, 0, -60, 0, 0.6),
+    ...frep(3, [fh(-16, 0.18), fh(-6, 0.18)]), ...frep(2, [fb(40, 0, 0, -60, 35, 0.14), fb(40, 0, 0, -60, -35, 0.14)]),
+    fb(40, 0, 0, -60, 0, 0.8), fb(0, 0, 0, 0, 0, 0.6), fh(0, 0.5)] },
+  { id: 'attack', name: 'Angriff', steps: [fe('#ff0000', 'flicker'), fh(-15, 0.5), fb(-100, 0, 0, 40, 0, 0.7),
+    fe('#ff0000', 'strobe'), fb(100, 0, 0, -50, 0, 0.35), fb(-80, 0, 0, 30, 0, 0.4), fb(100, 0, 0, -50, 0, 0.35),
+    fe('#ff0000', 'solid'), fb(-40, 0, 0, 20, 0, 0.6), fb(0, 0, 0, 0, 0, 0.6), fh(0, 0.5)] },
+  { id: 'scared', name: 'Ängstlich', steps: [fe('#a070ff', 'flicker'), fh(-18, 0.6), fb(-100, 0, 0, 50, 0, 0.7),
+    ...frep(2, [fb(-100, 0, 25, 50, 0, 0.15), fb(-100, 0, -25, 50, 0, 0.15)]),
+    fb(-100, 0, 0, 50, 0, 0.6), fb(0, 0, 0, 0, 0, 0.6), fh(0, 0.6)] },
+  { id: 'surprised', name: 'Überrascht', steps: [fe('#ffffff', 'strobe'), fh(20, 0.4), fe('#ffffff', 'solid'),
+    fb(-80, 0, 0, 80, 0, 1.0), fb(0, 0, 0, 0, 0, 0.6), fh(0, 0.6)] },
+  { id: 'sad', name: 'Traurig', steps: [fe('#2050ff', 'breathe'), fh(-15, 1.5), fb(0, 0, 0, -100, 0, 1.4),
+    ...frep(2, [fb(0, 0, 0, -100, 25, 0.8), fb(0, 0, 0, -100, -25, 0.8)]), fb(0, 0, 0, -100, 0, 1.0),
+    fb(0, 0, 0, 0, 0, 0.8), fh(0, 1.0)] },
+  { id: 'tired', name: 'Müde', steps: [fe('#5070ff', 'sleepy'), fh(-25, 2.5), fb(0, 0, 0, -60, 0, 1.5),
+    fb(0, 0, 0, 0, 0, 0.4), fb(0, 0, 30, -80, 0, 2.0), fb(0, 0, 0, 0, 0, 0.6), fh(0, 1.2)] },
+  { id: 'love', name: 'Verliebt', steps: [fe('#ff3c9a', 'pulse'), ...frep(3, [fb(0, 0, 60, 30, 0, 0.8), fb(0, 0, -60, 30, 0, 0.8)]),
+    fh(-8, 0.35), fh(0, 0.35), fb(0, 0, 0, 0, 0, 0.6)] },
+  { id: 'party', name: 'Party', steps: [fe('#ffffff', 'rainbow'), ...frep(2, [fb(0, 0, 100, 0, 0, 0.35), fb(0, 0, -100, 0, 0, 0.35)]),
+    fg('dance'), ...frep(2, [fh(-12, 0.3), fh(0, 0.3)]), fb(0, 0, 0, 0, 0, 0.4)] },
+  { id: 'stretch', name: 'Strecken', steps: [fe('#ffffff', 'sleepy'), fh(25, 1.0), fe('#ffffff', 'solid'),
+    fb(0, 0, 0, 100, 0, 1.2), fb(0, 0, 0, -60, 0, 1.0), fb(0, 0, 0, 0, 0, 0.6), fh(0, 0.8)] },
+  ...Object.entries(FUN_GESTURES).map(([g, name]) => ({ id: g, name, steps: [fg(g)] })),
 ];
 const FUN_TEMPLATES = [
   { id: 'tpl-disco', name: 'Disco', builtin: true, loop: false, steps: [
@@ -1381,7 +1405,7 @@ const FUN_TEMPLATES = [
     { t: 'emote', id: 'look' }, { t: 'pause', s: 1 }] },
 ];
 
-const FUN = { run: null, own: [], edit: null };
+const FUN = { run: null, own: [], edit: null, speed: 1, last: '' };
 
 function funLoad() {
   try {
@@ -1409,6 +1433,8 @@ function funCleanStep(st) {
   const s = num(st.s, 0, 30, 1);
   switch (st.t) {
     case 'emote': return FUN_EMOTES.some((e) => e.id === st.id) ? { t: 'emote', id: st.id } : null;
+    case 'eyes': return { t: 'eyes', color: /^#[0-9a-f]{6}$/i.test(st.color) ? st.color.toLowerCase() : '#ffffff',
+      effect: LED_EFFECTS[st.effect] && st.effect !== 'off' ? st.effect : 'solid', s: num(st.s, 0, 30, 0) };
     case 'gesture': return FUN_GESTURES[st.name] ? { t: 'gesture', name: st.name } : null;
     case 'body': return { t: 'body', x: num(st.x, -100, 100), y: num(st.y, -100, 100), roll: num(st.roll, -100, 100),
       pitch: num(st.pitch, -100, 100), yaw: num(st.yaw, -100, 100), s };
@@ -1504,7 +1530,7 @@ async function funArms(up, run) {
 }
 
 async function funStep(st, next, run) {
-  const ms = Math.max(0, +st.s || 0) * 1000;
+  const ms = (Math.max(0, +st.s || 0) * 1000) / FUN.speed;
   switch (st.t) {
     case 'emote': {
       const e = FUN_EMOTES.find((x) => x.id === st.id);
@@ -1548,14 +1574,23 @@ async function funStep(st, next, run) {
       send('wave');
       await funSleep(3200, run);
       return;
+    case 'eyes':
+      send('eyes', { color: st.color, effect: st.effect, ms: Math.round(ms || 120000) });
+      run.used.eyes = true;
+      return;
+    case 'note':  // nur in Spielen: Text anzeigen
+      $(st.el).textContent = st.text;
+      return;
     default:
       await funSleep(ms, run);
   }
 }
 
-async function funPlay(id) {
-  const c = funFind(id);
+// id einer Choreografie/eines Emotes, oder eine Abfolge {id, name, steps} (Spiele); done(): fertig gespielt
+async function funPlay(id, done) {
+  const c = typeof id === 'object' ? id : funFind(id);
   if (!c) return;
+  if (typeof id === 'object') id = c.id;
   if (FUN.run) {
     const same = FUN.run.id === id;
     funStop();
@@ -1575,6 +1610,7 @@ async function funPlay(id) {
         await funStep(run.steps[i], run.steps[i + 1] || (run.loop ? run.steps[0] : null), run);
       }
     } while (run.loop && !run.stopped && run.steps.length);
+    if (!run.stopped && done) done();
   } finally {
     funFinish(run);
   }
@@ -1592,6 +1628,7 @@ function funFinish(run) {
     if (run.stopped && tel.gesture) send('gesture', { name: 'stop' });
     if (run.used.arms && tel.arms && tel.arms !== 'down') send('arms', { up: false });
     if (run.used.height && run.z0) send('pose', { z: Math.round(run.z0) });
+    if (run.used.eyes) send('eyes', { reset: true });
   }
   renderFun();
 }
@@ -1618,6 +1655,9 @@ function renderFun() {
     if (b.dataset.toggleLabel) {
       b.innerHTML = on ? '<svg class="ic"><use href="#i-stop"/></svg>Stopp' : '<svg class="ic"><use href="#i-play"/></svg>Abspielen';
     }
+  });
+  document.querySelectorAll('[data-game]').forEach((b) => {
+    b.classList.toggle('running', !!run && run.id === `game-${b.dataset.game}`);
   });
   document.querySelectorAll('#fun-steps > li').forEach((li, i) => {
     li.classList.toggle('running', !!run && FUN.edit && run.id === `edit-${FUN.edit.id}` && run.step === i);
@@ -1659,6 +1699,7 @@ function funNewStep(t) {
     case 'height': return { t, dz: -10, s: 0.5 };
     case 'arms': return { t, up: true };
     case 'wave': return { t };
+    case 'eyes': return { t, color: '#ff2000', effect: 'flicker', s: 0 };
     default: return { t: 'pause', s: 1 };
   }
 }
@@ -1674,6 +1715,12 @@ function renderFunEditor() {
     if (st.t === 'emote') params = `<select data-k="id" aria-label="Emote">${opts(Object.fromEntries(FUN_EMOTES.map((e) => [e.id, e.name])), st.id)}</select>`;
     else if (st.t === 'gesture') params = `<select data-k="name" aria-label="Geste">${opts(FUN_GESTURES, st.name)}</select>`;
     else if (st.t === 'arms') params = `<select data-k="up" aria-label="Vorderbeine">${opts({ 1: 'heben', 0: 'absetzen' }, st.up ? '1' : '0')}</select>`;
+    else if (st.t === 'eyes') {
+      const fx = Object.fromEntries(Object.entries(LED_EFFECTS).filter(([k]) => k !== 'off'));
+      params = `<input type="color" data-k="color" value="${st.color}" aria-label="Farbe">` +
+        `<select data-k="effect" aria-label="Effekt">${opts(fx, st.effect)}</select>` +
+        `<label class="fun-num" title="0 = bis zum Ende"><span>s</span><input type="number" inputmode="decimal" data-k="s" min="0" max="30" step="0.5" value="${st.s}"></label>`;
+    }
     else if (FUN_FIELDS[st.t]) {
       params = FUN_FIELDS[st.t].map(([k, label]) => {
         const lim = k === 's' ? 'min="0" max="30" step="0.1"' : (k === 'dz' ? 'min="-60" max="60" step="1"' : 'min="-100" max="100" step="5"');
@@ -1706,6 +1753,87 @@ function funOpenEditor(id) {
   $('fun-editor').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+// ---- Spiele
+
+const fnote = (el, text) => ({ t: 'note', el, text });
+const ORACLE = [
+  ['Ja!', [fe('#3fd17a', 'solid'), fg('nod')]],
+  ['Nein.', [fe('#ff2000', 'solid'), fg('shake')]],
+  ['Vielleicht …', [fe('#ffd400', 'scan'), fg('circle')]],
+  ['Ganz sicher!', [{ t: 'emote', id: 'happy' }]],
+  ['Frag später nochmal.', [{ t: 'emote', id: 'tired' }]],
+  ['Lieber nicht.', [{ t: 'emote', id: 'scared' }]],
+];
+const DICE = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+// Spiel starten bzw. (zweiter Tipp) anhalten
+function funGame(name, steps, label) {
+  const id = `game-${name}`;
+  if (FUN.run && FUN.run.id === id) {
+    funStop();
+    return;
+  }
+  funPlay({ id, name: label, steps });
+}
+
+function funOracle() {
+  const [answer, steps] = ORACLE[Math.floor(Math.random() * ORACLE.length)];
+  funGame('oracle', [fnote('fun-oracle-out', 'Das Orakel denkt nach …'), fe('#ffffff', 'scan'),
+    fb(0, 0, 0, 40, 80, 0.9), fb(0, 0, 0, 40, -80, 0.9), fb(0, 0, 0, 0, 0, 0.4),
+    fnote('fun-oracle-out', `„${answer}“`), ...steps], 'Orakel');
+}
+
+function funDice() {
+  const n = 1 + Math.floor(Math.random() * 6);
+  const tap = [fe('#ffffff', 'solid'), fb(0, 0, 0, -80, 0, 0.3), fe('#303030', 'solid'), fb(0, 0, 0, 0, 0, 0.4)];
+  funGame('dice', [fnote('fun-dice-out', 'würfelt …'), fe('#ffffff', 'flicker'),
+    ...frep(3, [fb(0, 0, 50, 0, 40, 0.15), fb(0, 0, -50, 0, -40, 0.15)]), fb(0, 0, 0, 0, 0, 0.5),
+    fnote('fun-dice-out', `${DICE[n - 1]} ${n}`), ...frep(n, tap), fe('#3fd17a', 'solid', 1)], 'Würfeln');
+}
+
+function funRandom() {
+  const pool = FUN_EMOTES.filter((e) => e.id !== FUN.last);
+  const e = pool[Math.floor(Math.random() * pool.length)];
+  FUN.last = e.id;
+  $('fun-random-out').textContent = e.name;
+  funGame('random', [{ t: 'emote', id: e.id }], `Überrasch mich: ${e.name}`);
+}
+
+// ---- Augen
+
+const EYE_SWATCHES = [
+  ['Wut', '#ff2000', 'flicker'], ['Ruhig', '#2050ff', 'breathe'], ['Gut', '#3fd17a', 'solid'], ['Herz', '#ff3c9a', 'pulse'],
+  ['Achtung', '#ffb000', 'blink'], ['Blitz', '#ffffff', 'strobe'], ['Suchen', '#00e0d0', 'scan'], ['Müde', '#5070ff', 'sleepy'],
+  ['Party', '#ffffff', 'rainbow'],
+];
+const funEyeStyle = () => ({ color: $('fun-eye-color').value, effect: $('fun-eye-fx').value });
+
+function funEyeFrame() {
+  if (S.tab !== 'fun' || document.hidden) {
+    FUN.raf = 0;
+    return;
+  }
+  const live = S.tel && S.tel.eyes;  // was der Roboter gerade vorgegeben zeigt
+  const style = live || funEyeStyle();
+  const c = ledRender(style, performance.now());
+  for (let i = 0; i < 2; ++i) {
+    const [r, g, b] = c[i];
+    const el = $(`fun-eye-${i}`);
+    el.style.background = `rgb(${r}, ${g}, ${b})`;
+    el.style.boxShadow = `0 0 ${6 + (r + g + b) / 30}px rgb(${r}, ${g}, ${b})`;
+  }
+  $('fun-eye-now').textContent = live ? `Roboter zeigt: ${LED_EFFECTS[live.effect] || live.effect}` : 'Vorschau';
+  FUN.raf = requestAnimationFrame(funEyeFrame);
+}
+
+function funEyeTick() {
+  if (S.tab === 'fun' && !FUN.raf && !document.hidden) FUN.raf = requestAnimationFrame(funEyeFrame);
+}
+
+function funEyeShow(style) {
+  send('eyes', { ...style, ms: +$('fun-eye-dur').value });
+}
+
 function bindFun() {
   funLoad();
   renderFunEmotes();
@@ -1728,6 +1856,34 @@ function bindFun() {
     }
   });
   $('fun-now-stop').onclick = funStop;
+  $('fun-oracle').onclick = funOracle;
+  $('fun-dice').onclick = funDice;
+  $('fun-random').onclick = funRandom;
+  try {
+    FUN.speed = clamp(+localStorage.getItem('hexapod.funSpeed') || 1, 0.5, 2);
+  } catch (e) { /* ohne Speicher: 100 % */ }
+  $('fun-speed').value = Math.round(FUN.speed * 100);
+  $('fun-speed-val').textContent = `${Math.round(FUN.speed * 100)} %`;
+  $('fun-speed').oninput = (e) => {
+    FUN.speed = +e.target.value / 100;
+    $('fun-speed-val').textContent = `${e.target.value} %`;
+    try { localStorage.setItem('hexapod.funSpeed', String(FUN.speed)); } catch (err) { /* egal */ }
+  };
+  $('fun-eye-fx').innerHTML = Object.entries(LED_EFFECTS).filter(([k]) => k !== 'off')
+    .map(([k, v]) => `<option value="${k}"${k === 'flicker' ? ' selected' : ''}>${v}</option>`).join('');
+  $('fun-swatches').innerHTML = EYE_SWATCHES.map(([name, color, fx]) =>
+    `<button type="button" class="swatch" data-color="${color}" data-fx="${fx}" title="${LED_EFFECTS[fx]}"` +
+    ` style="--sw:${fx === 'rainbow' ? 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)' : color}">` +
+    `<i></i>${name}</button>`).join('');
+  $('fun-swatches').addEventListener('click', (e) => {
+    const b = e.target.closest('.swatch');
+    if (!b) return;
+    $('fun-eye-color').value = b.dataset.color;
+    $('fun-eye-fx').value = b.dataset.fx;
+    funEyeShow(funEyeStyle());
+  });
+  $('fun-eye-show').onclick = () => funEyeShow(funEyeStyle());
+  $('fun-eye-reset').onclick = () => send('eyes', { reset: true });
   $('fun-new').onclick = () => funOpenEditor(null);
   $('fun-close').onclick = () => {
     if (FUN.run && FUN.edit && FUN.run.id === `edit-${FUN.edit.id}`) funStop();
@@ -1755,7 +1911,7 @@ function bindFun() {
     const k = e.target.dataset.k;
     if (!k) return;
     if (k === 'up') st.up = e.target.value === '1';
-    else if (k === 'id' || k === 'name') st[k] = e.target.value;
+    else if (k === 'id' || k === 'name' || k === 'color' || k === 'effect') st[k] = e.target.value;
     else st[k] = +e.target.value;
     FUN.edit.steps[i] = funCleanStep(st) || st;
     if (e.target.type === 'number') e.target.value = FUN.edit.steps[i][k];
@@ -1839,7 +1995,10 @@ function bindFun() {
       e.preventDefault();
     }
   });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) funStop(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) funStop();
+    else funEyeTick();
+  });
 }
 
 // ------------------------------------------------- Globale Bedienelemente ---
@@ -1942,6 +2101,7 @@ function showTab(name) {
   setNavOpen(false);
   updateStream();
   v3Tick();
+  funEyeTick();
   clearInterval(S.statusTimer);
   renderBanner();
   if (name === 'system' || name === 'settings') {
@@ -3120,6 +3280,7 @@ const LED_STATES = {
 const LED_EFFECTS = {
   off: 'aus', solid: 'Dauerlicht', breathe: 'Atmen', blink: 'Blinken', pulse: 'Herzschlag',
   wink: 'Blinzeln', alternate: 'Wechselblinken', rainbow: 'Regenbogen',
+  flicker: 'Flackern', strobe: 'Blitzen', scan: 'Hin und her', sleepy: 'Müde',
 };
 const L = { cfg: null, preview: null, previewUntil: 0, raf: 0, touched: 0, state: '' };
 
@@ -3174,6 +3335,18 @@ function ledRender(style, t) {
       const hh = ((t % 7000) * 360) / 7000;
       return [hsvRgb(hh), hsvRgb(hh + 40)];
     }
+    case 'flicker': k = [0, 1].map((e) => 0.3 + (0.7 * (ledHash(Math.floor(t / 60) * 2 + e + 7) % 1000)) / 999); break;
+    case 'strobe': k = [t % 160 < 60 ? 1 : 0]; break;
+    case 'scan': {
+      const x = 0.5 - 0.5 * Math.cos((2 * Math.PI * (t % 1600)) / 1600);
+      k = [1 - 0.9 * x, 0.1 + 0.9 * x];
+      break;
+    }
+    case 'sleepy': {
+      const dt = (t % 4000) - 2500;
+      k = [0.4 * (dt < 0 || dt > 1200 ? 1 : Math.abs(dt - 600) / 600)];
+      break;
+    }
     default: break;
   }
   if (k.length === 1) k.push(k[0]);
@@ -3197,7 +3370,8 @@ function ledFrame(now) {
   const id = (S.tel && S.tel.led) || L.cfg.state || 'idle';
   const fixed = L.cfg.fixed.some((s) => s.id === id);
   const preview = Date.now() < L.previewUntil && !fixed;
-  const style = preview ? L.preview : ledStyleFor(L.cfg, id);
+  const eyes = !fixed && S.tel && S.tel.eyes;  // Vorgabe aus den Spielereien
+  const style = preview ? L.preview : (eyes || ledStyleFor(L.cfg, id));
   const k = 0.3 + 0.7 * (L.cfg.brightness / 100);  // Helligkeit angedeutet
   ledRender(style, now).forEach((c, i) => {
     const [r, g, b] = c.map((v) => Math.round(v * k));
@@ -3785,6 +3959,20 @@ const BLE_TEXT = {
 };
 
 // Telemetrie: Bluetooth-Status, Quelle, Modus, Meldungen
+// Kopfzeile: Controller-Symbol, solange einer verbunden ist (Bluetooth bzw. Gamepad im Browser)
+function renderPadPill(p) {
+  const pill = $('pill-pad');
+  const ble = p && p.ble === 'connected';
+  const web = p && p.src === 'web';
+  pill.hidden = !ble && !web;
+  if (pill.hidden) return;
+  const bat = ble && typeof p.bat === 'number' ? p.bat : null;
+  setPill('pill-pad', bat !== null ? `Controller ${bat} %` : 'Controller', bat !== null && bat <= 15 ? 'pill-warn' : '',
+    bat !== null ? `${bat} %` : '\u00a0');
+  pill.title = ble ? `${p.name || 'Xbox-Controller'} (Bluetooth)${bat !== null ? ` · Akku ${bat} %` : ''}`
+    : 'Gamepad im Browser';
+}
+
 function renderPad(p) {
   if (!p) return;
   if (P.seq === null) P.seq = p.seq || 0;  // alte Meldungen beim Laden nicht zeigen
@@ -3800,6 +3988,7 @@ function renderPad(p) {
   }
   P.mode = p.mode;
   P.src = p.src;
+  renderPadPill(p);
   const ind = $('pad-ind');
   ind.hidden = !p.src;
   ind.textContent = `🎮 ${PAD_MODES[p.mode] || ''}`;

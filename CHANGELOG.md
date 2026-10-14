@@ -4,6 +4,20 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.15.0
+
+- **Mehr Emotes, jetzt mit Augen:** neu Neugierig, Sauer (rot flackernd, stampft), Angriff (duckt sich, stößt
+  zweimal vor, rot blitzend), Überrascht, Traurig, Müde, Verliebt (Herzschlag in Pink) und Party; die bisherigen
+  zeigen jetzt ebenfalls passende Augen. „Überrasch mich“ spielt ein zufälliges Emote.
+- **Spiele:** *Orakel* (denkt nach, antwortet mit Kopf und Augen) und *Würfeln* (schüttelt sich, nickt die Zahl).
+- **Augen frei wählen:** Karte mit Farbfeldern (Wut, Ruhig, Herz, Blitz, Party …), Farbe, Effekt und Dauer,
+  animierte Vorschau bzw. Anzeige, was der Roboter gerade zeigt. Neue Effekte *Flackern*, *Blitzen*,
+  *Hin und her* und *Müde* – auch für die Zustände auf der Seite LEDs. Choreografien haben einen Schritt „Augen“.
+- **Tempo** für Choreografien und Emotes (50–200 %).
+- **Controller in der Kopfzeile:** Symbol mit Akkustand, solange ein Controller verbunden ist (Bluetooth oder
+  Gamepad im Browser), Tipp darauf öffnet die Controller-Seite.
+- Firmware: Befehl `eyes` (Augen kurz vorgeben), Telemetrie `eyes`.
+
 ## 0.14.0
 
 - **Neue Seite „Spielereien“:**

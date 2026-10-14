@@ -35,7 +35,7 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 | `GET /api/battery` | – | Akkuwerte und Schalter |
 | `POST /api/battery` | `{"enabled","deep_sleep"}` (Teilmenge) | Akkuüberwachung / Tiefschlaf schalten (persistent) |
 | `GET /api/leds` | – | Augen-LEDs: `mode` (`auto`/`single`/`off`), `brightness` (5–100 %), `board` (`boot`/`mirror`/`off`), `single` {color, effect}, `states` (einstellbar: ap, idle, torque, stand, walk, arms, gesture) und `fixed` (boot, wifi, bat_warn, bat_low, estop) je {id, color `#rrggbb`, effect}, `state` (gerade aktiv) |
-| `POST /api/leds` | Teilmenge: `mode`, `brightness`, `board`, `single` {color?, effect?}, `state`+`color?`+`effect?`, `reset`, `preview` (zeigt den geänderten Stil 2,5 s) | wie GET; gespeichert. Effekte: `off`, `solid`, `breathe`, `blink`, `pulse`, `wink` (Blinzeln), `alternate`, `rainbow` |
+| `POST /api/leds` | Teilmenge: `mode`, `brightness`, `board`, `single` {color?, effect?}, `state`+`color?`+`effect?`, `reset`, `preview` (zeigt den geänderten Stil 2,5 s) | wie GET; gespeichert. Effekte: `off`, `solid`, `breathe`, `blink`, `pulse`, `wink` (Blinzeln), `alternate`, `rainbow`, `flicker` (Flackern), `strobe` (Blitzen), `scan` (hin und her), `sleepy` (müde) |
 | `GET /api/pad` | – | Controller: `enabled` (Bluetooth), `addr` (gekoppelt), `deadzone`, `expo`, `speed` (0..1), `invert_y`, `swap_sticks`, `map` {Taste: Aktion}, `buttons`, `actions` (siehe [controller.md](controller.md)) |
 | `POST /api/pad` | Teilmenge: `enabled`, `deadzone`, `expo`, `speed`, `invert_y`, `swap_sticks`, `map` {Taste: Aktion}, `pair`, `forget`, `reset` | wie GET; gespeichert. `pair` schaltet Bluetooth ein und sucht 60 s |
 | `GET /api/history` | – | Verlauf der letzten 30 min (alle `period_s` = 10 s, älteste zuerst): `bat` (V), `rssi` (dBm), `temp` (Chip, °C), `heap` (KB); `null` = kein Wert; `age_ms` seit dem neuesten |
@@ -98,6 +98,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `cal_save` | – | Kalibrierung in NVS speichern |
 | `cal_reload` | – | gespeicherte Kalibrierung laden (Änderungen verwerfen) |
 | `cal_reset` | – | Standardwerte (noch nicht gespeichert) |
+| `eyes` | `color` (`#rrggbb`), `effect`, `ms` (100–120000, Standard 3000) bzw. `reset: true` | Augen kurz vorgeben (Spielereien): Farbe und Effekt wie auf der Seite LEDs, nicht über Warnungen (Not-Aus, Akku); `reset` = wieder je Zustand. Solange die Vorgabe gilt, steht sie in der Telemetrie unter `eyes` |
 | `client_log` | `text` (bis 100 Zeichen) | Meldung der Oberfläche ins Ereignisprotokoll (Warnung), höchstens alle 10 s, dazwischen gezählt. **Ohne Antwort** |
 
 Alle Befehle, die die Kalibrierung ändern (`cal_set`, `cal_center`, `cal_ref`, `cal_invert`, `cal_reload`,
@@ -135,6 +136,7 @@ Beispiel:
              "arms": "down", "gesture": "nod", "body": true, "offset_limited": true,
              "unreachable": [], "clamped": []},
   "led":   "stand",
+  "eyes":  {"color": "#ff2000", "effect": "flicker"},
   "log":   {"seq": 12, "warn": 3},
   "pad":   {"src": "ble", "mode": "walk", "speed": 60, "ble": "connected", "name": "Xbox Wireless Controller",
             "bat": 80, "in": {"lx": 0, "ly": 0.5, "rx": 0, "ry": 0, "lt": 0, "rt": 0, "b": 0}, "msg": "Modus: Laufen", "seq": 3},

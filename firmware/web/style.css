@@ -913,3 +913,16 @@ html.fpv-on, html.fpv-on body { overflow: hidden; }
 .fun-params > select { flex: 1; min-width: 0; }
 .fun-num { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; color: var(--muted); }
 .fun-num input { width: 68px; }
+.eye-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 6px; margin: 8px 0; }
+.swatch { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 8px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface-2, transparent); color: var(--text); font: inherit; font-size: 0.85rem; cursor: pointer; }
+.swatch:hover { border-color: var(--accent); }
+.swatch i { width: 14px; height: 14px; border-radius: 50%; flex: none; background: var(--sw); box-shadow: 0 0 0 1px var(--border), 0 0 6px var(--sw); }
+.game { display: flex; align-items: center; gap: 10px; margin: 10px 0 2px; }
+.game-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.game .btn.running, #fun-random.running { border-color: var(--accent); background: var(--accent-soft); }
+.game-out { min-height: 1.4em; margin: 2px 0 8px; font-size: 1.15rem; font-weight: 600; }
+.game-out:empty { margin: 0; min-height: 0; }
+#fun-dice-out { font-size: 1.6rem; }
+a.pill { color: inherit; text-decoration: none; }
+a.pill:hover { border-color: var(--accent); }

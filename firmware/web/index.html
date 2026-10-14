@@ -106,6 +106,7 @@
         <h1 id="page-title">Steuerung</h1>
         <div class="pills">
           <span id="pill-conn" class="pill pill-bad" title="Verbindung"><span class="pdot"></span><span class="ptext">Getrennt</span></span>
+          <a id="pill-pad" class="pill" href="#controller" title="Controller" hidden><svg class="ic"><use href="#i-gamepad"/></svg><span class="ptext">Controller</span></a>
           <span id="pill-bat" class="pill" title="Akku"><svg class="ic"><use href="#i-battery"/></svg><span class="ptext">Akku –</span></span>
           <span id="pill-torque" class="pill" title="Servos"><svg class="ic"><use href="#i-servo"/></svg><span class="ptext">Servos aus</span></span>
         </div>
@@ -443,6 +444,53 @@
                 <div class="emote-grid" id="fun-emotes"></div>
                 <p class="muted small">Ein Tipp genügt – sitzt der Roboter, steht er vorher auf (Servos müssen an
                   sein). <kbd>Leertaste</kbd> oder ein zweiter Tipp hält an, <kbd>Esc</kbd> ist wie immer Not-Aus.</p>
+                <div class="row wrap">
+                  <button id="fun-random" class="btn" type="button" data-game="random">Überrasch mich</button>
+                  <span id="fun-random-out" class="muted small"></span>
+                </div>
+              </div>
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-hex"/></svg>Spiele</h2>
+                <div class="game">
+                  <div class="game-text"><b>Orakel</b><span class="muted small">Stell eine Ja/Nein-Frage – laut oder im
+                    Kopf – und frag das Orakel. Es denkt nach und antwortet mit Kopf und Augen.</span></div>
+                  <button id="fun-oracle" class="btn" type="button" data-game="oracle">Fragen</button>
+                </div>
+                <p id="fun-oracle-out" class="game-out" aria-live="polite"></p>
+                <div class="game">
+                  <div class="game-text"><b>Würfeln</b><span class="muted small">Er schüttelt sich und nickt die
+                    gewürfelte Zahl – mitzählen!</span></div>
+                  <button id="fun-dice" class="btn" type="button" data-game="dice">Würfeln</button>
+                </div>
+                <p id="fun-dice-out" class="game-out" aria-live="polite"></p>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-bulb"/></svg>Augen</h2>
+                <div class="eyes-preview" aria-hidden="true">
+                  <span class="eye" id="fun-eye-0"></span><span class="eye" id="fun-eye-1"></span>
+                </div>
+                <p class="muted small center" id="fun-eye-now">Vorschau</p>
+                <div class="eye-swatches" id="fun-swatches"></div>
+                <div class="form-grid">
+                  <label for="fun-eye-color">Farbe</label>
+                  <input id="fun-eye-color" type="color" value="#ff2000">
+                  <label for="fun-eye-fx">Effekt</label>
+                  <select id="fun-eye-fx"></select>
+                  <label for="fun-eye-dur">Dauer</label>
+                  <select id="fun-eye-dur">
+                    <option value="5000">5 s</option>
+                    <option value="30000" selected>30 s</option>
+                    <option value="120000">2 min</option>
+                  </select>
+                </div>
+                <div class="row wrap">
+                  <button id="fun-eye-show" class="btn btn-primary" type="button">Zeigen</button>
+                  <button id="fun-eye-reset" class="btn btn-ghost" type="button">Wieder automatisch</button>
+                </div>
+                <p class="muted small">Warnungen (Not-Aus, Akku) haben Vorrang. Die Effekte gibt es auch für die
+                  Zustände auf der Seite <a href="#leds">LEDs</a>.</p>
               </div>
               <div class="card">
                 <h2><svg class="ic"><use href="#i-play"/></svg>Choreografien</h2>
@@ -452,10 +500,15 @@
                   <button id="fun-export" class="btn btn-ghost" type="button" title="Eigene Choreografien als JSON-Datei sichern"><svg class="ic"><use href="#i-download"/></svg>Export</button>
                   <label class="btn btn-ghost file-btn" title="Choreografien aus einer JSON-Datei hinzufügen"><svg class="ic"><use href="#i-upload"/></svg>Import<input id="fun-import" type="file" accept=".json,application/json"></label>
                 </div>
+                <label class="slider-row">
+                  <span>Tempo</span>
+                  <input id="fun-speed" type="range" min="50" max="200" step="10" value="100">
+                  <span id="fun-speed-val" class="mono">100 %</span>
+                </label>
                 <p class="muted small">Eigene Choreografien werden in diesem Browser gespeichert – mit Export/Import
-                  auf andere Geräte übertragen. Vorlagen lassen sich als Kopie bearbeiten.</p>
+                  auf andere Geräte übertragen. Vorlagen lassen sich als Kopie bearbeiten. Das Tempo gilt für alle
+                  Abläufe außer den fest eingebauten Gesten.</p>
               </div>
-            </div>
             <div class="card" id="fun-editor" hidden>
               <h2><svg class="ic"><use href="#i-sliders"/></svg><span id="fun-ed-title">Choreografie bearbeiten</span></h2>
               <div class="form-grid">
@@ -480,6 +533,7 @@
                 <button id="fun-save" class="btn btn-primary" type="button">Speichern</button>
                 <button id="fun-close" class="btn btn-ghost" type="button">Schließen</button>
               </div>
+            </div>
             </div>
           </div>
         </section>

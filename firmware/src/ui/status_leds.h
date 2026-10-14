@@ -19,6 +19,10 @@ class StatusLeds {
   // Einstellungen verzögert speichern
   void update();
 
+  // Augen kurz vorgeben (Spielereien), nicht über Warnungen; ms = 0 -> wieder automatisch
+  void showOverride(const ledfx::Style& s, uint32_t ms);
+  bool overrideStyle(ledfx::Style& out);  // true, solange eine Vorgabe bzw. Vorschau gilt
+
   // Einstellungen (aus dem Web-Task)
   void configToJson(JsonObject obj);
   bool applyJson(JsonVariantConst in, String& err);
@@ -31,7 +35,7 @@ class StatusLeds {
   ledfx::State state_ = ledfx::State::Boot;
   ledfx::Config cfg_ = ledfx::defaults();
   ledfx::Style preview_;
-  uint32_t preview_until_ = 0;   // millis(), 0 = keine Vorschau
+  uint32_t preview_until_ = 0;   // millis(), 0 = keine Vorschau (auch für showOverride)
   uint32_t dirty_ms_ = 0;        // letzte Änderung (0 = gespeichert)
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   ledfx::Rgb last_[2];

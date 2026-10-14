@@ -8,7 +8,8 @@ namespace ledfx {
 namespace {
 constexpr float TWO_PI = 6.28318531f;
 
-const char* const EFFECT_NAMES[NUM_EFFECTS] = {"off", "solid", "breathe", "blink", "pulse", "wink", "alternate", "rainbow"};
+const char* const EFFECT_NAMES[NUM_EFFECTS] = {"off",       "solid",   "breathe", "blink",  "pulse", "wink",
+                                               "alternate", "rainbow", "flicker", "strobe", "scan",  "sleepy"};
 const char* const STATE_NAMES[NUM_STATES] = {"boot", "wifi", "ap", "idle", "torque", "stand",
                                              "walk", "arms", "gesture", "bat_warn", "bat_low", "estop"};
 const char* const MODE_NAMES[3] = {"auto", "single", "off"};
@@ -163,6 +164,24 @@ void render(const Style& s, uint32_t t, Rgb out[2]) {
       out[0] = hsv(h);
       out[1] = hsv(h + 40.0f);
       return;
+    }
+    case Effect::Flicker:  // alle 60 ms neue Helligkeit 30–100 %, je Auge eigen
+      for (int e = 0; e < 2; ++e) k[e] = 0.3f + 0.7f * (hash32(t / 60 * 2 + e + 7) % 1000) / 999.0f;
+      break;
+    case Effect::Strobe:
+      k[0] = k[1] = (t % 160) < 60 ? 1.0f : 0.0f;
+      break;
+    case Effect::Scan: {  // Licht wandert weich von links nach rechts und zurück
+      const float x = 0.5f - 0.5f * std::cos(TWO_PI * (t % 1600) / 1600.0f);
+      k[0] = 1.0f - 0.9f * x;
+      k[1] = 0.1f + 0.9f * x;
+      break;
+    }
+    case Effect::Sleepy: {  // gedimmt, alle 4 s langsam zu und wieder auf
+      const int32_t dt = static_cast<int32_t>(t % 4000) - 2500;
+      const float lid_v = dt < 0 || dt > 1200 ? 1.0f : std::fabs(dt - 600.0f) / 600.0f;
+      k[0] = k[1] = 0.4f * lid_v;
+      break;
     }
   }
   out[0] = scale(s.color, k[0]);
