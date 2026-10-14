@@ -152,7 +152,7 @@ function describeClose(ev) {
   const open = ((now - S.wsOpenedAt) / 1000).toFixed(1);
   const idle = ((now - S.lastMsg) / 1000).toFixed(1);
   const codes = { 1000: 'normal', 1001: 'Seite verlassen', 1002: 'Protokollfehler', 1006: 'abgerissen', 1009: 'zu groß', 1011: 'Serverfehler' };
-  const why = S.wsStale ? `${WS_STALE_MS / 1000} s keine Daten`
+  const why = S.wsStale || !ev ? `${WS_STALE_MS / 1000} s keine Daten`
     : `${codes[ev.code] || 'Code'} ${ev.code}${ev.reason ? ' ' + ev.reason : ''}`;
   return `Verbindung getrennt (${why}) nach ${open} s, letzte Nachricht vor ${idle} s`;
 }
@@ -177,16 +177,7 @@ function connect() {
     v3Tick();
     if (OTA.rebooting) location.reload();  // neue Firmware = neue Oberfläche
   };
-  ws.onclose = (ev) => {
-    if (S.wsOpen && !document.hidden) S.wsLastClose = describeClose(ev);  // Handy gesperrt: kein Fehler
-    S.wsOpen = false;
-    if (!S.wsDownSince) {
-      S.wsDownSince = Date.now();
-      setTimeout(renderConnection, WS_BANNER_DELAY_MS + 50);
-    }
-    renderConnection();
-    setTimeout(connect, S.wsRetries++ ? WS_RETRY_MS : WS_RETRY_FIRST_MS);
-  };
+  ws.onclose = (ev) => wsClosed(ws, ev);
   ws.onerror = () => ws.close();
   ws.onmessage = (ev) => {
     S.lastMsg = Date.now();
@@ -196,8 +187,25 @@ function connect() {
   };
 }
 
+// Verbindung weg (oder hängt): Zustand zurücksetzen und neu verbinden
+function wsClosed(ws, ev) {
+  if (S.ws !== ws) return;
+  ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;  // spätere Ereignisse der alten Verbindung ignorieren
+  S.ws = null;
+  if (S.wsOpen && !document.hidden) S.wsLastClose = describeClose(ev);  // Handy gesperrt: kein Fehler
+  S.wsOpen = false;
+  if (!S.wsDownSince) {
+    S.wsDownSince = Date.now();
+    setTimeout(renderConnection, WS_BANNER_DELAY_MS + 50);
+  }
+  renderConnection();
+  setTimeout(connect, S.wsRetries++ ? WS_RETRY_MS : WS_RETRY_FIRST_MS);
+}
+
+const wsReady = () => S.wsOpen && S.ws && S.ws.readyState === WebSocket.OPEN;
+
 function send(cmd, params = {}) {
-  if (!S.wsOpen) {
+  if (!wsReady()) {
     toast('Keine Verbindung zum Hexapod', true);
     return false;
   }
@@ -206,13 +214,19 @@ function send(cmd, params = {}) {
 }
 
 setInterval(() => {
-  if (!S.wsOpen) return;
+  if (!S.wsOpen || !S.ws) return;
+  if (Date.now() - S.lastMsg > WS_STALE_MS) {
+    // Verbindung hängt -> sofort neu aufbauen: das Schließen einer hängenden Verbindung
+    // (Abschluss-Handshake) kann sehr lange dauern, so lange liefen Befehle ins Leere
+    S.wsStale = true;
+    const ws = S.ws;
+    wsClosed(ws, null);
+    try { ws.close(); } catch (e) { /* egal */ }
+    return;
+  }
+  if (S.ws.readyState !== WebSocket.OPEN) return;
   S.pingAt = performance.now();
   S.ws.send('{"cmd":"ping"}');
-  if (Date.now() - S.lastMsg > WS_STALE_MS) {  // Verbindung hängt -> neu aufbauen
-    S.wsStale = true;
-    S.ws.close();
-  }
 }, 1500);
 
 function onMessage(m) {
@@ -258,9 +272,13 @@ function onMessage(m) {
 
 // --------------------------------------------------------------- Kopfzeile --
 
-function setPill(id, text, cls = '') {
+// short: Kurzform für schmale Bildschirme (Handy), sonst wie text
+function setPill(id, text, cls = '', short = '') {
   const pill = $(id);
-  pill.querySelector('.ptext').textContent = text;
+  const t = pill.querySelector('.ptext');
+  t.textContent = text;
+  if (short) t.dataset.short = short;
+  else delete t.dataset.short;
   pill.className = 'pill ' + cls;
 }
 
@@ -284,15 +302,15 @@ function wsDropsPerMin() {
 function renderConnection() {
   if (!S.wsOpen) S.rtt = 0;
   const rtt = S.rtt ? Math.round(S.rtt) : 0;
-  const drops = wsDropsPerMin();
-  const slow = S.wsOpen && (rtt > RTT_SLOW_MS || drops >= 20);
+  const drops = wsDropsPerMin();  // für alle Geräte zusammen – nur ein Hinweis, kein Urteil über diese Verbindung
+  const slow = S.wsOpen && rtt > RTT_SLOW_MS;
   const down = wsDown();
   setPill('pill-conn', S.wsOpen ? (slow ? 'Verbindung langsam' : 'Verbunden') : (down ? 'Getrennt' : 'Verbinde …'),
     S.wsOpen ? (slow ? 'pill-warn' : 'pill-ok') : (down ? 'pill-bad' : 'pill-warn'));
   const rssi = S.tel && S.tel.wifi && S.tel.wifi.rssi;
   $('pill-conn').title = S.wsOpen
     ? `Antwortzeit ${rtt || '–'} ms${rssi ? ` · WLAN ${rssi} dBm (${signalBars(rssi)})` : ''}` +
-      `${drops ? ` · ${drops} Nachrichten in der letzten Minute ausgelassen (WLAN kam nicht nach)` : ''}` +
+      `${drops ? ` · Roboter hat in der letzten Minute ${drops} Nachrichten ausgelassen (WLAN eines Geräts kam nicht nach)` : ''}` +
       `${slow ? ' – Steuerung reagiert verzögert (WLAN-Empfang?)' : ''}`
     : '';
   $('sb-conn').classList.toggle('on', S.wsOpen);
@@ -354,11 +372,13 @@ function renderTelemetry() {
   if (S.tab === 'control') markProfile();
 
   // Akku
+  $('pill-bat').title = 'Akku';
   if (t.bat.state === 'off') setPill('pill-bat', 'Akku aus', 'pill-idle');
   else if (t.bat.state === 'usb') setPill('pill-bat', 'USB', 'pill-idle');
   else {
     setPill('pill-bat', `${t.bat.v.toFixed(2)} V · ${t.bat.pct}%`,
-      { ok: 'pill-ok', warn: 'pill-warn', critical: 'pill-bad' }[t.bat.state] || '');
+      { ok: 'pill-ok', warn: 'pill-warn', critical: 'pill-bad' }[t.bat.state] || '', `${t.bat.pct}%`);
+    $('pill-bat').title = `Akku ${t.bat.v.toFixed(2)} V · ${t.bat.pct}%`;
   }
 
   // Servos
@@ -582,13 +602,16 @@ function renderLevel(l) {
   levelFaultShown = !!l.fault;
 }
 
-async function loadKinematics() {
+async function loadKinematics(attempt = 0) {
   try {
     const k = await api('/api/kinematics');
     if (k.leg && Array.isArray(k.mounts) && k.mounts.length === 6) V3.geo = { leg: k.leg, mounts: k.mounts };
     buildPose(k);
     if (S.tel) renderPose(S.tel.motion);
-  } catch (e) { /* Firmware ohne IK */ }
+  } catch (e) {
+    // beim Laden der Seite hat der ESP nur wenige Verbindungen frei -> später nochmal
+    if (attempt < 20) setTimeout(() => loadKinematics(attempt + 1), 3000);
+  }
 }
 
 function bindPose() {
@@ -626,7 +649,7 @@ const W = {
 };
 
 function sendQuiet(cmd, params = {}) {
-  if (!S.wsOpen) return false;
+  if (!wsReady()) return false;
   S.ws.send(JSON.stringify({ cmd, ...params }));
   return true;
 }
@@ -893,8 +916,13 @@ function bindMove() {
 function walkKey(e, down) {
   const height = e.code === 'KeyR' || e.code === 'KeyF';
   if (S.tab !== 'control' || !(e.code in WALK_KEYS || e.code === 'Space' || height)) return false;
-  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  const el = document.activeElement;
+  const tag = (el && el.tagName) || '';
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return false;
+  // Leertaste auf einem per Tastatur (Tab) gewählten Knopf: Knopf auslösen statt Stopp.
+  // Nach einem Mausklick behält der Knopf zwar den Fokus, dann bleibt Leertaste = Stopp.
+  if (e.code === 'Space' && el && el.closest && el.closest('button, a, summary, [role="button"], [role="radio"], [role="tab"]') &&
+      el.matches(':focus-visible')) return false;
   if (height) {
     if (down) nudgeHeight(e.code === 'KeyR' ? 1 : -1);
     return true;
@@ -1304,6 +1332,7 @@ function bindGlobal() {
   };
 
   document.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented) return;  // schon von einem Dialog behandelt
     if (e.key === 'Escape') {
       walkStopAll();
       estop();
@@ -1315,8 +1344,11 @@ function bindGlobal() {
       return;
     }
     if (S.tab !== 'cal' || S.calView !== 'cal') return;
-    const tag = (document.activeElement && document.activeElement.tagName) || '';
-    if (tag === 'INPUT' && document.activeElement.type !== 'range') return;
+    const el = document.activeElement;
+    const tag = (el && el.tagName) || '';
+    // Pfeiltasten = Puls fein verstellen; nicht, wenn ein anderes Eingabefeld den Fokus hat
+    // (z. B. der kalibrierte Testregler – sonst ginge der Rohpuls an den Gelenkgrenzen vorbei)
+    if (tag === 'INPUT' && el.id !== 'ed-us-slider') return;
     if (tag === 'SELECT' || tag === 'TEXTAREA') return;
     const step = e.shiftKey ? 10 : 1;
     if (e.key === 'ArrowRight') setUs(currentUs() + step);
@@ -1944,22 +1976,29 @@ function renderProfiles() {
     b.title = p.hint || `eigenes Profil: Höhe ${p.z} mm, Fußabstand ${p.stance} mm, ${p.type}`;
     b.textContent = p.name;
     b.onclick = () => applyProfile(p);
-    if (ownIdx !== undefined) {
-      const del = document.createElement('span');
-      del.className = 'del';
-      del.textContent = '×';
-      del.title = 'Profil löschen';
-      del.onclick = (e) => {
-        e.stopPropagation();
-        if (!confirm(`Profil „${p.name}“ löschen?`)) return;
-        const list = ownProfiles();
-        list.splice(ownIdx, 1);
-        saveOwnProfiles(list);
-        renderProfiles();
-      };
-      b.appendChild(del);
+    if (ownIdx === undefined) {
+      box.appendChild(b);
+      return;
     }
-    box.appendChild(b);
+    // eigenes Profil: Löschen als eigener Knopf daneben (nicht im Anwenden-Knopf –
+    // ein knapp verfehltes × hätte sonst das Profil angewendet und den Roboter bewegt)
+    const group = document.createElement('span');
+    group.className = 'profile-own';
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'profile-del';
+    del.textContent = '×';
+    del.title = 'Profil löschen';
+    del.setAttribute('aria-label', `Profil „${p.name}“ löschen`);
+    del.onclick = () => {
+      if (!confirm(`Profil „${p.name}“ löschen?`)) return;
+      const list = ownProfiles();
+      list.splice(ownIdx, 1);
+      saveOwnProfiles(list);
+      renderProfiles();
+    };
+    group.append(b, del);
+    box.appendChild(group);
   };
   PROFILES.forEach((p) => add(p));
   own.forEach((p, i) => add(p, i));
@@ -2015,6 +2054,7 @@ const FPV_GESTURES = [['circle', 'Kreisen'], ['nod', 'Ja'], ['shake', 'Nein'], [
 function openFpv() {
   if (FPV.open) return;
   FPV.open = true;
+  v3Tick();  // 3D-Ansicht liegt jetzt verdeckt: keine Live-Daten
   const view = $('cam-view');
   FPV.home = view.parentElement;
   FPV.next = view.nextSibling;
@@ -2039,6 +2079,7 @@ function openFpv() {
 function closeFpv() {
   if (!FPV.open) return;
   FPV.open = false;
+  setTimeout(v3Tick, 0);  // 3D-Ansicht wieder sichtbar
   if (W.timer || W.keys.size || W.joyMove.some((v) => v) || W.joyTurn) walkStopAll();
   moveStopAll();
   FPV.home.insertBefore($('cam-view'), FPV.next);
@@ -3301,7 +3342,13 @@ function bindPad() {
   document.body.appendChild($('pad-pick'));  // Overlay über der ganzen Seite
   $('pad-pick-close').onclick = closePadPick;
   $('pad-pick').addEventListener('click', (e) => { if (e.target === $('pad-pick')) closePadPick(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('pad-pick').hidden) closePadPick(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || $('pad-pick').hidden) return;
+    // Esc schließt nur die Auswahl – nicht zusätzlich Not-Aus (globale Taste)
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    closePadPick();
+  });
   setInterval(() => { if (P.liveAt && Date.now() - P.liveAt > PAD_LIVE_MS) clearPadLive(); }, 500);
   window.addEventListener('gamepadconnected', () => { if (P.web) padTick(); });
   window.addEventListener('gamepaddisconnected', () => { if (P.web) padTick(); });
@@ -3707,11 +3754,11 @@ function v3Set(d, src) {
 
 // Live-Daten anfordern, solange die Ansicht sichtbar ist
 function v3Tick() {
-  const want = S.wsOpen && S.tab === 'control' && !document.hidden && V3.visible;
+  const want = wsReady() && v3Shown();
   if (want) {
     S.ws.send('{"cmd":"live","on":true}');
     V3.subscribed = true;
-  } else if (V3.subscribed && S.wsOpen) {
+  } else if (V3.subscribed && wsReady()) {
     S.ws.send('{"cmd":"live","on":false}');
     V3.subscribed = false;
   } else {
@@ -3720,8 +3767,13 @@ function v3Tick() {
   v3Loop();
 }
 
+// Ansicht zu sehen? (nicht hinter der Fahrer-Ansicht, die über allem liegt)
+function v3Shown() {
+  return S.tab === 'control' && !document.hidden && V3.visible && !FPV.open;
+}
+
 function v3Loop() {
-  const run = S.tab === 'control' && !document.hidden && V3.visible;
+  const run = v3Shown();
   if (run && !V3.raf) {
     V3.last = performance.now();
     V3.raf = requestAnimationFrame(v3Frame);
@@ -3800,7 +3852,7 @@ function v3Hull(pts) {
 
 function v3Frame(now) {
   V3.raf = 0;
-  if (S.tab !== 'control' || document.hidden || !V3.visible) return;
+  if (!v3Shown()) return;
   const dt = Math.min(0.1, Math.max(0, (now - V3.last) / 1000));
   V3.last = now;
   const t = V3.tgt, c = V3.cur;

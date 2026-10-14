@@ -11,7 +11,11 @@
 namespace padctl {
 namespace {
 constexpr uint32_t PERIOD_MS = 20;
-constexpr uint32_t WEB_TIMEOUT_MS = 300;   // Browser sendet ca. alle 50 ms
+// Browser sendet ca. alle 50 ms; mit Bluetooth an (WLAN im Energiesparmodus) kommen die
+// Nachrichten gebündelt in Abständen bis ca. 300 ms – erst nach 0,5 s als getrennt werten
+constexpr uint32_t WEB_TIMEOUT_MS = 500;
+// Erster Bluetooth-Bericht so kurz nach dem Verbinden: gedrückte Tasten waren schon gehalten
+constexpr uint32_t BLE_HELD_WINDOW_MS = 1000;
 constexpr uint32_t SAVE_DELAY_MS = 1500;
 constexpr float HEIGHT_STEP_MM = 5.0f;
 
@@ -255,7 +259,8 @@ void loop() {
   const bool cfg_changed = g_cfg_changed;
   g_cfg_changed = false;
   const padmap::Config cfg = g_cfg;
-  const bool web_fresh = g_web_ms && now - g_web_ms <= WEB_TIMEOUT_MS;
+  // vorzeichenrichtig: der Web-Task (anderer Kern) kann g_web_ms nach dem Lesen von now setzen
+  const bool web_fresh = g_web_ms && (int32_t)(now - g_web_ms) <= (int32_t)WEB_TIMEOUT_MS;
   const pad::State web = g_web;
   const bool save_now = g_dirty_ms && now - g_dirty_ms >= SAVE_DELAY_MS;
   if (save_now) g_dirty_ms = 0;
@@ -274,7 +279,12 @@ void loop() {
 
   pad::State in;
   Src src = Src::None;
-  if (padble::latest(in)) {
+  uint32_t reports = 0;
+  // Bluetooth: Bezug für "beim Verbinden gehaltene Tasten" ist der erste Bericht (der Controller
+  // meldet nur Änderungen) – kommt er bald nach dem Verbinden, gelten Tasten darin als gehalten
+  static uint32_t ble_since = 0;
+  static bool ble_based = false;
+  if (padble::latest(in, &reports)) {
     src = Src::Ble;
   } else if (web_fresh) {
     in = web;
@@ -286,7 +296,14 @@ void loop() {
     else if (g_src == Src::Ble) message("Controller getrennt");
     g_map.reset(src != Src::None ? in.buttons : 0);
     g_src = src;
-    if (src == Src::Ble) padble::rumble(35, 150);
+    if (src == Src::Ble) {
+      padble::rumble(35, 150);
+      ble_since = now;
+      ble_based = reports > 0;
+    }
+  } else if (src == Src::Ble && !ble_based && reports > 0) {
+    ble_based = true;
+    if (now - ble_since < BLE_HELD_WINDOW_MS) g_map.reset(in.buttons);
   }
   g_in = in;
   if (src == Src::None) return;

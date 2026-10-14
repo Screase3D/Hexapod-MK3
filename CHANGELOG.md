@@ -4,6 +4,40 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.12.1
+
+Fehlerbehebungen nach einer gründlichen Durchsicht des ganzen Codes:
+
+- **Laufen:** Musste ein Bein am Rand seiner Reichweite auf ein Nachbarbein in der Luft warten, lief der
+  Körper ungebremst weiter – nach schnellen Richtungswechseln knickte das Knie dann bis auf 9° ein oder ein
+  Fuß kam ganz aus der Reichweite. Jetzt bremst der Körper rechtzeitig (30 000 zufällige Richtungswechsel im
+  Test: Knie immer ≥ 25°). Ändern sich Richtung, Schrittdauer oder Fußhub im Lauf, gleitet das Tempo auf den
+  neuen Höchstwert, statt in einem Regelschritt gekappt zu werden (vorher bis 4800 mm/s², jetzt unter 800).
+- **„Lebendig“ und Laufen:** Hob „Lebendig“ gerade einen Fuß, als ein Fahrbefehl kam, waren kurz vier Beine
+  in der Luft. Schritte beginnen jetzt erst, wenn „Lebendig“ ausgeblendet ist (0,4 s).
+- **Fahrbefehl im Handbetrieb** (nach dem Start, Servos in Sitzstellung) ließ den Roboter ohne
+  Aufstehen-Ablauf direkt in die Standhaltung springen – wird jetzt ignoriert, erst „Aufstehen“.
+- **Ungültige Zahlen** (z. B. „unendlich“ vom Browser-Gamepad) konnten über NaN die Servos über ihre
+  Anschläge fahren – werden jetzt an allen Stellen abgefangen.
+- „Alle auf 1500 µs“ bzw. „Montagestellung“ direkt nach dem IK-Betrieb konnte vom letzten Regelschritt
+  überschrieben werden.
+- **Webserver:** Ein abgebrochener Upload (Kalibrierung importieren, Handy verlässt das WLAN) blockierte den
+  Server dauerhaft – auch der Not-Aus über das Netz ging dann nicht mehr. Ein fehlerhafter
+  `servo_us`-Befehl schaltete den IK-Betrieb ab.
+- **Controller:** „Vergessen“ bei ausgeschaltetem Bluetooth ging verloren (er verband sich später wieder);
+  der Controller konnte ein längeres Funk-Timeout aushandeln (Stopp nach Abbruch erst nach 6 s statt 2 s);
+  beim Verbinden gehaltene Tasten lösten aus, gehaltene Steuerkreuz-Tasten wiederholten sofort; das mit dem
+  Steuerkreuz gewählte Tempo wurde bei jedem Speichern der Controller-Einstellungen zurückgesetzt;
+  Browser-Gamepad mit Bluetooth an (WLAN im Energiesparmodus) wurde ständig als getrennt erkannt.
+- **Oberfläche:** Eine hängende Verbindung wurde zwar erkannt, aber erst nach langem Warten neu aufgebaut –
+  so lange liefen Befehle ins Leere, auch STOP (jetzt sofort neu verbinden, Not-Aus über die Notfall-Adresse).
+  Esc im Dialog „Taste belegen“ löste zusätzlich den Not-Aus aus. Pfeiltasten am Testregler der
+  Kalibrierung verstellten den Rohpuls an den Gelenkgrenzen vorbei. Schalter, Import und Profil-Löschen per
+  Tastatur erreichbar; Löschen eines eigenen Profils als eigener Knopf (ein knapp verfehltes × hat das Profil
+  angewendet). Beinmaße werden nachgeladen, wenn der erste Versuch scheitert. Die 3D-Ansicht holt keine
+  Live-Daten, solange die Fahrer-Ansicht darüber liegt. Leertaste auf einem per Tab gewählten Knopf löst ihn
+  aus (sonst weiter Stopp). Am Handy zeigt der Akku nur Prozent, damit der Seitentitel lesbar bleibt.
+
 ## 0.12.0
 
 - **Verbindung bei schwachem WLAN robuster:** Kam das WLAN nicht nach (voller Sendepuffer), wartete der

@@ -1,6 +1,7 @@
 #include "motion.h"
 
 #include <Preferences.h>
+#include <atomic>
 #include <freertos/FreeRTOS.h>
 
 #include "config.h"
@@ -93,7 +94,8 @@ float g_lo[NUM_SERVOS], g_hi[NUM_SERVOS];
 uint32_t g_limits_ms = 0;
 kin::BodyPose g_ik_pose = {0, 0, POSE_LIMITS.height_default, 0, 0, 0};  // Körperlage der letzten IK
 kin::BodyPose g_live_pose = g_ik_pose;  // dieselbe, unter g_mux (Live-Ansicht)
-float g_pose_vel[7] = {0, 0, 0, 0, 0, 0, 0};  // Nachführen der Haltung: x, y, z, Rollen, Nicken, Gieren, Fußabstand
+float g_pose_vel[7] = {0, 0, 0, 0, 0, 0, 0};
+std::atomic<uint32_t> g_update_seq{0};  // abgeschlossene Regelschritte (update)  // Nachführen der Haltung: x, y, z, Rollen, Nicken, Gieren, Fußabstand
 
 // Vorderbeine: Fußpunkt erreichbar (mit Abstand zu den Gelenkgrenzen)?
 constexpr float ARM_MARGIN_DEG = 3.0f;
@@ -126,7 +128,8 @@ gait::Params defaultGait() {
   return p;
 }
 
-float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+// NaN (sollte nie vorkommen) wird zur Mitte des Bereichs statt durchgereicht
+float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : (v == v ? v : 0.5f * (lo + hi))); }
 
 float approach(float cur, float target, float max_step) {
   float d = target - cur;
@@ -416,12 +419,20 @@ void setMode(Mode m) {
     g_enter_pose = true;
     g_enter_sitting = false;
   }
-  if (m != Mode::Pose && g_mode == Mode::Pose) {
+  const bool leave = m != Mode::Pose && g_mode == Mode::Pose;
+  if (leave) {
     g_leave_pose = true;
     g_walk_cmd[0] = g_walk_cmd[1] = g_walk_cmd[2] = 0.0f;
   }
   g_mode = m;
+  const uint32_t seq = g_update_seq.load();
   portEXIT_CRITICAL(&g_mux);
+  if (leave) {
+    // Ein gerade laufender Regelschritt im IK-Betrieb schreibt am Ende noch seine Winkel:
+    // abwarten, sonst überschreibt er einen gleich folgenden Handbefehl ("alle auf 1500 µs")
+    const uint32_t t0 = millis();
+    while (g_update_seq.load() == seq && millis() - t0 < 100) delay(1);
+  }
 }
 
 Mode mode() {
@@ -554,8 +565,13 @@ void sit() {
 }
 
 void walk(float vx, float vy, float turn) {
-  setMode(Mode::Pose);
   portENTER_CRITICAL(&g_mux);
+  // Nur im IK-Betrieb: aus dem Handbetrieb (z. B. nach dem Start, Servos in Sitzstellung)
+  // würde der Roboter sonst ohne Aufstehen-Ablauf direkt in die Standhaltung springen
+  if (g_mode != Mode::Pose) {
+    portEXIT_CRITICAL(&g_mux);
+    return;
+  }
   g_walk_cmd[0] = clampf(vx, -1.0f, 1.0f);
   g_walk_cmd[1] = clampf(vy, -1.0f, 1.0f);
   g_walk_cmd[2] = clampf(turn, -1.0f, 1.0f);
@@ -736,7 +752,17 @@ bool gesture(const char* name, String& err) {
   return true;
 }
 
+namespace {
+void updateStep(float dt);
+}
+
 void update(float dt) {
+  updateStep(dt);
+  g_update_seq.fetch_add(1);
+}
+
+namespace {
+void updateStep(float dt) {
   portENTER_CRITICAL(&g_mux);
   Mode m = g_mode;
   PoseState target = g_target;
@@ -941,6 +967,23 @@ void update(float dt) {
   neutral[4].x += ao.mid_dx;
   updateReach(g_current, gp.step_height);
   g_gait.setParams(gp);
+  // "Lebendig" blendet noch aus (hebt evtl. gerade einen Fuß): so lange keine Schritte
+  // beginnen – weder Laufen noch Umsetzen der Füße (Vorderbeine heben, Hinsetzen) –, sonst
+  // wären kurz vier Beine in der Luft. Kleine Änderungen (Fußabstand) folgen weiter direkt.
+  static kin::Vec3 held[NUM_LEGS];
+  static bool have_held = false;
+  if (!g_anim.silent()) {
+    cmd[0] = cmd[1] = cmd[2] = 0.0f;
+    bool jump = false;
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+      if (hypotf(neutral[leg].x - held[leg].x, neutral[leg].y - held[leg].y) > 8.0f) jump = true;
+    }
+    if (have_held && jump) {
+      for (int leg = 0; leg < NUM_LEGS; ++leg) neutral[leg] = held[leg];
+    }
+  }
+  for (int leg = 0; leg < NUM_LEGS; ++leg) held[leg] = neutral[leg];
+  have_held = true;
   g_gait.setCommand(cmd[0], cmd[1], cmd[2]);
   g_gait.update(dt, neutral);
 
@@ -999,6 +1042,8 @@ void update(float dt) {
   }
   portEXIT_CRITICAL(&g_mux);
 }
+
+}  // namespace
 
 Activity activity() {
   portENTER_CRITICAL(&g_mux);

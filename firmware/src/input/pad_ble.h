@@ -35,7 +35,7 @@ void forget();             // Kopplung löschen, trennen
 Status status();
 
 // letzter Zustand des Controllers; false = nicht verbunden
-bool latest(pad::State& out);
+bool latest(pad::State& out, uint32_t* reports = nullptr);  // reports: Berichte seit dem Verbinden
 void rumble(uint8_t strength, uint16_t ms);  // kurze Vibration (Rückmeldung)
 
 // Nach erfolgreichem Koppeln einmal true mit der neuen Adresse (zum Speichern)

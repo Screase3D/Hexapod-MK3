@@ -26,6 +26,8 @@ float coxaSign(const LegMount& m) {
 }
 
 bool legIk(const LegGeometry& g, const LegMount& m, const Vec3& foot, JointAngles& out) {
+  // NaN fiele durch alle Bereichsprüfungen und käme als Winkel heraus
+  if (!std::isfinite(foot.x) || !std::isfinite(foot.y) || !std::isfinite(foot.z)) return false;
   float horiz = std::sqrt(foot.x * foot.x + foot.y * foot.y);
   if (horiz < 1e-3f) return false;  // Fuß genau unter der Coxa-Achse: Coxa unbestimmt
 

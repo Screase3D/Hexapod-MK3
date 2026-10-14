@@ -185,8 +185,8 @@ void handle(JsonVariantConst in, JsonDocument& out) {
 
   // --- Sollwerte (schalten in den manuellen Modus) ---
   } else if (strcmp(cmd, "servo_us") == 0) {
-    motion::setMode(motion::Mode::Manual);
     if (!validId(in, id, out)) return;
+    motion::setMode(motion::Mode::Manual);
     servos.setPulseUs(id, in["us"] | 1500.0f);
     result(out, true);
   } else if (strcmp(cmd, "servo_deg") == 0) {

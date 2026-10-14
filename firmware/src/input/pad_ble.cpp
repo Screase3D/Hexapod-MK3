@@ -46,6 +46,7 @@ bool g_req_pair = false, g_req_forget = false;
 uint32_t g_pair_until = 0;
 pad::State g_pad;
 uint32_t g_pad_ms = 0;
+uint32_t g_reports = 0;  // Eingabeberichte seit dem Verbinden
 int g_battery = -1;
 char g_name[32] = "";
 char g_addr[18] = "";
@@ -181,6 +182,7 @@ void onReport(NimBLERemoteCharacteristic* ch, uint8_t* data, size_t len, bool) {
   portENTER_CRITICAL(&g_mux);
   g_pad = s;
   g_pad_ms = millis();
+  ++g_reports;
   portEXIT_CRITICAL(&g_mux);
 }
 
@@ -244,6 +246,13 @@ bool connectTo(const NimBLEAddress& a, bool pairing) {
   }
   bool report = false;
   g_out = nullptr;
+  // vor dem Abonnieren zurücksetzen: ein Bericht, der gleich danach kommt (Zustand beim
+  // Verbinden, gehaltene Tasten), bleibt erhalten
+  portENTER_CRITICAL(&g_mux);
+  g_pad = pad::State();
+  g_pad_ms = millis();
+  g_reports = 0;
+  portEXIT_CRITICAL(&g_mux);
   for (NimBLERemoteService* svc : g_client->getServices(true)) {
     const bool hid = svc->getUUID() == UUID_HID;
     if (!hid && svc->getUUID() != UUID_BATTERY) continue;
@@ -280,8 +289,6 @@ bool connectTo(const NimBLEAddress& a, bool pairing) {
   memcpy(g_name, g_found_name, sizeof(g_name));
   copyStr(g_addr, sizeof(g_addr), addr.c_str());
   if (pairing) g_new_pairing = true;
-  g_pad = pad::State();
-  g_pad_ms = millis();
   g_state = State::Connected;
   portEXIT_CRITICAL(&g_mux);
   return true;
@@ -300,6 +307,7 @@ void shutdown() {
 
 void task(void*) {
   uint16_t last_itvl = 0;  // zuletzt gesehenes Verbindungsintervall (1,25 ms)
+  bool timeout_asked = false;  // eigenes Funk-Timeout in dieser Verbindung schon nachgefordert
   uint8_t itvl_check = 0;
   uint8_t fails = 0;       // Fehlversuche in Folge
   uint32_t retry_at = 0;   // vorher nicht erneut suchen/verbinden
@@ -320,8 +328,11 @@ void task(void*) {
     vTaskDelay(pdMS_TO_TICKS(TASK_PERIOD_MS));
     portENTER_CRITICAL(&g_mux);
     const bool enabled = g_enabled;
-    const bool req_pair = g_req_pair, req_forget = g_req_forget;
-    g_req_pair = g_req_forget = false;
+    // Vergessen bei ausgeschaltetem Bluetooth: erst nach dem nächsten Einschalten ausführen
+    // (die Kopplung lässt sich nur mit laufendem Stack löschen)
+    const bool req_pair = g_req_pair, req_forget = g_req_forget && g_enabled;
+    g_req_pair = false;
+    if (g_enabled) g_req_forget = false;
     const bool found = g_found;
     const NimBLEAddress found_addr = g_found_addr;
     const int found_rssi = g_found_rssi;
@@ -381,16 +392,27 @@ void task(void*) {
         if (!g_client || !g_client->isConnected()) {
           g_out = nullptr;
           last_itvl = 0;
+          timeout_asked = false;
           checkRejectedDrop();
           setState(State::Searching);  // Controller aus oder außer Reichweite: wieder suchen
           break;
         }
         if (++itvl_check >= 50) {  // etwa jede Sekunde: hat sich das Intervall geändert?
           itvl_check = 0;
-          const uint16_t itvl = g_client->getConnInfo().getConnInterval();
+          const NimBLEConnInfo ci = g_client->getConnInfo();
+          const uint16_t itvl = ci.getConnInterval();
           if (itvl && itvl != last_itvl) {
             if (last_itvl) EV_INFO("Bluetooth-Intervall jetzt %.1f ms", itvl * 1.25f);
             last_itvl = itvl;
+          }
+          // Hat der Controller längere Funk-Timeouts bzw. Latenz ausgehandelt, würde ein
+          // Abbruch erst spät erkannt (ein gehaltener Stick gilt so lange weiter): die eigenen
+          // 2 s nachfordern, einmal je Verbindung
+          if (itvl && !timeout_asked && (ci.getConnTimeout() > CONN_SUPERVISION_10MS || ci.getConnLatency() > 0)) {
+            timeout_asked = true;
+            const bool ok = g_client->updateConnParams(itvl, itvl, 0, CONN_SUPERVISION_10MS);
+            EV_INFO("Controller: Funk-Timeout %u ms, Latenz %u – fordere %u ms an%s", ci.getConnTimeout() * 10u,
+                    ci.getConnLatency(), CONN_SUPERVISION_10MS * 10u, ok ? "" : " (abgelehnt)");
           }
         }
         if (rumble_ms && g_out) {
@@ -489,6 +511,9 @@ void startPairing() {
 void forget() {
   portENTER_CRITICAL(&g_mux);
   g_req_forget = true;
+  // Adresse sofort vergessen: auch mit Bluetooth aus darf er sich nicht wieder verbinden
+  g_addr[0] = g_name[0] = 0;
+  g_battery = -1;
   portEXIT_CRITICAL(&g_mux);
 }
 
@@ -507,12 +532,13 @@ Status status() {
   return s;
 }
 
-bool latest(pad::State& out) {
+bool latest(pad::State& out, uint32_t* reports) {
   // Der Controller meldet nur Änderungen: gehaltene Sticks bleiben gültig, solange
   // die Verbindung steht (ein Abbruch wird über das BLE-Timeout erkannt)
   portENTER_CRITICAL(&g_mux);
   const bool ok = g_state == State::Connected;
   if (ok) out = g_pad;
+  if (reports) *reports = g_reports;
   portEXIT_CRITICAL(&g_mux);
   return ok;
 }

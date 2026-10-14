@@ -67,7 +67,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `mode` | `mode`: `"pose"` / `"manual"` | Körperhaltung per IK an/aus |
 | `pose` | `x`, `y`, `z`, `roll`, `pitch`, `yaw`, `stance` (Teilmenge) | Zielhaltung (mm/Grad, wird begrenzt), siehe [kinematik.md](kinematik.md). Ist sie nicht erreichbar, gilt die nächste erreichbare; die Antwort enthält dann `"limited": true` und in `msg`, was begrenzt wurde |
 | `pose_reset` | – | Standardhaltung |
-| `walk` | `vx`, `vy`, `turn` (je −1…1) | Fahrbefehl: vor/zurück, links/rechts, drehen (+ = links). Schaltet in den IK-Modus. **Ohne Antwort**; ohne neuen Befehl für 0,6 s hält der Roboter an – also während der Fahrt etwa alle 100 ms senden |
+| `walk` | `vx`, `vy`, `turn` (je −1…1) | Fahrbefehl: vor/zurück, links/rechts, drehen (+ = links). Wirkt nur im IK-Modus (vorher `stand`). **Ohne Antwort**; ohne neuen Befehl für 0,6 s hält der Roboter an – also während der Fahrt etwa alle 100 ms senden |
 | `stop` | – | Fahrbefehl auf 0 (Roboter läuft noch in die Neutralstellung) |
 | `stand` | – | aufstehen (aus dem Sitzen; braucht Torque), schaltet in den IK-Modus |
 | `sit` | – | hinsetzen (setzt erhobene Vorderbeine vorher ab) |

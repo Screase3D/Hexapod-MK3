@@ -160,7 +160,11 @@ class Gait {
   kin::Vec3 coxa_[NUM_LEGS] = {};
   float min_radius_ = -1.0f;  // < 0: keine Reichweitengrenze
   float max_radius_ = 0.0f;
+  float min_target_ = -1.0f, max_target_ = 0.0f;  // vorgegebene Grenzen (min/max_radius_ gleiten dorthin)
   float reach_k_ = 1.0f;      // aktueller Faktor aus der Reichweitengrenze
+  float goal_k_ = 1.0f;       // Reichweitenfaktor des Fahrziels (sinkt gleitend)
+  float limit_now_ = 0.0f;    // Fußgeschwindigkeit bei der aktuellen Schrittfrequenz (sinkt gleitend)
+  float brake_ = 1.0f;        // für den nächsten Schritt: ein wartendes Bein kommt sonst an den Rand der Reichweite
   float guard_coxa_ = 0.0f, guard_h_ = 0.0f, guard_d2_ = -1.0f;  // Schwungbahn-Schutz (d2 < 0: aus)
 };
 

@@ -79,19 +79,27 @@ Config defaults() {
 }
 
 void Mapper::setConfig(const Config& c) {
+  const float before = cfg_.speed;
   cfg_ = c;
   cfg_.deadzone = clampf(cfg_.deadzone, 0.02f, 0.4f);
   cfg_.expo = clampf(cfg_.expo, 0.0f, 1.0f);
   cfg_.speed = clampf(cfg_.speed, 0.1f, 1.0f);
-  speed_ = cfg_.speed;
+  // mit dem Steuerkreuz gewähltes Tempo nur zurücksetzen, wenn sich das Grundtempo ändert
+  // (nicht bei jedem Speichern der Controller-Einstellungen)
+  if (cfg_.speed != before) speed_ = cfg_.speed;
 }
 
 void Mapper::reset(uint32_t held) {
   prev_ = held;
-  for (int i = 0; i < pad::NUM_BUTTONS; ++i) held_[i] = next_repeat_[i] = 0.0f;
+  for (int i = 0; i < pad::NUM_BUTTONS; ++i) {
+    held_[i] = 0.0f;
+    // beim Verbinden gehaltene Tasten: auch keine Wiederholung, bis sie losgelassen werden
+    next_repeat_[i] = (held & pad::mask(i)) ? 1e9f : 0.0f;
+  }
 }
 
 float Mapper::axis(float v) const {
+  if (!std::isfinite(v)) return 0.0f;  // z. B. "1e999" aus dem Browser
   const float a = std::fabs(v);
   if (a <= cfg_.deadzone) return 0.0f;
   float s = clampf((a - cfg_.deadzone) / (1.0f - cfg_.deadzone), 0.0f, 1.0f);
@@ -102,7 +110,7 @@ float Mapper::axis(float v) const {
 void Mapper::stick(float x, float y, float& ox, float& oy) const {
   // runde Totzone, Betrag neu skaliert; Kennlinie je Achse
   const float m = std::sqrt(x * x + y * y);
-  if (m <= cfg_.deadzone) {
+  if (!std::isfinite(m) || m <= cfg_.deadzone) {  // unendlich: inf * 0 ergäbe NaN
     ox = oy = 0.0f;
     return;
   }

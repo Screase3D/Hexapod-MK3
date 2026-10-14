@@ -449,7 +449,7 @@
               <button id="cal-defaults" class="btn btn-danger-outline" type="button">Standardwerte</button>
               <span class="grow"></span>
               <button id="cal-export" class="btn btn-ghost" type="button" title="Kalibrierung als JSON-Datei sichern"><svg class="ic"><use href="#i-download"/></svg>Export</button>
-              <label class="btn btn-ghost" title="Kalibrierung aus JSON-Datei laden (speichert sofort)"><svg class="ic"><use href="#i-upload"/></svg>Import<input id="cal-import" type="file" accept=".json,application/json" hidden></label>
+              <label class="btn btn-ghost file-btn" title="Kalibrierung aus JSON-Datei laden (speichert sofort)"><svg class="ic"><use href="#i-upload"/></svg>Import<input id="cal-import" type="file" accept=".json,application/json"></label>
             </div>
           </div>
 
@@ -739,7 +739,7 @@
                 <div class="card-head">
                   <h2><svg class="ic"><use href="#i-gamepad"/></svg>Bluetooth am Roboter</h2>
                   <label class="switch" title="Bluetooth des Roboters ein/aus">
-                    <input id="pad-ble-on" type="checkbox">
+                    <input id="pad-ble-on" type="checkbox" aria-label="Bluetooth am Roboter">
                     <span class="slider"></span>
                   </label>
                 </div>
@@ -762,7 +762,7 @@
                 <div class="card-head">
                   <h2><svg class="ic"><use href="#i-control"/></svg>Controller an diesem Gerät</h2>
                   <label class="switch" title="Controller am Handy/PC über den Browser verwenden">
-                    <input id="pad-web-on" type="checkbox">
+                    <input id="pad-web-on" type="checkbox" aria-label="Controller an diesem Gerät">
                     <span class="slider"></span>
                   </label>
                 </div>

@@ -100,13 +100,17 @@ bool readJsonBody(httpd_req_t* req, JsonDocument& doc, String& err) {
   body.reserve(req->content_len);
   char buf[512];
   size_t remaining = req->content_len;
+  int timeouts = 0;
   while (remaining > 0) {
     int r = httpd_req_recv(req, buf, remaining < sizeof(buf) ? remaining : sizeof(buf));
-    if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+    // Kommt der Rest nicht (Handy aus dem WLAN, falsche Länge), nicht ewig warten: der
+    // Server-Task bearbeitet sonst nichts anderes mehr, auch keinen Not-Aus
+    if (r == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 3) continue;
     if (r <= 0) {
       err = "Lesefehler";
       return false;
     }
+    timeouts = 0;
     body.concat(buf, r);
     remaining -= r;
   }

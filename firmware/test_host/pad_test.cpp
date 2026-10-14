@@ -207,6 +207,29 @@ static void testButtons() {
   step(e, pad::State());
   o = step(e, press(pad::BTN_XBOX));
   CHECK(o.n_actions == 1 && o.actions[0] == Action::Estop);
+  // gehaltene Wiederholtaste (Steuerkreuz) beim Verbinden: keine Wiederholung, bis losgelassen
+  Mapper h;
+  h.reset(pad::mask(pad::BTN_UP));
+  int rep = 0;
+  for (int i = 0; i < 50; ++i) rep += step(h, press(pad::BTN_UP)).n_actions;  // 1 s gehalten
+  CHECK(rep == 0);
+  step(h, pad::State());
+  CHECK(step(h, press(pad::BTN_UP)).n_actions == 1);
+  // Speichern der Einstellungen ändert das mit dem Steuerkreuz gewählte Tempo nicht
+  Mapper sp;
+  for (int i = 0; i < 4; ++i) {
+    step(sp, press(pad::BTN_RIGHT));
+    step(sp, pad::State());
+  }
+  const float chosen = sp.speed();
+  CHECK(chosen > defaults().speed + 0.1f);
+  Config inv = defaults();
+  inv.invert_y = true;
+  sp.setConfig(inv);
+  CHECK(near(sp.speed(), chosen));
+  inv.speed = 0.3f;  // Grundtempo geändert -> gilt
+  sp.setConfig(inv);
+  CHECK(near(sp.speed(), 0.3f));
   // Namen
   for (int i = 0; i < NUM_ACTIONS; ++i) {
     Action a;

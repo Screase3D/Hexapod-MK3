@@ -23,6 +23,7 @@ constexpr float PHASE_SNAP = 2e-3f;      // näher am Muster: Versatz exakt übe
 constexpr float TRANS_SPEED = 0.75f;
 constexpr float VMAX_RAMP_S = 0.8f;      // Tempo-Anpassung beim Gangwechsel: volle Spanne in 0,8 s
 constexpr float TWO_PI = 6.28318531f;
+constexpr float REACH_GLIDE = 40.0f;     // mm/s: so schnell wird der erlaubte Bereich im Lauf enger
 constexpr float URGENT_MIN_STEP = 5.0f;  // mm: kürzere Zwischenschritte bringen nichts
 // Nachbarbeine (Reihenfolge um den Körper: vl, ml, hl, hr, mr, vr)
 constexpr int NEIGHBOR_A[NUM_LEGS] = {1, 0, 1, 0, 3, 2};
@@ -154,6 +155,9 @@ void Gait::reset(const kin::Vec3 neutral[NUM_LEGS]) {
   for (int k = 0; k < 3; ++k) cmd_[k] = cmd_ramped_[k] = 0.0f;
   vx_ = vy_ = wz_ = 0.0f;
   reach_k_ = 1.0f;
+  brake_ = 1.0f;
+  goal_k_ = 1.0f;
+  limit_now_ = 0.0f;
   cadence_ = 1.0f;
   phase_ = 0.0f;
   vmax_ = 0.0f;
@@ -183,8 +187,12 @@ void Gait::setParams(const Params& p) {
 
 void Gait::setReach(const kin::Vec3 coxa[NUM_LEGS], float min_radius, float max_radius) {
   for (int i = 0; i < NUM_LEGS; ++i) coxa_[i] = coxa[i];
-  min_radius_ = min_radius;
-  max_radius_ = max_radius;
+  // Wird der Bereich enger (höherer Fußhub, andere Körperhöhe), gleitet die Grenze im Lauf
+  // dorthin (update): sonst stünden Füße schlagartig "außerhalb" -> Vollbremsung
+  min_target_ = min_radius;
+  max_target_ = max_radius;
+  if (idle_ || min_radius_ < 0.0f || min_radius < min_radius_) min_radius_ = min_radius;
+  if (idle_ || max_radius_ <= 0.0f || max_radius > max_radius_) max_radius_ = max_radius;
 }
 
 void Gait::setSwingGuard(const kin::LegGeometry& g, float height, float knee_min_deg) {
@@ -295,11 +303,15 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
     cadence_ = approach(cadence_, target, CADENCE_RATE * dt);
   }
   // Bei der aktuellen Schrittfrequenz höchstens max_stride je Standphase
-  // (folgt die Frequenz einer Tempoänderung noch, wird kurz gebremst)
+  // (folgt die Frequenz einer Tempoänderung noch, wird kurz gebremst). Sinkt die Grenze
+  // plötzlich (längere Schrittdauer, höherer Fußhub), gleitet sie in ramp_s herunter statt
+  // das Tempo in einem Regelschritt zu kappen – die Reserve ACCEL_MARGIN deckt das.
   const float foot_max_now = params_.max_stride / stance_s;
+  if (idle_ || limit_now_ <= 0.0f || foot_max_now >= limit_now_) limit_now_ = foot_max_now;
+  else limit_now_ = std::fmax(foot_max_now, limit_now_ - fm_active * dt / params_.ramp_s);
   const float fastest_now = fastestFoot(v_cur);
-  if (fastest_now > foot_max_now) {
-    for (int a = 0; a < 3; ++a) v_cur[a] *= foot_max_now / fastest_now;
+  if (fastest_now > limit_now_) {
+    for (int a = 0; a < 3; ++a) v_cur[a] *= limit_now_ / fastest_now;
   }
 
   // Reichweite: kein Fuß kommt der Coxa-Achse zu nahe. Ein Fuß pendelt um ±v*half
@@ -307,11 +319,20 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   // Standphase, beim Beschleunigen etwas weiter (ACCEL_MARGIN). Die Grenze gilt
   // schon für das Fahrziel, damit die Rampe gleichmäßig bis zum erlaubten Tempo
   // beschleunigt (sonst wäre das Beschleunigen früher zu Ende als geplant).
+  // Für das aktuelle Tempo gilt die Grenze sofort (Sicherheit); die des Fahrziels sinkt
+  // höchstens mit der Rampe (Richtungswechsel z. B. vorwärts -> seitwärts: sanft abbremsen).
   const float half = (0.5f * stance_s + dt) * ACCEL_MARGIN;
-  const float target = std::fmin(reachScale(v_goal[0], v_goal[1], v_goal[2], half, neutral),
-                                 reachScale(v_cur[0], v_cur[1], v_cur[2], half, neutral));
-  // sinken sofort, steigen nur mit der Rampe (kein Tempo-Sprung)
-  reach_k_ = target < reach_k_ ? target : std::fmin(target, reach_k_ + dt / ramp_up);
+  const float k_goal = reachScale(v_goal[0], v_goal[1], v_goal[2], half, neutral);
+  if (idle_ || k_goal >= goal_k_) goal_k_ = k_goal;
+  else goal_k_ = std::fmax(k_goal, goal_k_ - dt / params_.ramp_s);
+  const float target = std::fmin(goal_k_, reachScale(v_cur[0], v_cur[1], v_cur[2], half, neutral));
+  // sinken und steigen mit der Rampe (volle Spanne in ramp_s bzw. ramp_up) – kein
+  // Tempo-Sprung, auch wenn sich Schrittdauer oder Fußhub im Lauf ändern. Kommt ein Fuß
+  // dabei an den Rand, setzt er vorzeitig um bzw. bremst den Körper (brake_).
+  reach_k_ = target < reach_k_ ? std::fmax(target, reach_k_ - dt / params_.ramp_s)
+                               : std::fmin(target, reach_k_ + dt / ramp_up);
+  reach_k_ *= brake_;  // ein Standbein muss auf seinen Nachbarn warten und ist schon nah am Rand
+  brake_ = 1.0f;
   vx_ = v_cur[0] * reach_k_;
   vy_ = v_cur[1] * reach_k_;
   wz_ = v_cur[2] * reach_k_;
@@ -439,6 +460,8 @@ void Gait::switchType(float cadence, const kin::Vec3 neutral[NUM_LEGS]) {
 void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   if (dt <= 0.0f) return;
   if (dt > MAX_DT) dt = MAX_DT;
+  if (min_radius_ < min_target_) min_radius_ = std::fmin(min_target_, min_radius_ + REACH_GLIDE * dt);
+  if (max_radius_ > max_target_) max_radius_ = std::fmax(max_target_, max_radius_ - REACH_GLIDE * dt);
   computeVelocity(dt, neutral);
   bool moving = std::fabs(cmd_ramped_[0]) > MOVING_EPS || std::fabs(cmd_ramped_[1]) > MOVING_EPS ||
                 std::fabs(cmd_ramped_[2]) > MOVING_EPS;
@@ -619,6 +642,24 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
       l.h = 0.0f;
     }
   }
+  // Wartet ein Standbein auf einen Nachbarn in der Luft, darf sein Fuß den Rand der
+  // Reichweite nicht erreichen, bevor der Nachbar aufsetzt: sonst den Körper abbremsen
+  // (wirkt im nächsten Schritt; bis zum Stillstand, wenn der Fuß schon am Rand steht)
+  float brake = 1.0f;
+  for (int i = 0; i < NUM_LEGS; ++i) {
+    const Leg& l = legs_[i];
+    if (l.swing || !l.wait) continue;
+    float free_in = 0.0f;  // Zeit, bis der letzte Nachbar aufsetzt
+    for (int k = 0; k < 2; ++k) {
+      const Leg& n = legs_[k ? NEIGHBOR_B[i] : NEIGHBOR_A[i]];
+      if (n.swing) free_in = std::fmax(free_in, (1.0f - n.u) * (n.dur > 0.0f ? n.dur : swing_dur));
+    }
+    const float need = free_in + 2.0f * dt;
+    const float rt = reachTime(i);
+    if (rt < need) brake = std::fmin(brake, rt / need);
+  }
+  brake_ = brake;
+
   // 3. Schwungbahnen: Heben und Vorschwingen gleichzeitig, beide mit weichem Anfang und
   //    Ende (früh nach außen zu schwingen entlastet den Femur beim Abheben nah am Körper).
   //    Verschiebt sich der Aufsetzpunkt (Tempo ändert sich), führt der verbleibende Weg

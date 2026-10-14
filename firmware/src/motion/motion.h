@@ -35,7 +35,7 @@ void stand();
 void sit();
 
 // Fahrbefehl, normiert -1..1 (vx vor, vy links, turn + = links drehen).
-// Schaltet in den IK-Modus. Bleibt ein neuer Befehl länger als
+// Wirkt nur im IK-Modus (sonst ignoriert, erst aufstehen). Bleibt ein neuer Befehl länger als
 // WALK_TIMEOUT_MS aus (Verbindung weg), hält der Roboter an.
 void walk(float vx, float vy, float turn);
 void stopWalking();

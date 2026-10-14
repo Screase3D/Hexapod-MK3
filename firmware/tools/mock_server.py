@@ -268,7 +268,7 @@ def telemetry():
         "cam": {"clients": 1, "err": 0, "fps": 12.4, "kb": 23, "kbps": 2300, "awake": True, "wake_ms": 640, "wakes": 3,
                 **({"bt_fs": state["camera"]["bt_framesize"]} if PAD["enabled"] and state["camera"]["bt_framesize"] else {})},
         "motion": motion_tel(), "led": led_state(), "pad": pad_tel(), "log": log_tel(),
-        "wifi": wifi_tel(), "heap": 182000, "ws": 1,
+        "wifi": wifi_tel(), "heap": 182000, "ws": 1, "ws_drop": 0,
     }
 
 
@@ -392,8 +392,9 @@ def handle(cmd):
     if c == "client_log":  # wie die Firmware: ins Ereignisprotokoll, ohne Antwort
         ev("warn", "Oberfläche: " + str(cmd.get("text", ""))[:100])
         return None
-    if c == "walk":  # wie die Firmware: ohne Antwort
-        state["mode"] = "pose"
+    if c == "walk":  # wie die Firmware: ohne Antwort, nur im IK-Modus
+        if state["mode"] != "pose":
+            return None
         state["walk"] = [float(cmd.get(k, 0)) for k in ("vx", "vy", "turn")]
         state["walk_t"] = time.time()
         return None

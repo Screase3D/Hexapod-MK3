@@ -455,6 +455,99 @@ static void testSwitchStress() {
   std::printf("Info: Dauertest Gangwechsel: Knie min. %.1f°, Sprung max. %.2f mm\n", knee_min, worst_jump);
 }
 
+// Fahren, loslassen, in eine andere Richtung weiter (zufällig, auch mit Drehen): Muss ein
+// Bein am Rand der Reichweite auf seinen Nachbarn warten, bremst der Körper – kein Fuß
+// außer Reichweite, das Knie knickt nicht ein
+static void testRedirect() {
+  Vec3 n[6];
+  neutralFeet(n, POSE_LIMITS.stance_default);
+  uint32_t rnd = 777;
+  auto next = [&]() {
+    rnd = rnd * 1664525u + 1013904223u;
+    return (rnd >> 8) / 16777216.0f;
+  };
+  float knee_min = 1e9f;
+  int ik_fail = 0, adjacent = 0;
+  for (int sc = 0; sc < 3000; ++sc) {
+    gait::Gait g = makeGait(TYPES[sc % 3], n);
+    GaitWatch w(g);
+    float a[3], b[3];
+    for (int k = 0; k < 3; ++k) {
+      a[k] = 2 * next() - 1;
+      b[k] = 2 * next() - 1;
+    }
+    for (int k = 0; k < 3; ++k) {
+      if (next() < 0.3f) a[k] = a[k] > 0 ? 1.0f : -1.0f;
+      if (next() < 0.3f) b[k] = b[k] > 0 ? 1.0f : -1.0f;
+    }
+    const int t1 = 40 + static_cast<int>(next() * 160), rel = static_cast<int>(next() * 50);
+    g.setCommand(a[0], a[1], a[2]);
+    for (int k = 0; k < t1; ++k) {
+      g.update(DT, n);
+      w.step(g);
+    }
+    g.setCommand(0, 0, 0);
+    for (int k = 0; k < rel; ++k) {
+      g.update(DT, n);
+      w.step(g);
+    }
+    g.setCommand(b[0], b[1], b[2]);
+    for (int k = 0; k < 150; ++k) {
+      g.update(DT, n);
+      w.step(g);
+    }
+    knee_min = std::fmin(knee_min, w.knee_min);
+    ik_fail += w.ik_fail;
+    adjacent += w.adjacent;
+  }
+  CHECK(ik_fail == 0);
+  CHECK(adjacent == 0);
+  CHECK(knee_min > KNEE_MIN_DEG - 0.5f);
+  std::printf("Info: 3000 Richtungswechsel: Knie min. %.1f°, IK-Fehler %d\n", knee_min, ik_fail);
+}
+
+// Grenzen ändern sich im Lauf (Richtung, Schrittdauer, Fußhub): das Tempo gleitet auf den
+// neuen Höchstwert, statt in einem Regelschritt gekappt zu werden
+static void testSmoothLimits() {
+  Vec3 n[6];
+  neutralFeet(n, POSE_LIMITS.stance_default);
+  struct Case {
+    int type;
+    float a[3], b[3];
+    int change;  // 0 Richtung, 1 Schrittdauer 0,3 -> 0,4 s, 2 Fußhub 15 -> 25 mm
+  };
+  const Case cases[] = {{0, {1, 0, 0}, {0, 1, 0}, 0}, {1, {1, 0, 0}, {0, 1, 0}, 0}, {0, {1, 0, 0}, {-1, 0, 0}, 0},
+                        {0, {1, 0, 0}, {1, 0, 0}, 1}, {0, {1, 0, 0}, {1, 0, 0}, 2}};
+  float worst = 0;
+  for (const Case& c : cases) {
+    gait::Params p = firmwareParams(TYPES[c.type]);
+    if (c.change == 1) p.swing_s = 0.3f;
+    gait::Gait g = makeGait(TYPES[c.type], n, &p);
+    g.setCommand(c.a[0], c.a[1], c.a[2]);
+    for (int k = 0; k < 200; ++k) g.update(DT, n);
+    GaitWatch w(g);
+    if (c.change == 1) {
+      p.swing_s = 0.4f;
+      g.setParams(p);
+    }
+    if (c.change == 2) {
+      p.step_height = GAIT_LIMITS.height_max;
+      p.max_stride = gaitStrideMax(p.step_height);
+      g.setParams(p);
+      setReach(g, p.step_height);
+    }
+    g.setCommand(c.b[0], c.b[1], c.b[2]);
+    for (int k = 0; k < 200; ++k) {
+      g.update(DT, n);
+      w.step(g);
+    }
+    w.check(0.5f);
+    worst = std::fmax(worst, w.worst_acc);
+  }
+  CHECK(worst < 1000.0f);  // vorher bis 4800 mm/s² (Tempo in einem Regelschritt gekappt)
+  std::printf("Info: Grenzen ändern sich im Lauf: Beschleunigung max. %.0f mm/s²\n", worst);
+}
+
 // Anlaufen aus dem Stillstand: Das Bein mit dem spätesten Schwungfenster wandert
 // bis zu seinem ersten Schritt mit; die Anlauf-Rampe hält seine Auslenkung nahe an
 // der des eingeschwungenen Laufs (halbe Schrittlänge). Ohne sie wäre es beim
@@ -521,6 +614,8 @@ int main() {
   testStartAndSwitch();
   testWalkingSwitch();
   testSwitchStress();
+  testRedirect();
+  testSmoothLimits();
   testStartExcursion();
   testCadence();
   std::printf("%d Prüfungen, %d Fehler\n", g_checks, g_failed);

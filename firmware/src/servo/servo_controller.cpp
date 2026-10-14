@@ -193,15 +193,17 @@ String ServoController::inhibitReason() {
 
 // --- Sollwerte -----------------------------------------------------------------
 
+// Ungültige Sollwerte (NaN/unendlich) werden ignoriert – die Rampe würde damit sonst
+// ungebremst über die absoluten Grenzen laufen
 void ServoController::setPulseUs(int id, float us) {
-  if (id < 0 || id >= NUM_SERVOS) return;
+  if (id < 0 || id >= NUM_SERVOS || !isfinite(us)) return;
   lock();
   ch_[id].target_us = clampUs(us);
   unlock();
 }
 
 float ServoController::setAngleDeg(int id, float deg) {
-  if (id < 0 || id >= NUM_SERVOS) return 0.0f;
+  if (id < 0 || id >= NUM_SERVOS || !isfinite(deg)) return 0.0f;
   lock();
   float clamped = cal_.clampDeg(id, deg);
   ch_[id].target_us = clampUs(cal_.degToUs(id, clamped));
@@ -213,6 +215,10 @@ uint32_t ServoController::setAnglesDeg(const float* deg) {
   uint32_t clamped = 0;
   lock();
   for (int i = 0; i < NUM_SERVOS; ++i) {
+    if (!isfinite(deg[i])) {  // alten Sollwert behalten
+      clamped |= 1u << i;
+      continue;
+    }
     float d = cal_.clampDeg(i, deg[i]);
     if (d != deg[i]) clamped |= 1u << i;
     ch_[i].target_us = clampUs(cal_.degToUs(i, d));
@@ -222,12 +228,14 @@ uint32_t ServoController::setAnglesDeg(const float* deg) {
 }
 
 void ServoController::setAllPulseUs(float us) {
+  if (!isfinite(us)) return;
   lock();
   for (auto& c : ch_) c.target_us = clampUs(us);
   unlock();
 }
 
 void ServoController::setAllAngleDeg(float deg) {
+  if (!isfinite(deg)) return;
   lock();
   for (int i = 0; i < NUM_SERVOS; ++i) ch_[i].target_us = clampUs(cal_.degToUs(i, deg));
   unlock();
