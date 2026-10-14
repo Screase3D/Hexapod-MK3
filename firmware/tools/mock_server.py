@@ -129,7 +129,9 @@ def wifi_json():
             ap["off_in_s"] = int(state["wifi_ap_off_at"] - time.time())
     sta = {"state": state["wifi_sta"], "ssid": state["wifi_ssid"]}
     if connected:
-        sta.update(ip="192.168.178.57", rssi=-52, channel=6, tries=2, connect_ms=4200)
+        # Empfang schwankt etwas (wie WiFi.RSSI() je Beacon)
+        sta.update(ip="192.168.178.57", rssi=-52 + round(2 * math.sin(time.time() * 1.7)), channel=6, tries=2,
+                   connect_ms=4200)
     if state["wifi_sta"] == "failed":
         sta.update(reason=state["wifi_reason"], retry_in=8)
     return {"mode": ("ap+sta" if connected else "ap") if state["wifi_ap"] else "sta",

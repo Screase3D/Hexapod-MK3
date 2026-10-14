@@ -4,7 +4,10 @@
 #include <WiFi.h>
 #include <errno.h>
 #include <esp_http_server.h>
+#include <sys/select.h>
 #include <sys/socket.h>
+
+#include <atomic>
 
 #include "config.h"
 #include "generated/web_assets.h"
@@ -30,6 +33,9 @@ constexpr size_t MAX_WS_FRAME_LEN = 2048;
 httpd_handle_t g_server = nullptr;
 volatile uint32_t g_last_cmd_ms = 0;
 volatile int g_ws_clients = 0;
+// Telemetrie und Live-Daten, die ausgelassen wurden, weil das WLAN nicht nachkam
+std::atomic<uint32_t> g_ws_dropped{0};
+std::atomic<int> g_queued[2] = {{0}, {0}};  // noch nicht gesendete Aufträge: [0] Telemetrie, [1] Live
 
 // Clients der Live-Ansicht (nur im HTTP-Server-Task benutzt); g_live_until für loop()
 struct LiveSub {
@@ -477,6 +483,17 @@ struct BroadcastJob {
   bool live;  // nur an Clients der Live-Ansicht
 };
 
+// Hat der Socket gerade Platz im Sendepuffer? (lwIP meldet "beschreibbar", solange
+// mindestens die Hälfte frei ist.) Ohne Platz würde send() den Server-Task blockieren –
+// und mit ihm alle eingehenden Befehle, auch die Fahrbefehle.
+bool socketWritable(int fd) {
+  fd_set w;
+  FD_ZERO(&w);
+  FD_SET(fd, &w);
+  timeval tv = {0, 0};
+  return select(fd + 1, nullptr, &w, nullptr, &tv) > 0 && FD_ISSET(fd, &w);
+}
+
 // Läuft im Kontext des HTTP-Server-Tasks (httpd_queue_work) -> thread-sicher
 void broadcastWork(void* arg) {
   BroadcastJob* job = static_cast<BroadcastJob*>(arg);
@@ -487,7 +504,14 @@ void broadcastWork(void* arg) {
   if (httpd_get_client_list(g_server, &count, fds) == ESP_OK) {
     for (size_t i = 0; i < count; ++i) {
       if (httpd_ws_get_fd_info(g_server, fds[i]) != HTTPD_WS_CLIENT_WEBSOCKET) continue;
+      ++ws;
       if (job->live && !liveSubscribed(fds[i], now)) continue;
+      // Telemetrie und Live-Daten kommen ohnehin gleich neu: kommt das WLAN nicht nach,
+      // diese Nachricht für diesen Client auslassen statt zu warten
+      if (!socketWritable(fds[i])) {
+        g_ws_dropped.fetch_add(1);
+        continue;
+      }
       httpd_ws_frame_t f = {};
       f.type = HTTPD_WS_TYPE_TEXT;
       f.payload = (uint8_t*)job->data;
@@ -499,10 +523,10 @@ void broadcastWork(void* arg) {
         httpd_sess_trigger_close(g_server, fds[i]);
         continue;
       }
-      ++ws;
     }
   }
   if (!job->live) g_ws_clients = ws;
+  g_queued[job->live ? 1 : 0].fetch_sub(1);
   free(job->data);
   delete job;
 }
@@ -564,6 +588,12 @@ bool begin() {
 
 static void queueBroadcast(const String& msg, bool live) {
   if (!g_server || msg.isEmpty()) return;
+  // Hängt der Server-Task noch an älteren Nachrichten, die neue nicht auch noch anstellen
+  std::atomic<int>& queued = g_queued[live ? 1 : 0];
+  if (queued.load() >= 2) {
+    g_ws_dropped.fetch_add(1);
+    return;
+  }
   BroadcastJob* job = new BroadcastJob;
   job->live = live;
   job->len = msg.length();
@@ -573,7 +603,9 @@ static void queueBroadcast(const String& msg, bool live) {
     return;
   }
   memcpy(job->data, msg.c_str(), job->len);
+  queued.fetch_add(1);
   if (httpd_queue_work(g_server, broadcastWork, job) != ESP_OK) {
+    queued.fetch_sub(1);
     free(job->data);
     delete job;
   }
@@ -584,6 +616,7 @@ void broadcastLive(const String& msg) { queueBroadcast(msg, true); }
 bool liveWanted() { return g_live_until && (int32_t)(g_live_until - millis()) > 0; }
 
 int wsClientCount() { return g_ws_clients; }
+uint32_t wsDropped() { return g_ws_dropped.load(); }
 
 uint32_t msSinceLastCommand() { return millis() - g_last_cmd_ms; }
 

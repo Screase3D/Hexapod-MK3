@@ -34,6 +34,8 @@ bool liveWanted();
 // Sendet nur an diese Clients
 void broadcastLive(const String& msg);
 int wsClientCount();
+// Telemetrie-/Live-Nachrichten, die ausgelassen wurden, weil das WLAN nicht nachkam (seit dem Start)
+uint32_t wsDropped();
 // Zeit seit der letzten Nachricht eines Clients (für Steuer-Watchdog)
 uint32_t msSinceLastCommand();
 

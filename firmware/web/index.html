@@ -840,6 +840,30 @@
               <p class="muted small" id="wifi-hint"></p>
             </div>
 
+            <div class="card" id="rssi-card">
+              <div class="card-head">
+                <h2><svg class="ic"><use href="#i-wifi"/></svg>Signal messen</h2>
+                <span class="mono small" id="rssi-now">–</span>
+              </div>
+              <div class="rssi-meter" aria-hidden="true"><div class="rssi-fill" id="rssi-fill"></div></div>
+              <p class="muted small">Zum Vergleichen von Antenne und Einbauort: Roboter nicht bewegen, messen, dann Antenne
+                umstecken oder verlegen und erneut messen. Die Messungen bleiben auch nach einem Neustart erhalten.</p>
+              <div class="rssi-controls">
+                <input id="rssi-label" maxlength="30" placeholder="Bezeichnung, z. B. Antenne oben" aria-label="Bezeichnung der Messung">
+                <button id="rssi-start" class="btn btn-small btn-primary" type="button">10 s messen</button>
+              </div>
+              <div class="table-scroll" id="rssi-wrap" hidden>
+                <table class="hist-table rssi-table">
+                  <thead><tr><th>Messung</th><th>Mittel</th><th>Bereich</th><th>ggü. erster</th></tr></thead>
+                  <tbody id="rssi-rows"></tbody>
+                </table>
+              </div>
+              <div class="row wrap rssi-foot" id="rssi-foot" hidden>
+                <span class="muted small" id="rssi-verdict"></span>
+                <button id="rssi-clear" class="btn btn-small" type="button">Liste leeren</button>
+              </div>
+            </div>
+
               <div class="card">
                 <h2><svg class="ic"><use href="#i-chip"/></svg>Version</h2>
                 <dl class="kv" id="about-info"></dl>

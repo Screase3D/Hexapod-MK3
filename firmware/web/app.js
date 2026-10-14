@@ -266,16 +266,34 @@ function setPill(id, text, cls = '') {
 
 const RTT_SLOW_MS = 250;
 
+// Vom Roboter ausgelassene Nachrichten (WLAN kam nicht nach), Verlauf der letzten Minute
+function noteWsDrops(n) {
+  if (typeof n !== 'number') return;
+  const now = Date.now();
+  const h = S.wsDrops || (S.wsDrops = []);
+  if (h.length && n < h[h.length - 1][1]) h.length = 0;  // Neustart des Roboters
+  h.push([now, n]);
+  while (h.length > 2 && now - h[0][0] > 60000) h.shift();
+}
+
+function wsDropsPerMin() {
+  const h = S.wsDrops;
+  return S.wsOpen && h && h.length > 1 ? h[h.length - 1][1] - h[0][1] : 0;
+}
+
 function renderConnection() {
   if (!S.wsOpen) S.rtt = 0;
   const rtt = S.rtt ? Math.round(S.rtt) : 0;
-  const slow = S.wsOpen && rtt > RTT_SLOW_MS;
+  const drops = wsDropsPerMin();
+  const slow = S.wsOpen && (rtt > RTT_SLOW_MS || drops >= 20);
   const down = wsDown();
   setPill('pill-conn', S.wsOpen ? (slow ? 'Verbindung langsam' : 'Verbunden') : (down ? 'Getrennt' : 'Verbinde …'),
     S.wsOpen ? (slow ? 'pill-warn' : 'pill-ok') : (down ? 'pill-bad' : 'pill-warn'));
   const rssi = S.tel && S.tel.wifi && S.tel.wifi.rssi;
   $('pill-conn').title = S.wsOpen
-    ? `Antwortzeit ${rtt || '–'} ms${rssi ? ` · WLAN ${rssi} dBm (${signalBars(rssi)})` : ''}${slow ? ' – Steuerung reagiert verzögert (WLAN-Empfang?)' : ''}`
+    ? `Antwortzeit ${rtt || '–'} ms${rssi ? ` · WLAN ${rssi} dBm (${signalBars(rssi)})` : ''}` +
+      `${drops ? ` · ${drops} Nachrichten in der letzten Minute ausgelassen (WLAN kam nicht nach)` : ''}` +
+      `${slow ? ' – Steuerung reagiert verzögert (WLAN-Empfang?)' : ''}`
     : '';
   $('sb-conn').classList.toggle('on', S.wsOpen);
   $('sb-conn-text').textContent = S.wsOpen ? `Verbunden · ${location.hostname}${rtt ? ` · ${rtt} ms` : ''}` : (down ? 'Getrennt' : 'Verbinde …');
@@ -328,6 +346,8 @@ function renderTelemetry() {
   const t = S.tel;
   const sv = t.servo;
   v3Telemetry(t);
+  noteWsDrops(t.ws_drop);
+  rssiTelemetry(t);
   renderPad(t.pad);
   renderLogState(t.log);
   if (FPV.open) renderFpv(t);
@@ -3330,6 +3350,108 @@ async function loadWifi() {
   } catch (e) { /* ignorieren */ }
 }
 
+// ------------------------------------------------------- Signal messen --
+// Empfangsstärke (RSSI aus der Telemetrie, 4 Hz) 10 s lang mitteln und mehrere Messungen
+// vergleichen, z. B. mit/ohne externe Antenne oder verschiedene Einbauorte.
+const RSSI_MEASURE_MS = 10000;
+const RSSI = { run: null, list: [] };
+
+function rssiLoad() {
+  try { RSSI.list = JSON.parse(localStorage.getItem('rssiTests') || '[]').slice(-12); } catch (e) { RSSI.list = []; }
+}
+
+function rssiSave() {
+  try { localStorage.setItem('rssiTests', JSON.stringify(RSSI.list)); } catch (e) { /* kein Speicher */ }
+}
+
+function rssiTelemetry(t) {
+  const rssi = t.wifi && typeof t.wifi.rssi === 'number' ? t.wifi.rssi : null;
+  $('rssi-now').textContent = rssi === null ? (t.wifi && t.wifi.mode === 'ap' ? 'nur im Heimnetz' : '–')
+    : `${rssi} dBm ${signalBars(rssi)}`;
+  $('rssi-fill').style.width = rssi === null ? '0' : `${clamp((rssi + 95) / 65, 0, 1) * 100}%`;
+  const r = RSSI.run;
+  if (!r) return;
+  if (rssi !== null) r.samples.push(rssi);
+  const left = r.until - Date.now();
+  if (left > 0) $('rssi-start').textContent = `Messe … ${Math.ceil(left / 1000)} s`;
+  else rssiFinish();
+}
+
+function rssiFinish() {
+  const r = RSSI.run;
+  if (!r) return;
+  RSSI.run = null;
+  clearTimeout(r.timer);
+  $('rssi-start').textContent = '10 s messen';
+  $('rssi-start').disabled = false;
+  if (r.samples.length < 5) {
+    toast('Kein Empfangswert – messen geht nur, wenn der Roboter im Heimnetz ist', true);
+    return;
+  }
+  const avg = r.samples.reduce((a, b) => a + b, 0) / r.samples.length;
+  RSSI.list.push({ label: r.label, at: Date.now(), avg: Math.round(avg * 10) / 10,
+    min: Math.min(...r.samples), max: Math.max(...r.samples), n: r.samples.length });
+  RSSI.list = RSSI.list.slice(-12);
+  rssiSave();
+  renderRssi();
+}
+
+function renderRssi() {
+  const list = RSSI.list;
+  $('rssi-wrap').hidden = $('rssi-foot').hidden = !list.length;
+  const body = $('rssi-rows');
+  body.innerHTML = '';
+  const first = list.length ? list[0].avg : 0;
+  const dec = (v) => v.toFixed(1).replace('.', ',');
+  list.forEach((m, i) => {
+    const tr = document.createElement('tr');
+    const d = m.avg - first;
+    const name = document.createElement('td');
+    name.textContent = m.label;
+    name.title = new Date(m.at).toLocaleString('de-DE');
+    tr.appendChild(name);
+    for (const [text, cls] of [[`${dec(m.avg)} dBm`, ''], [`${m.min} … ${m.max}`, ''],
+      [i ? `${d > 0 ? '+' : d < 0 ? '−' : '±'}${dec(Math.abs(d))} dB` : '–', i && d >= 3 ? 'better' : i && d <= -3 ? 'worse' : '']]) {
+      const td = document.createElement('td');
+      td.textContent = text;
+      if (cls) td.className = cls;
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  });
+  // Einordnung der letzten Messung gegenüber der ersten
+  let verdict = '';
+  if (list.length > 1) {
+    const d = list[list.length - 1].avg - first;
+    verdict = Math.abs(d) < 3 ? 'Letzte Messung: kein merklicher Unterschied (unter 3 dB)'
+      : d > 0 ? `Letzte Messung: ${dec(d)} dB besser${d >= 6 ? ' – deutlich (doppelte Reichweite ab ca. 6 dB)' : ''}`
+        : `Letzte Messung: ${dec(-d)} dB schlechter`;
+  }
+  $('rssi-verdict').textContent = verdict;
+}
+
+function bindRssi() {
+  rssiLoad();
+  renderRssi();
+  $('rssi-start').onclick = () => {
+    if (!S.wsOpen) {
+      toast('Keine Verbindung zum Hexapod', true);
+      return;
+    }
+    const label = $('rssi-label').value.trim() || `Messung ${RSSI.list.length + 1}`;
+    RSSI.run = { label, until: Date.now() + RSSI_MEASURE_MS, samples: [],
+      timer: setTimeout(rssiFinish, RSSI_MEASURE_MS + 2000) };  // auch ohne Telemetrie beenden
+    $('rssi-start').disabled = true;
+    $('rssi-start').textContent = 'Messe …';
+    $('rssi-label').value = '';
+  };
+  $('rssi-clear').onclick = () => {
+    RSSI.list = [];
+    rssiSave();
+    renderRssi();
+  };
+}
+
 function signalBars(rssi) {
   const n = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
   return '▂▄▆█'.slice(0, n).padEnd(4, '·');
@@ -4105,6 +4227,7 @@ function init() {
   bindSystem();
   bindImu();
   bindModel();
+  bindRssi();
   selectServo(0);
   showCalView('cal');
   showTab(pageFromHash());

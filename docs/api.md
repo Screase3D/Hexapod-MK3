@@ -134,9 +134,15 @@ Beispiel:
   "cam":   {"clients": 1, "awake": true, "fps": 12.4, "kb": 23, "kbps": 2300, "err": 0,
             "wake_ms": 640, "wakes": 3},
   "heap": 182000,
-  "ws": 1
+  "ws": 1,
+  "ws_drop": 0
 }
 ```
+
+`ws` = verbundene WebSocket-Clients, `ws_drop` = seit dem Start ausgelassene Telemetrie- und
+Live-Nachrichten: Ist der Sendepuffer eines Clients voll (WLAN kommt nicht nach), lässt der Roboter
+diese regelmäßigen Nachrichten für ihn aus, statt zu warten – so bleiben eingehende Befehle (Fahren!)
+nicht hängen. Die Oberfläche zeigt die Anzahl der letzten Minute im Tooltip der Verbindungsanzeige.
 
 `bat.state`: `off` (Überwachung ausgeschaltet – `v` ist dann nur ein ungeprüfter Messwert),
 `usb` (kein Akku), `ok`, `warn`, `critical`. `servo.inhibit` enthält den Grund einer

@@ -779,6 +779,15 @@ rect.pc-paddle { fill: transparent; stroke-dasharray: 3 3; }
 .hist-tip b { font-variant-numeric: tabular-nums; }
 .hist-tip span { color: var(--muted); margin-left: 6px; }
 .hist-empty { font-size: 0.82rem; color: var(--muted); padding: 18px 0; }
+/* Signal messen */
+.rssi-meter { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin-bottom: 10px; }
+.rssi-fill { height: 100%; width: 0; background: var(--accent); border-radius: 4px; transition: width 0.25s; }
+.rssi-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.rssi-controls input { flex: 1 1 180px; min-width: 0; }
+.rssi-table td:first-child, .rssi-table th:first-child { text-align: left; white-space: normal; }
+.rssi-table .better { color: var(--ok); font-weight: 650; }
+.rssi-table .worse { color: var(--danger-text); font-weight: 650; }
+.rssi-foot { justify-content: space-between; margin-top: 8px; }
 .hist-table-wrap { margin-top: 10px; }
 .hist-table-wrap summary { cursor: pointer; color: var(--muted); }
 .table-scroll { max-height: 260px; overflow: auto; margin-top: 6px; }

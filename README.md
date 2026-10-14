@@ -221,7 +221,7 @@ oben rechts. Jede Seite hat eine eigene Adresse, z. B. `http://hexapod.local/#ka
 | **Systemübersicht** | Kennzahlen (Akku, WLAN mit Antwortzeit, Regelung, Kamera, Speicher, Laufzeit), **Verlauf** der letzten 30 min (Akkuspannung, WLAN-Signal, Chip-Temperatur, Speicher; mit Tabelle), Komponenten, I²C-Scan, Neustart, **Ereignisse** seit dem Start (Neustartgrund, WLAN, Not-Aus, Akku, Controller, Updates; Punkt im Menü bei neuen Warnungen) |
 | **LEDs** | Augen: Farbe und Effekt je Zustand (Servos aus, steht, läuft, Vorderbeine, Geste, …), eine Farbe für alles oder aus, Helligkeit, Board-LED; Vorschau |
 | **Controller** | Großer Controller mit allen Tasten und ihrer Funktion (antippen zum Umbelegen, Live-Anzeige, Sticks/Trigger je Modus); Xbox-Controller per Bluetooth am Roboter (koppeln, vergessen) oder am Handy/PC über den Browser; Tempo/Totzone/Kennlinie, Sticks tauschen |
-| **Einstellungen** | WLAN, Servo-Stellgeschwindigkeit, Lagesensor (Einbaulage, Nullpunkt, Gyro), Akkuüberwachung, Farbschema (automatisch/dunkel/hell), Tastenkürzel, Version (Firmware, Git-Stand, Build-Datum), **Firmware-Update** |
+| **Einstellungen** | WLAN, **Signal messen** (Empfang 10 s mitteln und vergleichen, z. B. mit/ohne Antenne), Servo-Stellgeschwindigkeit, Lagesensor (Einbaulage, Nullpunkt, Gyro), Akkuüberwachung, Farbschema (automatisch/dunkel/hell), Tastenkürzel, Version (Firmware, Git-Stand, Build-Datum), **Firmware-Update** |
 
 ## Oberfläche ohne Roboter entwickeln
 

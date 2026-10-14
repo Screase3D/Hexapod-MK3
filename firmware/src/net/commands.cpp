@@ -281,6 +281,7 @@ void buildTelemetry(JsonDocument& doc) {
   if (sta) w["rssi"] = WiFi.RSSI();
   doc["heap"] = ESP.getFreeHeap();
   doc["ws"] = web::wsClientCount();
+  doc["ws_drop"] = web::wsDropped();
   JsonObject ctl = doc["ctl"].to<JsonObject>();
   ctl["hz"] = roundf(control_stats::hz.load() * 10.0f) / 10.0f;
   ctl["max_us"] = control_stats::max_work_us.load();

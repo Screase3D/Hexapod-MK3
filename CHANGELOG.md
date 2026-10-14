@@ -4,6 +4,18 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.12.0
+
+- **Verbindung bei schwachem WLAN robuster:** Kam das WLAN nicht nach (voller Sendepuffer), wartete der
+  Webserver bis zu 4 s beim Senden der Telemetrie – in der Zeit blieben auch eingehende Befehle liegen, der
+  Roboter konnte beim Laufen kurz anhalten. Mit den neuen 20-Hz-Daten der 3D-Ansicht wäre das häufiger
+  passiert. Jetzt lässt er regelmäßige Nachrichten (Telemetrie, Live-Daten) für einen Client aus, solange
+  dessen Puffer voll ist, und stellt nicht mehr als zwei davon an. Wie oft das in der letzten Minute
+  vorkam, steht im Tooltip der Verbindungsanzeige (Telemetrie `ws_drop`).
+- **Signal messen** (Einstellungen): Empfangsstärke live und als 10-s-Mittel mit Bezeichnung, mehrere
+  Messungen untereinander mit dem Unterschied zur ersten (z. B. „ohne Antenne“, „Antenne oben“). Bleibt nach
+  einem Neustart erhalten – praktisch zum Prüfen der externen Antenne.
+
 ## 0.11.1
 
 - 3D-Ansicht: Die Tibia hat jetzt die gebogene Form des Bauteils aus dem CAD (vom Knie erst nach außen,
