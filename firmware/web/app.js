@@ -1028,7 +1028,7 @@ function renderWalk(m) {
       if (g.cadence) info.push(`Schritt ${(g.swing_s * g.cadence).toFixed(2).replace('.', ',')} s`);
     }
     info.push(`max. ${g.max_speed} mm/s · ${g.max_turn} °/s`);
-    if (g.active && g.active !== g.type) info.push('Gangart wechselt nach dem Anhalten');
+    if (g.switching) info.push(g.active !== g.type ? 'Gangart wechselt – passt das Tempo an' : 'Gangart wechselt – Beine finden in den Takt');
   }
   $('walk-info').textContent = info.join(' · ');
 }
@@ -1888,7 +1888,7 @@ function applyProfile(p) {
   if (!send('pose', pose)) return;
   send('gait', { type: p.type, swing_s: p.swing_s, step_height: p.step_height });
   const m = S.tel && S.tel.motion;
-  toast(`Profil „${p.name}“${m && m.gait && m.gait.walking && m.gait.active !== p.type ? ' – Gangart nach dem Anhalten' : ''}`);
+  toast(`Profil „${p.name}“${m && m.gait && m.gait.walking && m.gait.active !== p.type ? ' – Gangart wechselt im Lauf' : ''}`);
 }
 
 // aktives Profil: Haltung und Gang stimmen (fast) überein

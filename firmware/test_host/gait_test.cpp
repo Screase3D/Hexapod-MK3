@@ -37,6 +37,7 @@ static int g_checks = 0;
 constexpr float DT = 0.02f;  // 50 Hz wie der Regel-Task
 const gait::Type TYPES[] = {gait::Type::Tripod, gait::Type::Ripple, gait::Type::Wave};
 const int MAX_SWING[] = {3, 2, 1};
+const int NEIGHBORS[6][2] = {{1, 3}, {0, 2}, {1, 5}, {0, 4}, {3, 5}, {2, 4}};  // vl ml hl hr mr vr im Kreis
 
 struct Cmd {
   float vx, vy, turn;
@@ -71,6 +72,7 @@ static void setReach(gait::Gait& g, float step_height) {
   for (int i = 0; i < 6; ++i) coxa[i] = coxaWorld(pose, LEG_MOUNTS[i]);
   g.setReach(coxa, gait::minFootRadius(LEG_GEOMETRY, POSE_LIMITS.stance_default, h, step_height, KNEE_MIN_DEG),
              gait::maxFootRadius(LEG_GEOMETRY, h));
+  g.setSwingGuard(LEG_GEOMETRY, h, KNEE_MIN_DEG);
 }
 
 static gait::Gait makeGait(gait::Type t, const Vec3 neutral[6], const gait::Params* params = nullptr) {
@@ -171,7 +173,10 @@ static void testWalking(bool extreme) {
         int swinging = 0;
         for (int i = 0; i < 6; ++i) {
           const Vec3& f = g.foot(i);
-          if (g.swinging(i)) ++swinging;
+          if (g.swinging(i)) {
+            ++swinging;
+            CHECK(!g.swinging(NEIGHBORS[i][0]) && !g.swinging(NEIGHBORS[i][1]));  // nie zwei Nachbarn
+          }
           float jump = std::hypot(std::hypot(f.x - prev[i].x, f.y - prev[i].y), f.z - prev[i].z);
           if (jump > max_jump) max_jump = jump;
           prev[i] = f;
@@ -210,7 +215,9 @@ static void testWalking(bool extreme) {
               a.tibia > ASSEMBLY_POSE.tibia + 70)
             ++limit_hits;
         }
-        CHECK(swinging <= MAX_SWING[ti]);
+        // Anlaufen: das Bein mit dem spätesten Schwung setzt in Kurven ggf. vorher um
+        // (Reichweite), dann auch einmal ein Bein mehr in der Luft
+        if ((k + 1) * DT > 2 * gait::cycleTime(TYPES[ti], p.swing_s)) CHECK(swinging <= MAX_SWING[ti]);
         have_prev = true;
       }
       CHECK(!g.idle());
@@ -224,9 +231,8 @@ static void testWalking(bool extreme) {
               "Knie min. %.1f°, Dreifuß vorwärts %.0f mm/s\n",
               extreme ? "Extremwerte" : "Standard", max_jump, max_slip, max_rate_stance, max_rate_swing,
               jmin[0], jmax[0], jmin[1], jmax[1], jmin[2], jmax[2], knee_min, speed_fwd);
-  // Kniewinkel: die Reichweitengrenze rechnet mit einem Schritt genau zum Körper
-  // hin; beim Anlaufen in Kurven (Welle, 25 mm Hub) geht es kurz etwas darunter
-  CHECK(knee_min > KNEE_MIN_DEG - (extreme ? 5.0f : 1.0f));
+  // Kniewinkel: Reichweitengrenze, vorzeitiges Umsetzen am Rand und Schwungbahn-Schutz
+  CHECK(knee_min > KNEE_MIN_DEG - 0.5f);
   CHECK(ik_fail == 0);
   CHECK(limit_hits == 0);
   CHECK(max_slip < 0.05f);
@@ -268,7 +274,7 @@ static void testStop() {
   }
 }
 
-// Anfahren: die erste Beingruppe hebt sofort ab; Gangart-Wechsel erst im Stillstand
+// Anfahren: die erste Beingruppe hebt sofort ab; Gangart-Wechsel im Stillstand sofort
 static void testStartAndSwitch() {
   Vec3 n[6];
   neutralFeet(n, POSE_LIMITS.stance_default);
@@ -278,15 +284,175 @@ static void testStartAndSwitch() {
   g.update(DT, n);
   CHECK(g.swingMask() == 0b010101);  // vl, hl, mr
 
-  gait::Params p = g.params();
-  p.type = gait::Type::Wave;
-  g.setParams(p);
-  for (int k = 0; k < 20; ++k) g.update(DT, n);
-  CHECK(g.activeType() == gait::Type::Tripod);  // läuft noch
   g.setCommand(0, 0, 0);
   for (int k = 0; k < 300 && !g.idle(); ++k) g.update(DT, n);
   CHECK(g.idle());
+  gait::Params p = g.params();
+  p.type = gait::Type::Wave;
+  g.setParams(p);
   CHECK(g.activeType() == gait::Type::Wave);
+}
+
+// Überwacht einen Lauf Schritt für Schritt: rutschen Standfüße (Welt), sind zwei
+// Nachbarbeine gleichzeitig in der Luft, springen Füße, sind die Gelenke erreichbar?
+struct GaitWatch {
+  BodyPose pose{0, 0, POSE_LIMITS.height_default, 0, 0, 0};
+  float bx = 0, by = 0, byaw = 0, pvx = 0, pvy = 0;
+  Vec3 planted[6] = {}, prev[6] = {};
+  bool was_stance[6] = {};
+  float worst_acc = 0, worst_slip = 0, worst_jump = 0, knee_min = 1e9f;
+  int adjacent = 0, too_many = 0, ik_fail = 0, limit_hits = 0, swinging = 0;
+
+  explicit GaitWatch(const gait::Gait& g) {
+    for (int i = 0; i < 6; ++i) prev[i] = g.foot(i);
+    pvx = g.speedX();
+    pvy = g.speedY();
+  }
+  void step(const gait::Gait& g) {
+    worst_acc = std::fmax(worst_acc, std::hypot(g.speedX() - pvx, g.speedY() - pvy) / DT);
+    pvx = g.speedX();
+    pvy = g.speedY();
+    float cy = std::cos(byaw), sy = std::sin(byaw);
+    bx += (cy * g.speedX() - sy * g.speedY()) * DT;
+    by += (sy * g.speedX() + cy * g.speedY()) * DT;
+    byaw += g.turnRate() * DT;
+    cy = std::cos(byaw);
+    sy = std::sin(byaw);
+    swinging = 0;
+    for (int i = 0; i < 6; ++i) {
+      const Vec3& f = g.foot(i);
+      if (g.swinging(i)) {
+        ++swinging;
+        if (g.swinging(NEIGHBORS[i][0]) || g.swinging(NEIGHBORS[i][1])) ++adjacent;
+      }
+      worst_jump = std::fmax(worst_jump, std::hypot(std::hypot(f.x - prev[i].x, f.y - prev[i].y), f.z - prev[i].z));
+      prev[i] = f;
+      Vec3 w = {bx + cy * f.x - sy * f.y, by + sy * f.x + cy * f.y, f.z};
+      // (im Stillstand rücken die Füße bis zu 2 mm auf die Neutralpunkte – gewollt)
+      const bool stance = !g.swinging(i) && !g.idle();
+      if (stance && was_stance[i]) worst_slip = std::fmax(worst_slip, std::hypot(w.x - planted[i].x, w.y - planted[i].y));
+      if (stance && !was_stance[i]) planted[i] = w;
+      was_stance[i] = stance;
+      JointAngles a;
+      if (!legIk(LEG_GEOMETRY, LEG_MOUNTS[i], bodyToLeg(LEG_MOUNTS[i], worldToBody(pose, f)), a)) {
+        ++ik_fail;
+        continue;
+      }
+      knee_min = std::fmin(knee_min, 90.0f + a.tibia);
+      if (std::fabs(a.coxa) > 60 || a.femur < ASSEMBLY_POSE.femur - 70 || a.femur > ASSEMBLY_POSE.femur + 70 ||
+          a.tibia < ASSEMBLY_POSE.tibia - 70 || a.tibia > ASSEMBLY_POSE.tibia + 70)
+        ++limit_hits;
+    }
+    if (swinging > 3) ++too_many;
+  }
+  void check(float knee_tol) const {
+    CHECK(adjacent == 0);
+    CHECK(too_many == 0);
+    CHECK(ik_fail == 0);
+    CHECK(limit_hits == 0);
+    CHECK(worst_slip < 0.05f);
+    CHECK(worst_jump < 9.0f);
+    CHECK(knee_min > KNEE_MIN_DEG - knee_tol);
+  }
+};
+
+// Gangwechsel im Lauf (alle Richtungen, geradeaus, Kurve, seitwärts): fließend –
+// Füße rutschen nicht, nie zwei Nachbarbeine gleichzeitig in der Luft, Gelenke
+// erreichbar, Tempo ohne Sprung, danach eingeschwungen im neuen Muster
+static void testWalkingSwitch() {
+  Vec3 n[6];
+  neutralFeet(n, POSE_LIMITS.stance_default);
+  const Cmd SW_CMDS[] = {{1, 0, 0, "vor"}, {0.8f, 0, 0.6f, "Kurve"}, {0, 1, 0, "seitwärts"}};
+  float worst_switch = 0, worst_conv = 0, worst_acc = 0, worst_jump = 0, knee_min = 1e9f;
+  for (int from = 0; from < 3; ++from) {
+    for (int to = 0; to < 3; ++to) {
+      if (from == to) continue;
+      for (const Cmd& c : SW_CMDS) {
+        gait::Gait g = makeGait(TYPES[from], n);
+        g.setCommand(c.vx, c.vy, c.turn);
+        for (int k = 0; k < 200; ++k) g.update(DT, n);  // 4 s einschwingen
+        gait::Params p = g.params();
+        p.type = TYPES[to];
+        g.setParams(p);
+        GaitWatch w(g);
+        float t_switch = -1, t_conv = -1;
+        int over = 0;
+        for (int k = 0; k < 600; ++k) {  // 12 s
+          g.update(DT, n);
+          w.step(g);
+          const float t = (k + 1) * DT;
+          if (t_switch < 0 && g.activeType() == TYPES[to]) t_switch = t;
+          if (t_conv < 0 && !g.transitioning()) t_conv = t;
+          // nach dem Einfinden: nie mehr Beine in der Luft, als die neue Gangart vorsieht
+          if (t_conv > 0 && w.swinging > MAX_SWING[to]) ++over;
+        }
+        w.check(0.5f);
+        CHECK(over == 0);
+        CHECK(t_switch > 0 && t_switch < 1.5f);
+        CHECK(t_conv > 0 && t_conv < 8.0f);
+        CHECK(g.activeType() == TYPES[to] && !g.transitioning() && g.phaseError() == 0.0f);
+        if (c.vx == 1 && c.turn == 0) CHECK_NEAR(g.speedX(), g.maxSpeed(), 0.5);  // wieder volles Tempo
+        worst_switch = std::fmax(worst_switch, t_switch);
+        worst_conv = std::fmax(worst_conv, t_conv);
+        worst_acc = std::fmax(worst_acc, w.worst_acc);
+        worst_jump = std::fmax(worst_jump, w.worst_jump);
+        knee_min = std::fmin(knee_min, w.knee_min);
+      }
+    }
+  }
+  CHECK(worst_acc < 400.0f);  // mm/s²: Tempo gleitet, kein Sprung
+  std::printf("Info: Gangwechsel im Lauf: umgetaktet nach max. %.1f s, eingeschwungen nach max. %.1f s, "
+              "Beschleunigung max. %.0f mm/s², Knie min. %.1f°, Sprung max. %.2f mm\n",
+              worst_switch, worst_conv, worst_acc, knee_min, worst_jump);
+}
+
+// Dauertest: zufällige Gangart-Wechsel und Fahrbefehle in schneller Folge (auch mitten
+// im Umtakten, beim Anhalten und Anlaufen); am Ende Stillstand in der gewählten Gangart
+static void testSwitchStress() {
+  Vec3 n[6];
+  neutralFeet(n, POSE_LIMITS.stance_default);
+  uint32_t rnd = 12345;
+  auto next = [&]() {
+    rnd = rnd * 1664525u + 1013904223u;
+    return (rnd >> 8) / 16777216.0f;  // 0..1
+  };
+  float knee_min = 1e9f, worst_jump = 0;
+  for (int run = 0; run < 6; ++run) {
+    gait::Gait g = makeGait(TYPES[run % 3], n);
+    GaitWatch w(g);
+    float t_next = 0;
+    for (int k = 0; k < 3000; ++k) {  // 60 s
+      const float t = k * DT;
+      if (t >= t_next) {
+        t_next = t + 0.2f + 2.5f * next();
+        const float r = next();
+        if (r < 0.45f) {
+          gait::Params p = g.params();
+          p.type = TYPES[static_cast<int>(next() * 2.999f)];
+          g.setParams(p);
+        } else if (r < 0.6f) {
+          g.setCommand(0, 0, 0);
+        } else if (r < 0.8f) {
+          const Cmd& c = CMDS[static_cast<int>(next() * 9.999f)];
+          g.setCommand(c.vx, c.vy, c.turn);
+        } else {
+          g.setCommand(2 * next() - 1, 2 * next() - 1, 2 * next() - 1);
+        }
+      }
+      g.update(DT, n);
+      w.step(g);
+    }
+    g.setCommand(0, 0, 0);
+    for (int k = 0; k < 500 && !g.idle(); ++k) {
+      g.update(DT, n);
+      w.step(g);
+    }
+    w.check(0.5f);
+    CHECK(g.idle() && g.activeType() == g.params().type && !g.transitioning());
+    knee_min = std::fmin(knee_min, w.knee_min);
+    worst_jump = std::fmax(worst_jump, w.worst_jump);
+  }
+  std::printf("Info: Dauertest Gangwechsel: Knie min. %.1f°, Sprung max. %.2f mm\n", knee_min, worst_jump);
 }
 
 // Anlaufen aus dem Stillstand: Das Bein mit dem spätesten Schwungfenster wandert
@@ -353,6 +519,8 @@ int main() {
   testWalking(true);
   testStop();
   testStartAndSwitch();
+  testWalkingSwitch();
+  testSwitchStress();
   testStartExcursion();
   testCadence();
   std::printf("%d Prüfungen, %d Fehler\n", g_checks, g_failed);

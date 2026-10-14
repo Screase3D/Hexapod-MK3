@@ -78,7 +78,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `pad` | `lx`, `ly`, `rx`, `ry` (−1…1, y oben +), `lt`, `rt` (0…1), `b` (Tasten-Bits: a, b, x, y, lb, rb, view, menu, xbox, ls, rs, up, down, left, right, share, p1–p4) | Gamepad im Browser, wertet die Firmware wie einen Bluetooth-Controller aus. **Ohne Antwort**, etwa alle 50 ms senden; nach 0,3 s ohne Befehl gilt er als getrennt |
 | `alive` | `on` (bool) | „Lebendig“: im Stand ab und zu kleine zufällige Bewegungen, siehe [kinematik.md](kinematik.md#lebendig); wird gespeichert |
 | `wave` | – | rechtes Vorderbein winkt (nur wenn oben) |
-| `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wirkt im Stillstand |
+| `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wechselt auch im Lauf fließend (`motion.gait.switching` = Übergang läuft) |
 | `leveling` | `on` (bool) | Lageausgleich an/aus, siehe [kinematik.md](kinematik.md#lageausgleich) |
 | `imu_cal` | `level` (bool) | Lagesensor kalibrieren (2 s ruhig halten): Gyro-Nullpunkt, mit `level` zusätzlich aktuelle Lage = waagerecht. Fortschritt/Ergebnis in der Telemetrie |
 | `imu_level_reset` | – | Nullpunkt (waagerecht) löschen |
@@ -143,7 +143,7 @@ Sperre (z. B. „Akku leer“). `motion.unreachable` / `motion.clamped` listen B
 Fußpunkt nicht erreichen bzw. an eine Gelenkgrenze stoßen. `motion.posture` (nur im IK-Modus):
 `sitting`, `standing_up`, `standing`, `sitting_down` – gelaufen wird nur in `standing`.
 `motion.gait`: `type` = gewählte,
-`active` = laufende Gangart, `swing` = Bitmaske der Beine in der Luft (Bit 0 = Bein 1),
+`active` = laufende Gangart, `switching` = Gangwechsel im Lauf noch nicht abgeschlossen (nur wenn `true`), `swing` = Bitmaske der Beine in der Luft (Bit 0 = Bein 1),
 `vx`/`vy` in mm/s, `wz` in °/s, `max_*` = Höchstwerte bei den aktuellen Parametern (geradeaus
 bzw. seitwärts bzw. Drehen auf der Stelle, mit Reichweitengrenze), `nominal` = Tempo ohne
 Reichweitengrenze (ist `max_speed` deutlich kleiner, schränkt die Haltung das Laufen ein),

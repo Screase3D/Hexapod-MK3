@@ -269,8 +269,30 @@ phasengesteuert:
    25 % Reserve decken das Beschleunigen ab.
 
 Fahren und Drehen gleichzeitig wird so begrenzt, dass kein Fuß schneller als erlaubt wandert. Die
-Oberfläche zeigt das aktuell mögliche Höchsttempo unter den Joysticks. Ein Wechsel der Gangart wirkt
-erst im Stillstand.
+Oberfläche zeigt das aktuell mögliche Höchsttempo unter den Joysticks.
+
+**Gangart im Lauf wechseln:** Intern läuft ein gemeinsamer Takt; jedes Bein hat einen Versatz dazu,
+im eingeschwungenen Lauf genau den seines Musters. Beim Wechsel:
+
+1. Zu einer langsameren Gangart bremst der Roboter erst gleitend auf deren Tempo ab (auch die
+   Reichweite muss bei den längeren Standphasen passen), zu einer schnelleren taktet er sofort um.
+2. Beim Umtakten bekommt jedes Standbein die Phase, die zu seiner Fußstellung passt (es hebt ab, wenn
+   der Fuß das hintere Ende der neuen Standphase erreicht). Ein laufender Schwung endet in seinem
+   Tempo am geplanten Aufsetzpunkt – kein Fuß springt.
+3. Danach finden die Beine in ihren Standphasen ins neue Muster: Wer hinterher ist, steht bis zu 60 %
+   kürzer, wer voraus ist, bis zu 10 % länger (der Fuß wandert so kaum weiter nach hinten). Eine
+   gemeinsame Verschiebung aller Beine zählt nicht – das Muster gilt bis auf seine Lage. Nie heben
+   zwei Nachbarbeine gleichzeitig ab. Bis alle Beine im Takt sind (je nach Gangarten ca. 2–7 s),
+   läuft der Roboter mit 75 % des Tempos der langsameren Gangart, dann beschleunigt er gleitend.
+
+Die Oberfläche zeigt „Gangart wechselt …“ unter den Joysticks, solange das läuft.
+
+**Rand der Reichweite:** Würde ein Standfuß vor seinem geplanten Schwung den erlaubten Bereich
+verlassen (nach einer schnellen Richtungsumkehr, beim Anlaufen in Kurven), setzt er vorher um –
+diese Beine zuerst, danach findet das Bein wieder in den Takt. Hebt ein Fuß nah am Körper ab und
+schwingt nicht gleich nach außen, führt die Schwungbahn ihn so weit nach außen, wie das Knie in
+dieser Höhe braucht. Im Zufalls-Dauertest (Gangarten und Fahrbefehle wild durcheinander) bleibt das
+Knie so immer über 25° – vorher knickte es dort bis auf 5° ein.
 
 **Schrittfrequenz passt sich an:** Langsam laufen heißt nicht mehr „gleich viele, nur kürzere
 Schritte“. Wäre ein Schritt kürzer als die Hälfte der vollen Schrittlänge, verlängert die Gangart
@@ -290,8 +312,8 @@ Die *Stellgeschwindigkeit* unter Einstellungen wirkt nur bei Einzelbefehlen (Kal
 Justierung), nicht beim Laufen: Damit die Servo-Rampe die glatten Schrittbahnen nicht ausbremst, gilt
 im IK-Betrieb mindestens `GAIT_SERVO_SLEW_DEG_PER_S` (600 °/s, etwa das, was ein MG90S ohne Last
 schafft) – erst, nachdem der Übergang in die Haltung mit der normalen Rampe abgeschlossen ist. Bei
-den Standardwerten bleiben die Gelenke im Schwung unter ca. 280 °/s, beim Tragen unter ca. 120 °/s;
-das Knie bleibt über 25° (bei 25 mm Hub beim Anlaufen in Kurven kurz bis ca. 21°).
+den Standardwerten bleiben die Gelenke im Schwung unter ca. 350 °/s, beim Tragen unter ca. 180 °/s;
+das Knie bleibt über 25°.
 
 **Erster Test:** Roboter aufbocken (Füße frei), Torque an, Aufstehen, Tempo auf 20–30 %, Dreifuß, langsam
 nach vorne. Zu sehen sein sollte: abwechselnd drei Beine heben (vorne links, hinten links, Mitte
@@ -383,9 +405,11 @@ Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet, auch in der
 - [`kinematics_test.cpp`](../firmware/test_host/kinematics_test.cpp): IK/FK, Vorzeichen,
   Körperhaltung, Standardhaltung = Montagestellung
 - [`gait_test.cpp`](../firmware/test_host/gait_test.cpp): Standbeine rutschen nicht, höchstens 3/2/1
-  Beine gleichzeitig in der Luft, keine Sprünge, alle Fußpunkte erreichbar und innerhalb der
-  Standardgrenzen (auch bei Extremwerten), Kniewinkel nicht unter `KNEE_MIN_DEG`,
-  Gelenkgeschwindigkeiten, Anhalten und Anfahren, Auslenkung der Füße beim Anlaufen
+  Beine gleichzeitig in der Luft, nie zwei Nachbarbeine, keine Sprünge, alle Fußpunkte erreichbar und
+  innerhalb der Standardgrenzen (auch bei Extremwerten), Kniewinkel nicht unter `KNEE_MIN_DEG`,
+  Gelenkgeschwindigkeiten, Anhalten und Anfahren, Auslenkung der Füße beim Anlaufen; Gangwechsel im
+  Lauf für alle Paare (geradeaus, Kurve, seitwärts: Tempo gleitet, eingeschwungen nach < 8 s) und ein
+  Dauertest mit zufälligen Wechseln und Fahrbefehlen
 - [`posture_test.cpp`](../firmware/test_host/posture_test.cpp): Sitzhaltung erreichbar,
   Aufstehen und Hinsetzen komplett durchgerechnet (Füße bleiben beim Heben stehen, alle Stellungen
   erreichbar und innerhalb der Grenzen)

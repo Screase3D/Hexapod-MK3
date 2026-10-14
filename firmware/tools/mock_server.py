@@ -206,6 +206,8 @@ def gait_status():
     g.update(active=g["type"], walking=walking, max_speed=round(max_speed), max_side=round(max_speed * 0.76),
              max_turn=round(max_speed / 181 * 57.3), nominal=round(nominal), cadence=round(cadence, 2),
              vx=0, vy=0, wz=0, swing=0)
+    if walking and time.time() - state.get("gait_switch_t", 0) < 3:
+        g["switching"] = True
     if walking:
         phase = (time.time() / cycle) % 1
         g["swing"] = sum(1 << i for i, s in enumerate(SWING_START[g["type"]]) if (phase - s) % 1 < sigma)
@@ -419,6 +421,8 @@ def handle(cmd):
         if "type" in cmd:
             if cmd["type"] not in SWING_FRACTION:
                 return {**out, "ok": False, "msg": "unbekannte Gangart (tripod, ripple, wave)"}
+            if cmd["type"] != state["gait"]["type"] and gait_status()["walking"]:
+                state["gait_switch_t"] = time.time()  # wie gait.cpp: fließender Übergang im Lauf
             state["gait"]["type"] = cmd["type"]
         if "swing_s" in cmd:
             state["gait"]["swing_s"] = max(0.3, min(1.2, float(cmd["swing_s"])))

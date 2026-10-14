@@ -4,6 +4,21 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.10.0
+
+- **Gangart im Lauf wechseln:** Dreifuß, Ripple und Welle lassen sich jetzt jederzeit umschalten (Oberfläche,
+  Profil oder Controller), ohne anzuhalten. Zu einer langsameren Gangart bremst der Roboter gleitend ab,
+  dann übernimmt jedes Bein die Phase, die zu seiner Fußstellung passt; laufende Schritte werden in ihrem
+  Tempo zu Ende geführt, kein Fuß springt. In wenigen Schritten (ca. 2–7 s) finden die Beine in den neuen
+  Takt, nie zwei Nachbarbeine gleichzeitig in der Luft; währenddessen 75 % Tempo, danach gleitend volles
+  Tempo. Unter den Joysticks steht „Gangart wechselt …“, solange der Übergang läuft.
+- **Weichere, sicherere Schritte bei wilden Joystick-Bewegungen:** Würde ein Fuß vor seinem Schritt den
+  erlaubten Bereich verlassen (schnelle Richtungsumkehr, Anlaufen in Kurven), setzt er vorher um. Hebt ein Fuß
+  nah am Körper ab, führt die Schwungbahn ihn erst etwas nach außen. Im Zufalls-Dauertest bleibt das Knie
+  so immer über 25° (vorher bis 5°, mit kurzen Fehlstellungen); die größten Fußsprünge sind kleiner.
+- Schwungbahnen folgen einem sich verschiebenden Aufsetzpunkt (Tempoänderung im Schritt) ohne Sprung.
+- Gangsteuerung mit gemeinsamem Takt und Bein-Versätzen: kein Auseinanderdriften der Beine durch Rundung.
+
 ## 0.9.0
 
 - **Besseres Kamerabild:** Bis jetzt lief der Sensor mit Werkseinstellungen. Neu unter ⚙ an der Kamera:

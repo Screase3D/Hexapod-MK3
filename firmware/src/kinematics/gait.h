@@ -13,6 +13,20 @@
 //                und Ende 0, kein Aufschlagen).
 // Ohne Fahrbefehl laufen die Beine noch in die Neutralstellung zurück und
 // bleiben dann stehen; Beine, die schon dort stehen, heben nicht ab.
+//
+// Takt: Eine gemeinsame Phase läuft durch den Zyklus; jedes Bein hat einen Versatz
+// dazu (Beinphase = Takt - Versatz, 0 = Beginn seines Schwungs). Im eingeschwungenen
+// Lauf sind die Versätze die des Musters der Gangart.
+// Gangwechsel im Lauf: zu einer langsameren Gangart erst abbremsen, dann umtakten;
+// zu einer schnelleren erst umtakten, dann beschleunigen. Beim Umtakten bekommt
+// jedes Bein die Phase, die zu seiner Fußstellung passt (ein laufender Schwung wird
+// in seinem Tempo zu Ende geführt); danach finden die Beine in den Standphasen ins
+// neue Muster (Standphase bis zu 10 % länger bzw. 60 % kürzer, Tempo solange 75 %).
+// Ein Bein hebt nie ab, solange ein Nachbarbein in der Luft ist.
+// Würde ein Standfuß vor seinem Schwung den Rand der Reichweite erreichen
+// (Richtungsumkehr, Anlaufen in Kurven), setzt er vorher um und findet danach wieder
+// ins Muster. Die Schwungbahn folgt einem sich verschiebenden Aufsetzpunkt ohne
+// Sprung und weicht nah am Körper nach außen aus (Knie, setSwingGuard).
 // Springen die Neutralpunkte im Stillstand um mehr als 10 mm (Aufstehen),
 // werden die Füße ebenso mit Schritten umgesetzt.
 //
@@ -57,7 +71,7 @@ class Gait {
   // Alle Füße auf die Neutralpunkte, Stillstand
   void reset(const kin::Vec3 neutral[NUM_LEGS]);
 
-  // Gangart-Wechsel wird erst im Stillstand wirksam (siehe pendingType)
+  // Gangart-Wechsel wirkt auch im Lauf (fließender Übergang, siehe oben)
   void setParams(const Params& p);
   const Params& params() const { return params_; }
 
@@ -68,6 +82,10 @@ class Gait {
   // erlaubter waagerechter Abstand Fuß <-> Coxa-Achse (siehe minFootRadius,
   // maxFootRadius). Ohne Aufruf gilt nur max_stride.
   void setReach(const kin::Vec3 coxa[NUM_LEGS], float min_radius, float max_radius);
+  // Schwungbahn-Schutz: Hebt ein Fuß nah am Körper ab und schwingt nicht gleich nach
+  // außen (Richtungswechsel, Zwischenschritt), führt die Bahn ihn so weit nach außen,
+  // dass das Knie (bei Körperhöhe height) nicht unter knee_min_deg einknickt.
+  void setSwingGuard(const kin::LegGeometry& g, float height, float knee_min_deg);
 
   // Einen Regelschritt rechnen. neutral = aktuelle Neutralpunkte (Fußabstand
   // kann sich ändern), im Lauf-System auf dem Boden.
@@ -79,6 +97,9 @@ class Gait {
   bool idle() const { return idle_; }
   float phase() const { return phase_; }
   Type activeType() const { return active_type_; }
+  // Gangwechsel läuft noch (Tempo angepasst, Beine finden ins neue Muster)
+  bool transitioning() const { return !idle_ && (switching_ || params_.type != active_type_); }
+  float phaseError() const { return phase_err_; }  // größte Abweichung vom Muster (Anteil Zyklus)
 
   // Tatsächliche (gerampte, begrenzte) Geschwindigkeit
   float speedX() const { return vx_; }      // mm/s
@@ -95,10 +116,26 @@ class Gait {
  private:
   struct Leg {
     kin::Vec3 pos{0, 0, 0};
-    kin::Vec3 lift{0, 0, 0};  // Abhebepunkt der laufenden Schwungphase
-    bool swing = false;       // Fuß in der Luft
-    bool in_window = false;   // Phase liegt im Schwungfenster (auch wenn übersprungen)
+    bool swing = false;  // Fuß in der Luft
+    float off = 0.0f;    // Versatz gegen den Takt (Muster: Schwungbeginn der Gangart)
+    float ph = 0.0f;     // Beinphase im letzten Schritt 0..1 (0 = Beginn des Schwungs)
+    float u = 0.0f;      // Fortschritt des laufenden Schwungs 0..1
+    float h = 0.0f;      // davon zurückgelegter Weg 0..1 (Profil)
+    float dur = 0.0f;    // > 0: Schwung nach Zeit mit dieser Dauer (begann vor dem Umtakten)
+    float half = 0.0f;   // dabei: Vorlauf des Aufsetzpunkts (halbe Standphase der alten Gangart, s)
+    bool wait = false;   // Schwung fällig, aber noch nicht erlaubt (Nachbar in der Luft)
   };
+
+  float footMax(Type t) const;  // Fußgeschwindigkeit bei max_stride je Standphase
+  bool liftAllowed(int leg) const;
+  // Schrittfrequenz für die neue Gangart, wenn umgetaktet werden kann (sonst 0)
+  float switchCadence(float dt, const kin::Vec3 neutral[NUM_LEGS]) const;
+  void switchType(float cadence, const kin::Vec3 neutral[NUM_LEGS]);
+  // Beinphase passend zur Fußstellung (Standbein): Schwungbeginn, wenn der Fuß das
+  // hintere Ende der Standphase erreicht. done = Anteil der Standphase, falls fast im Stand.
+  float footPhase(int leg, float done, const kin::Vec3 neutral[NUM_LEGS]) const;
+  // Zeit (s), bis der Standfuß den Rand der Reichweite erreicht (1e9: entfernt sich / keine Grenze)
+  float reachTime(int leg) const;
 
   void computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]);
   // größter Faktor 0..1 für (vx, vy, wz), mit dem alle Füße in der Reichweite bleiben
@@ -106,19 +143,25 @@ class Gait {
 
   Params params_;
   Type active_type_ = Type::Tripod;
+  Type from_type_ = Type::Tripod;  // Gangart vor dem letzten Umtakten
   Leg legs_[NUM_LEGS];
   float cmd_[3] = {0, 0, 0};       // Vorgabe (normiert)
   float cmd_ramped_[3] = {0, 0, 0};
   float vx_ = 0, vy_ = 0, wz_ = 0;
   float max_speed_ = 0, max_side_ = 0, max_turn_ = 0, nominal_speed_ = 0;
   float cadence_ = 1.0f;
-  float phase_ = 0;
+  float phase_ = 0;           // Takt 0..1
+  float vmax_ = 0;            // Grenze der Fußgeschwindigkeit (gleitet beim Gangwechsel)
+  bool converging_ = false;   // Beine finden ins Muster (nach dem Umtakten oder einem Zwischenschritt)
+  bool switching_ = false;    // Gangwechsel bis zum Abschluss (Tempo reduziert)
+  float phase_err_ = 0;
   bool idle_ = true;
   bool starting_ = true;  // erster Zyklus nach dem Stillstand: langsamer beschleunigen
   kin::Vec3 coxa_[NUM_LEGS] = {};
   float min_radius_ = -1.0f;  // < 0: keine Reichweitengrenze
   float max_radius_ = 0.0f;
   float reach_k_ = 1.0f;      // aktueller Faktor aus der Reichweitengrenze
+  float guard_coxa_ = 0.0f, guard_h_ = 0.0f, guard_d2_ = -1.0f;  // Schwungbahn-Schutz (d2 < 0: aus)
 };
 
 // Hilfsprofile (auch für Tests)

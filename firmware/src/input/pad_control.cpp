@@ -118,7 +118,7 @@ void run(padmap::Action action, const motion::Activity& a) {
     case Action::GaitPrev:
     case Action::GaitNext: {
       const char* name = motion::cycleGait(action == Action::GaitNext ? 1 : -1);
-      message(String("Gangart: ") + gaitText(name) + (a.walking ? " (nach dem Anhalten)" : ""));
+      message(String("Gangart: ") + gaitText(name));
       break;
     }
     case Action::HeightUp:

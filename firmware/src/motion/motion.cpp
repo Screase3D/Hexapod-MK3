@@ -62,6 +62,7 @@ struct GaitStatus {
   uint8_t swing;
   float vx, vy, wz_deg, max_speed, max_side, max_turn_deg, nominal, cadence;
   gait::Type type;
+  bool switching;  // Gangwechsel im Lauf läuft noch
 } g_status = {};
 float g_body_cmd[5] = {0, 0, 0, 0, 0};  // Körper-Joystick: x, y, roll, pitch, yaw (normiert)
 uint32_t g_body_ms = 0;
@@ -286,6 +287,7 @@ void updateReach(const PoseState& cur, float step_height) {
   kin::Vec3 coxa[NUM_LEGS];
   for (int leg = 0; leg < NUM_LEGS; ++leg) coxa[leg] = kin::coxaWorld(cur.pose, LEG_MOUNTS[leg]);
   g_gait.setReach(coxa, r_min, r_max);
+  g_gait.setSwingGuard(LEG_GEOMETRY, cur.pose.z, KNEE_MIN_DEG);
 }
 
 // ---- Gespeicherte Einstellungen (NVS): Haltung, Gang, Lageausgleich, Stellgeschwindigkeit
@@ -944,6 +946,7 @@ void update(float dt) {
   st.nominal = g_gait.nominalSpeed();
   st.cadence = g_gait.cadence();
   st.type = g_gait.activeType();
+  st.switching = g_gait.transitioning();
 
   portENTER_CRITICAL(&g_mux);
   g_unreachable = unreachable;
@@ -1025,11 +1028,12 @@ void toJson(JsonObject obj) {
   if (alive_act != alive::Action::None) al["act"] = alive::actionName(alive_act);
 
   JsonObject g = obj["gait"].to<JsonObject>();
-  g["type"] = gait::typeName(gp.type);  // gewählt (wirkt im Stillstand)
+  g["type"] = gait::typeName(gp.type);  // gewählt (im Lauf: fließender Übergang)
   g["swing_s"] = gp.swing_s;
   g["step_height"] = gp.step_height;
   if (m != Mode::Pose) return;
   g["active"] = gait::typeName(st.type);
+  if (st.switching) g["switching"] = true;
   g["walking"] = st.walking;
   g["swing"] = st.swing;
   g["vx"] = roundf(st.vx);

@@ -11,8 +11,22 @@ constexpr float SETTLE_TOL = 2.0f;     // mm: Fuß gilt als "in Neutralstellung"
 // z. B. beim Aufstehen), wird er mit Schritten umgesetzt statt verschoben
 constexpr float REPOSITION_MIN = 10.0f;
 constexpr float MOVING_EPS = 1e-3f;    // normierter Befehl, ab dem gelaufen wird
-constexpr float LATE_START = 0.25f;    // Schwungfenster erst so spät erreicht -> aussetzen
 constexpr float MAX_DT = 0.05f;        // größere Zeitschritte (Hänger) begrenzen
+// Gangwechsel im Lauf: Die Phase eines Standbeins läuft höchstens 10 % langsamer
+// (Standphase bis zu 1/0,9 = 1,11-mal so lang, der Fuß wandert kaum weiter nach hinten)
+// bzw. 60 % schneller (kürzer: unkritisch) – Beine, die hinterher sind, holen auf;
+// solange die Beine noch nicht im neuen Muster sind, läuft der Roboter mit 75 % des
+// Tempos (Reserve, falls ein Bein auf seinen Nachbarn warten muss).
+constexpr float PHASE_GAIN = 8.0f;       // Korrektur je Zyklus und Abweichung
+constexpr float PHASE_SLOW = 0.1f, PHASE_FAST = 0.6f;
+constexpr float PHASE_SNAP = 2e-3f;      // näher am Muster: Versatz exakt übernehmen
+constexpr float TRANS_SPEED = 0.75f;
+constexpr float VMAX_RAMP_S = 0.8f;      // Tempo-Anpassung beim Gangwechsel: volle Spanne in 0,8 s
+constexpr float TWO_PI = 6.28318531f;
+constexpr float URGENT_MIN_STEP = 5.0f;  // mm: kürzere Zwischenschritte bringen nichts
+// Nachbarbeine (Reihenfolge um den Körper: vl, ml, hl, hr, mr, vr)
+constexpr int NEIGHBOR_A[NUM_LEGS] = {1, 0, 1, 0, 3, 2};
+constexpr int NEIGHBOR_B[NUM_LEGS] = {3, 2, 5, 4, 5, 4};
 // Ändert sich das Tempo, während ein Fuß steht, wandert er weiter als ±v*half um
 // seinen Neutralpunkt: Dauert das Beschleunigen mindestens eine Standphase, höchstens
 // 25 % (ebenso beim Anlaufen mit der Anlauf-Rampe). Die Reichweitengrenze hält
@@ -42,6 +56,7 @@ constexpr float SWING_FRACTION[NUM_TYPES] = {0.5f, 1.0f / 3.0f, 1.0f / 6.0f};
 constexpr float PHASE_EPS = 1e-5f;  // Rundung an den Fenstergrenzen
 
 float frac(float v) { return v - std::floor(v); }
+float wrapHalf(float v) { return v - std::floor(v + 0.5f); }  // -0.5..0.5
 float clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
 float approach(float cur, float target, float step) {
@@ -141,9 +156,20 @@ void Gait::reset(const kin::Vec3 neutral[NUM_LEGS]) {
   reach_k_ = 1.0f;
   cadence_ = 1.0f;
   phase_ = 0.0f;
+  vmax_ = 0.0f;
+  converging_ = switching_ = false;
+  phase_err_ = 0.0f;
   idle_ = true;
   starting_ = true;
   active_type_ = params_.type;
+}
+
+float Gait::footMax(Type t) const {
+  return params_.max_stride / (dutyFactor(t) * cycleTime(t, params_.swing_s));
+}
+
+bool Gait::liftAllowed(int leg) const {
+  return !legs_[NEIGHBOR_A[leg]].swing && !legs_[NEIGHBOR_B[leg]].swing;
 }
 
 void Gait::setParams(const Params& p) {
@@ -159,6 +185,14 @@ void Gait::setReach(const kin::Vec3 coxa[NUM_LEGS], float min_radius, float max_
   for (int i = 0; i < NUM_LEGS; ++i) coxa_[i] = coxa[i];
   min_radius_ = min_radius;
   max_radius_ = max_radius;
+}
+
+void Gait::setSwingGuard(const kin::LegGeometry& g, float height, float knee_min_deg) {
+  // kleinster Abstand Femur-Achse <-> Fuß, bei dem das Knie knee_min_deg erreicht
+  guard_coxa_ = g.coxa;
+  guard_h_ = height;
+  guard_d2_ = g.femur * g.femur + g.tibia * g.tibia -
+              2.0f * g.femur * g.tibia * std::cos(knee_min_deg * 0.0174532925f);
 }
 
 void Gait::setCommand(float vx, float vy, float turn) {
@@ -199,18 +233,13 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
     cmd_ramped_[k] = approach(cmd_ramped_[k], cmd_[k], dt / (accel ? ramp_up : params_.ramp_s));
   }
 
-  // Höchstgeschwindigkeit: in einer Standphase darf ein Fuß höchstens
-  // max_stride zurücklegen (Befehl 1 = Tempo bei der eingestellten Schrittdauer)
-  const float foot_max = params_.max_stride / stance_nom;
   float r_max = 1.0f;
   for (int i = 0; i < NUM_LEGS; ++i) {
     float r = std::hypot(neutral[i].x, neutral[i].y);
     if (r > r_max) r_max = r;
   }
-  const float turn_max = foot_max / r_max;
-
-  // Befehl -> Geschwindigkeit; Fahren + Drehen gleichzeitig: schnellsten Fuß auf
-  // foot_max begrenzen
+  // Befehl -> Geschwindigkeit bei Fußgeschwindigkeit fm; Fahren + Drehen gleichzeitig:
+  // schnellsten Fuß auf fm begrenzen
   auto fastestFoot = [&](const float v[3]) {
     float fastest = 0.0f;
     for (int i = 0; i < NUM_LEGS; ++i) {
@@ -219,24 +248,48 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
     }
     return fastest;
   };
-  auto toVelocity = [&](const float c[3], float v[3]) {
-    v[0] = c[0] * foot_max;
-    v[1] = c[1] * foot_max;
-    v[2] = c[2] * turn_max;
+  auto toVelocity = [&](const float c[3], float fm, float v[3]) {
+    v[0] = c[0] * fm;
+    v[1] = c[1] * fm;
+    v[2] = c[2] * fm / r_max;
     float fastest = fastestFoot(v);
-    if (fastest > foot_max) {
-      for (int a = 0; a < 3; ++a) v[a] *= foot_max / fastest;
+    if (fastest > fm) {
+      for (int a = 0; a < 3; ++a) v[a] *= fm / fastest;
     }
   };
+
+  // Höchstgeschwindigkeit: in einer Standphase darf ein Fuß höchstens
+  // max_stride zurücklegen (Befehl 1 = Tempo bei der eingestellten Schrittdauer).
+  // Gangwechsel: bis die Beine im neuen Muster sind, 75 % des Tempos der langsameren
+  // der beiden Gangarten (Reserve für längere Standphasen); vor dem Umtakten in eine
+  // langsamere Gangart muss das Tempo auch dort in die Reichweite passen. Die Grenze
+  // gleitet dorthin statt zu springen.
+  const float fm_active = params_.max_stride / stance_nom;
+  const bool pending = !idle_ && params_.type != active_type_;
+  float fm_target = fm_active;
+  if (pending) {
+    fm_target = std::fmin(fm_active, footMax(params_.type));
+    float vg[3];
+    toVelocity(cmd_, fm_target, vg);
+    const float st_new = dutyFactor(params_.type) * cycleTime(params_.type, params_.swing_s);
+    fm_target *= TRANS_SPEED * reachScale(vg[0], vg[1], vg[2], (0.5f * st_new + dt) * ACCEL_MARGIN, neutral);
+  } else if (!idle_ && switching_) {
+    fm_target = TRANS_SPEED * std::fmin(fm_active, footMax(from_type_));
+  }
+  if (idle_ || vmax_ <= 0.0f) vmax_ = fm_target;
+  else vmax_ = approach(vmax_, fm_target, std::fmax(fm_active, footMax(params_.type)) / VMAX_RAMP_S * dt);
+  const float foot_max = vmax_;
+
   float v_cur[3], v_goal[3];
-  toVelocity(cmd_ramped_, v_cur);
-  toVelocity(cmd_, v_goal);
+  toVelocity(cmd_ramped_, foot_max, v_cur);
+  toVelocity(cmd_, foot_max, v_goal);
 
   // Schrittfrequenz: ruhiger, je langsamer (beim Anhalten unverändert lassen)
   const bool commanded = std::fabs(cmd_[0]) > MOVING_EPS || std::fabs(cmd_[1]) > MOVING_EPS ||
                          std::fabs(cmd_[2]) > MOVING_EPS;
   if (commanded) {
-    const float ratio = fastestFoot(v_cur) / foot_max;
+    // (vor dem Umtakten bezogen auf die bisherige Gangart -> ruhige Schritte beim Abbremsen)
+    const float ratio = fastestFoot(v_cur) / (switching_ ? foot_max : fm_active);
     float target = ratio > 1e-3f ? STRIDE_KEEP / ratio : CADENCE_MAX;
     target = target < 1.0f ? 1.0f : (target > CADENCE_MAX ? CADENCE_MAX : target);
     cadence_ = approach(cadence_, target, CADENCE_RATE * dt);
@@ -265,10 +318,11 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   // Anzeige: Höchsttempo geradeaus, seitwärts bzw. Drehrate auf der Stelle
   // (bei voller Geschwindigkeit läuft die eingestellte Schrittfrequenz)
   const float half_nom = (0.5f * stance_nom + dt) * ACCEL_MARGIN;
-  max_speed_ = foot_max * reachScale(foot_max, 0.0f, 0.0f, half_nom, neutral);
-  max_side_ = foot_max * reachScale(0.0f, foot_max, 0.0f, half_nom, neutral);
-  max_turn_ = turn_max * reachScale(0.0f, 0.0f, turn_max, half_nom, neutral);
-  nominal_speed_ = foot_max;
+  const float turn_nom = fm_active / r_max;
+  max_speed_ = fm_active * reachScale(fm_active, 0.0f, 0.0f, half_nom, neutral);
+  max_side_ = fm_active * reachScale(0.0f, fm_active, 0.0f, half_nom, neutral);
+  max_turn_ = turn_nom * reachScale(0.0f, 0.0f, turn_nom, half_nom, neutral);
+  nominal_speed_ = fm_active;
 }
 
 float Gait::reachScale(float vx, float vy, float wz, float half_stance_s,
@@ -301,6 +355,87 @@ float Gait::reachScale(float vx, float vy, float wz, float half_stance_s,
   return s < 0.0f ? 0.0f : s;
 }
 
+float Gait::switchCadence(float dt, const kin::Vec3 neutral[NUM_LEGS]) const {
+  float fastest = 0.0f;
+  for (int i = 0; i < NUM_LEGS; ++i) {
+    fastest = std::fmax(fastest, std::hypot(vx_ - wz_ * neutral[i].y, vy_ + wz_ * neutral[i].x));
+  }
+  const float fm = footMax(params_.type);
+  if (fastest > fm * 1.001f + 1e-3f) return 0.0f;  // erst abbremsen
+  // Schrittfrequenz wie im eingeschwungenen Lauf der neuen Gangart bei diesem Tempo,
+  // aber keine langsameren Schwünge als bisher (kurze Zyklen: schnell im neuen Muster)
+  float cad = fastest > 1e-3f ? std::fmin(cadence_, STRIDE_KEEP * fm / fastest) : cadence_;
+  cad = cad < 1.0f ? 1.0f : (cad > CADENCE_MAX ? CADENCE_MAX : cad);
+  if (fastest <= 1e-3f) return cad;
+  auto reachOk = [&](float c) {
+    const float stance = dutyFactor(params_.type) * cycleTime(params_.type, params_.swing_s * c);
+    return reachScale(vx_, vy_, wz_, (0.5f * stance + dt) * ACCEL_MARGIN, neutral) >= 0.999f;
+  };
+  if (reachOk(cad)) return cad;
+  return reachOk(1.0f) ? 1.0f : 0.0f;
+}
+
+float Gait::footPhase(int i, float done, const kin::Vec3 neutral[NUM_LEGS]) const {
+  const float cycle = cycleTime(active_type_, params_.swing_s * cadence_);
+  const float stance = dutyFactor(active_type_) * cycle;
+  const Leg& l = legs_[i];
+  const float wx = vx_ - wz_ * neutral[i].y, wy = vy_ + wz_ * neutral[i].x;
+  const float w2 = wx * wx + wy * wy;
+  float rest = (1.0f - clamp01(done)) * stance;
+  if (w2 * cycle * cycle > 1.0f) {  // läuft (> 1 mm je Zyklus): Restzeit aus der Fußstellung
+    rest = ((l.pos.x - neutral[i].x) * wx + (l.pos.y - neutral[i].y) * wy) / w2 + 0.5f * stance;
+  }
+  rest = rest < 0.0f ? 0.0f : (rest > stance ? stance : rest);
+  return std::fmin(1.0f - rest / cycle, 1.0f - 1e-6f);
+}
+
+float Gait::reachTime(int i) const {
+  if (min_radius_ < 0.0f) return 1e9f;
+  const Leg& l = legs_[i];
+  // Fuß relativ zur Coxa-Achse und seine Bewegung im Lauf-System: -(v + w x p)
+  const float rx = l.pos.x - coxa_[i].x, ry = l.pos.y - coxa_[i].y;
+  const float dx = wz_ * l.pos.y - vx_, dy = -vy_ - wz_ * l.pos.x;
+  const float dd = dx * dx + dy * dy;
+  if (dd < 1e-6f) return 1e9f;
+  const float rd = rx * dx + ry * dy, r2 = rx * rx + ry * ry;
+  const float m2 = min_radius_ * min_radius_, M2 = max_radius_ * max_radius_;
+  if (r2 <= m2 || r2 >= M2) return 0.0f;
+  float t = (-rd + std::sqrt(rd * rd + dd * (M2 - r2))) / dd;  // außen: |r + t*d| = M
+  const float disc = rd * rd - dd * (r2 - m2);                   // innen: |r + t*d| = m
+  if (rd < 0.0f && disc > 0.0f) t = std::fmin(t, (-rd - std::sqrt(disc)) / dd);
+  return t;
+}
+
+void Gait::switchType(float cadence, const kin::Vec3 neutral[NUM_LEGS]) {
+  const float sigma_old = SWING_FRACTION[static_cast<int>(active_type_)];
+  const float cycle_old = cycleTime(active_type_, params_.swing_s * cadence_);
+  from_type_ = active_type_;
+  active_type_ = params_.type;
+  cadence_ = cadence;
+  converging_ = switching_ = true;
+  const float sigma = SWING_FRACTION[static_cast<int>(active_type_)];
+
+  // Phase je Bein in der neuen Gangart, passend zum Stand seines Fußes; ein laufender
+  // Schwung endet in seinem Tempo am geplanten Aufsetzpunkt
+  for (int i = 0; i < NUM_LEGS; ++i) {
+    Leg& l = legs_[i];
+    float p;
+    if (l.swing) {
+      if (l.dur <= 0.0f) {
+        l.dur = sigma_old * cycle_old;
+        l.half = 0.5f * (1.0f - sigma_old) * cycle_old;
+      }
+      p = l.u * sigma;
+    } else if (l.wait) {
+      p = 0.0f;
+    } else {
+      p = footPhase(i, (l.ph - sigma_old) / (1.0f - sigma_old), neutral);
+    }
+    l.off = frac(phase_ - p);
+    l.ph = p;
+  }
+}
+
 void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   if (dt <= 0.0f) return;
   if (dt > MAX_DT) dt = MAX_DT;
@@ -323,7 +458,22 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
     }
     idle_ = false;
     phase_ = 0.0f;  // erste Beingruppe hebt sofort ab
-    for (auto& l : legs_) l.in_window = false;
+    converging_ = switching_ = false;
+    const int t0 = static_cast<int>(active_type_);
+    for (int i = 0; i < NUM_LEGS; ++i) {
+      Leg& l = legs_[i];
+      l.off = SWING_START[t0][i];
+      l.ph = frac(-l.off);
+      if (l.ph <= 0.0f) l.ph = 1.0f;  // Schwungbeginn mit dem ersten Schritt
+      l.swing = l.wait = false;
+      l.dur = 0.0f;
+    }
+  }
+
+  // Gangwechsel im Lauf: umtakten, sobald Tempo und Reichweite zur neuen Gangart passen
+  if (params_.type != active_type_) {
+    const float cad = switchCadence(dt, neutral);
+    if (cad > 0.0f) switchType(cad, neutral);
   }
 
   // Standbeine bleiben auf dem Boden stehen: im Lauf-System bewegen sie sich
@@ -336,55 +486,179 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
     l.pos = {c * x - s * y, s * x + c * y, 0.0f};
   }
 
-  const float cycle = cycleTime(active_type_, params_.swing_s * cadence_);
-  const float next_phase = phase_ + dt / cycle;
-  if (next_phase >= 1.0f) starting_ = false;  // jedes Bein hatte sein Schwungfenster
-  phase_ = frac(next_phase);
   const int t = static_cast<int>(active_type_);
+  const float cycle = cycleTime(active_type_, params_.swing_s * cadence_);
   const float sigma = SWING_FRACTION[t];
   const float half_stance = 0.5f * (1.0f - sigma) * cycle;
+  const float dp = dt / cycle;
+  const float next_phase = phase_ + dp;
+  if (next_phase >= 1.0f) starting_ = false;  // jedes Bein hatte sein Schwungfenster
+  phase_ = frac(next_phase);
 
+  // Nach dem Umtakten: Standbeine ins Muster führen (Phase etwas langsamer bzw.
+  // schneller), nahe dran exakt übernehmen
+  if (converging_) {
+    // Das Muster gilt bis auf eine gemeinsame Lage: mittlere Abweichung herausnehmen
+    float sx = 0.0f, sy = 0.0f;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+      if (legs_[i].wait) continue;
+      const float a = TWO_PI * (legs_[i].off - SWING_START[t][i]);
+      sx += std::cos(a);
+      sy += std::sin(a);
+    }
+    const float shift = sx * sx + sy * sy > 1e-6f ? std::atan2(sy, sx) / TWO_PI : 0.0f;
+    if (std::fabs(shift) > 0.5f * PHASE_SNAP) {  // kleine Reste gleichen die Beine einzeln aus
+      phase_ = frac(phase_ - shift);
+      for (auto& l : legs_) l.off = frac(l.off - shift);
+    }
+  }
+  float max_err = 0.0f;
+  bool off_pattern = false;
   for (int i = 0; i < NUM_LEGS; ++i) {
     Leg& l = legs_[i];
+    if (converging_ && !l.swing) {
+      if (l.wait) {
+        l.off = phase_;  // Phase wartet am Schwungbeginn
+      } else {
+        const float ahead = wrapHalf(SWING_START[t][i] - l.off);  // > 0: Bein ist voraus
+        if (std::fabs(ahead) < PHASE_SNAP) l.off = SWING_START[t][i];
+        else l.off = frac(l.off + std::fmax(-PHASE_FAST, std::fmin(PHASE_SLOW, PHASE_GAIN * ahead)) * dp);
+      }
+    }
+    max_err = std::fmax(max_err, std::fabs(wrapHalf(SWING_START[t][i] - l.off)));
+    off_pattern = off_pattern || l.off != SWING_START[t][i] || l.wait || l.dur > 0.0f;
+  }
+  phase_err_ = max_err;
+  if (converging_ && !off_pattern) converging_ = switching_ = false;
+
+  auto targetOf = [&](int i) {
     // Aufsetzpunkt: so weit vor der Neutralstellung, dass die folgende
     // Standphase symmetrisch um sie herum verläuft
-    kin::Vec3 target = {neutral[i].x + (vx_ - wz_ * neutral[i].y) * half_stance,
-                        neutral[i].y + (vy_ + wz_ * neutral[i].x) * half_stance, 0.0f};
-    float p = frac(phase_ - SWING_START[t][i]);
-    // Fenster minimal kürzen: an der Grenze nie zwei Gruppen gleichzeitig in der Luft
-    bool win = p < sigma - PHASE_EPS;
-    float u = p / sigma;
+    const float half = legs_[i].dur > 0.0f ? legs_[i].half : half_stance;
+    return kin::Vec3{neutral[i].x + (vx_ - wz_ * neutral[i].y) * half,
+                     neutral[i].y + (vy_ + wz_ * neutral[i].x) * half, 0.0f};
+  };
 
-    if (win && !l.in_window) {
-      // Schwungfenster beginnt: nur abheben, wenn nötig und nicht mitten drin
-      bool needed = moving || distXY(l.pos, neutral[i]) > SETTLE_TOL;
-      if (needed && u < LATE_START) {
-        l.swing = true;
-        l.lift = l.pos;
-      }
-    } else if (!win && l.in_window && l.swing) {
-      l.swing = false;  // aufsetzen
-      l.pos = target;
+  // 1. Schwungbeine: weiter bzw. aufsetzen (vor dem Abheben anderer Beine, damit an der
+  //    Grenze nie zwei Gruppen gleichzeitig in der Luft sind)
+  for (int i = 0; i < NUM_LEGS; ++i) {
+    Leg& l = legs_[i];
+    if (!l.swing) continue;
+    const float p = frac(phase_ - l.off);
+    bool land;
+    if (l.dur > 0.0f) {
+      l.u += dt / l.dur;
+      land = l.u >= 1.0f - 1e-4f;
+    } else {
+      l.u = p / sigma;
+      land = p >= sigma - PHASE_EPS;  // Fenster minimal kürzen (Rundung)
     }
-    l.in_window = win;
-
-    if (l.swing) {
-      // Heben und Vorschwingen gleichzeitig, beide mit weichem Anfang und Ende
-      // (früh nach außen zu schwingen entlastet den Femur beim Abheben nah am Körper)
-      float h = smoothStep5(u);
-      l.pos.x = l.lift.x + (target.x - l.lift.x) * h;
-      l.pos.y = l.lift.y + (target.y - l.lift.y) * h;
-      l.pos.z = params_.step_height * liftProfile(u);
+    if (land) {
+      l.pos = targetOf(i);
+      l.swing = false;
+      if (l.dur > 0.0f) {
+        // Schwung aus der alten Gangart: Phase passend zum Aufsetzpunkt
+        l.dur = 0.0f;
+        const float pf = footPhase(i, 0.0f, neutral);
+        l.off = frac(phase_ - pf);
+        l.ph = pf;
+      } else {
+        l.ph = p;
+      }
+    }
+  }
+  // 2. Standbeine: am Schwungbeginn abheben, wenn nötig und kein Nachbarbein in der Luft ist.
+  //    Würde ein Fuß vor seinem Schwung den Rand der Reichweite erreichen (z. B. nach
+  //    einer Richtungsumkehr oder beim Anlaufen), setzt er vorher um – diese Beine zuerst.
+  const float swing_dur = sigma * cycle;
+  int order[NUM_LEGS];
+  float urgency[NUM_LEGS];
+  bool wrapped[NUM_LEGS];
+  for (int i = 0; i < NUM_LEGS; ++i) {
+    const Leg& l = legs_[i];
+    const float p = frac(phase_ - l.off);
+    wrapped[i] = !l.swing && !l.wait && p < l.ph - 0.5f;
+    urgency[i] = 1e9f;
+    // (nur wenn der Schritt etwas bringt: Fuß nicht schon am Aufsetzpunkt)
+    if (moving && !l.swing && distXY(l.pos, targetOf(i)) > URGENT_MIN_STEP) {
+      const float due = (l.wait || wrapped[i]) ? 0.0f : (1.0f - p) * cycle;  // bis zum geplanten Schwung
+      const float rt = reachTime(i);
+      if (rt < swing_dur && rt < due) urgency[i] = rt;
+    }
+    int k = i;
+    for (; k > 0 && urgency[order[k - 1]] > urgency[i]; --k) order[k] = order[k - 1];
+    order[k] = i;
+  }
+  for (int n = 0; n < NUM_LEGS; ++n) {
+    const int i = order[n];
+    Leg& l = legs_[i];
+    if (l.swing) continue;
+    bool lift = false;
+    if (l.wait) {
+      lift = liftAllowed(i);
+    } else if (wrapped[i] && (moving || distXY(l.pos, neutral[i]) > SETTLE_TOL)) {
+      lift = liftAllowed(i);
+      if (!lift) {
+        l.wait = true;  // sobald erlaubt; bis dahin wartet die Phase
+        l.off = phase_;
+        converging_ = true;
+      }
+    } else if (urgency[i] < 1e9f) {
+      // vorzeitig umsetzen (bzw. sobald erlaubt), Phase beginnt neu
+      lift = liftAllowed(i);
+      l.wait = !lift;
+      l.off = phase_;
+      converging_ = true;
+    }
+    l.ph = frac(phase_ - l.off);
+    if (lift) {
+      l.wait = false;
+      l.swing = true;
+      l.dur = 0.0f;
+      l.u = l.ph / sigma;
+      l.h = 0.0f;
+    }
+  }
+  // 3. Schwungbahnen: Heben und Vorschwingen gleichzeitig, beide mit weichem Anfang und
+  //    Ende (früh nach außen zu schwingen entlastet den Femur beim Abheben nah am Körper).
+  //    Verschiebt sich der Aufsetzpunkt (Tempo ändert sich), führt der verbleibende Weg
+  //    ohne Sprung dorthin.
+  for (int i = 0; i < NUM_LEGS; ++i) {
+    Leg& l = legs_[i];
+    if (!l.swing) continue;
+    const kin::Vec3 target = targetOf(i);
+    const float h = smoothStep5(l.u);
+    if (l.h < 1.0f) {
+      const float k = (h - l.h) / (1.0f - l.h);
+      l.pos.x += (target.x - l.pos.x) * k;
+      l.pos.y += (target.y - l.pos.y) * k;
+    }
+    l.h = h;
+    l.pos.z = params_.step_height * liftProfile(l.u);
+    if (guard_d2_ > 0.0f) {
+      // nicht näher an die Coxa-Achse, als das Knie in dieser Höhe zulässt
+      const float dz = guard_h_ - l.pos.z;
+      const float need = guard_d2_ - dz * dz;
+      if (need > 0.0f) {
+        const float r_min = guard_coxa_ + std::sqrt(need);
+        const float rx = l.pos.x - coxa_[i].x, ry = l.pos.y - coxa_[i].y;
+        const float r = std::hypot(rx, ry);
+        if (r < r_min && r > 1e-3f) {
+          l.pos.x = coxa_[i].x + rx * r_min / r;
+          l.pos.y = coxa_[i].y + ry * r_min / r;
+        }
+      }
     }
   }
 
   if (!moving) {
     // Angekommen? Dann anhalten (kein Bein in der Luft, alle in Neutralstellung)
     for (int i = 0; i < NUM_LEGS; ++i) {
-      if (legs_[i].swing || distXY(legs_[i].pos, neutral[i]) > SETTLE_TOL) return;
+      if (legs_[i].swing || legs_[i].wait || distXY(legs_[i].pos, neutral[i]) > SETTLE_TOL) return;
     }
     idle_ = true;
     starting_ = true;
+    converging_ = switching_ = false;
     phase_ = 0.0f;
     vx_ = vy_ = wz_ = 0.0f;
     for (int i = 0; i < NUM_LEGS; ++i) legs_[i].pos = {neutral[i].x, neutral[i].y, 0.0f};
