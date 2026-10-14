@@ -4,6 +4,12 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.11.1
+
+- 3D-Ansicht: Die Tibia hat jetzt die gebogene Form des Bauteils aus dem CAD (vom Knie erst nach außen,
+  dann der Knick nach unten zur Fußspitze) statt eines geraden Stabs. Für die Kinematik zählt weiterhin
+  nur die gerade Linie Knie → Fußspitze.
+
 ## 0.11.0
 
 - **3D-Ansicht** auf der Steuerungsseite: Der Roboter als Live-Modell, gerechnet aus den aktuellen

@@ -3526,6 +3526,11 @@ function bindSystem() {
 const D2R = Math.PI / 180;
 // Blickwinkel: Richtung der Kamera um die Hochachse, Höhe über dem Boden (rad), Zoom
 const V3_VIEWS = { '3d': [-2.1, 0.5, 1.05], top: [Math.PI, 1.45, 1.1], side: [-Math.PI / 2, 0.1, 1.3], front: [0, 0.14, 1.35] };
+// Gebogenes Tibia-Bauteil (CAD-Umriss, docs/beingeometrie.py): vom Knie erst nach außen, dann
+// Knick nach unten zur Fußspitze. Mittellinie als [Anteil entlang der Linie Knie -> Fußspitze,
+// seitlich dazu in mm (+ = nach außen/oben)], dazu die Breite je Abschnitt in mm.
+const V3_TIBIA_SHAPE = [[0.17, 14.5], [0.37, 21], [0.75, 7.7]];
+const V3_LEG_WIDTH = [15, 11, 12, 10, 8, 6];  // Coxa, Femur, Tibia: Knie -> Knick -> Fuß
 const V3_GRID = 50;        // mm zwischen den Bodenlinien
 const V3_GRID_N = 8;       // Linien je Richtung
 const V3 = {
@@ -3637,7 +3642,7 @@ function v3PoseFn(b) {
   };
 }
 
-// Punkte eines Beins im Körper-System: Coxa-Achse, Femur-Achse, Knie, Fuß
+// Punkte eines Beins im Körper-System: Coxa-Achse, Femur-Achse, Knie, Form der Tibia, Fußspitze
 function v3LegPoints(leg, a) {
   const m = V3.geo.mounts[leg];
   const g = V3.geo.leg;
@@ -3646,7 +3651,12 @@ function v3LegPoints(leg, a) {
   const f = a[1] * D2R;
   const td = f + (a[2] + 90) * D2R - Math.PI;  // Richtung der Tibia gegen die Waagerechte
   const kr = g.coxa + g.femur * Math.cos(f), kz = g.femur * Math.sin(f);
-  const rz = [[0, 0], [g.coxa, 0], [kr, kz], [kr + g.tibia * Math.cos(td), kz + g.tibia * Math.sin(td)]];
+  const tr = Math.cos(td), tz = Math.sin(td);  // entlang der Tibia-Linie; seitlich: (-tz, tr)
+  const rz = [[0, 0], [g.coxa, 0], [kr, kz]];
+  for (const [along, side] of V3_TIBIA_SHAPE) {
+    rz.push([kr + along * g.tibia * tr - side * tz, kz + along * g.tibia * tz + side * tr]);
+  }
+  rz.push([kr + g.tibia * tr, kz + g.tibia * tz]);
   return rz.map(([r, z]) => [m.x + r * Math.cos(c), m.y + r * Math.sin(c), z]);
 }
 
@@ -3735,7 +3745,7 @@ function v3Draw() {
     body = c.b;
     if (!body) {
       let zmin = 0;
-      for (const p of bl) zmin = Math.min(zmin, p[3][2]);
+      for (const pts of bl) for (const q of pts) zmin = Math.min(zmin, q[2]);
       body = [0, 0, -zmin, 0, 0, 0];
     }
     toWorld = v3PoseFn(body);
@@ -3804,7 +3814,7 @@ function v3Draw() {
   const swing = (leg) => (c.s >> leg) & 1;
   const planted = [];
   for (let leg = 0; leg < 6; ++leg) {
-    const ft = legs[leg][3];
+    const ft = legs[leg][legs[leg].length - 1];
     if (!swing(leg) && ft[2] < 4) planted.push([ft[0], ft[1]]);
   }
   const hull = v3Hull(planted);
@@ -3865,7 +3875,7 @@ function v3Draw() {
   ctx.lineWidth = Math.max(1, W / 700);
   ctx.strokeStyle = col.accent;
   for (let leg = 0; leg < 6; ++leg) {
-    const ft = legs[leg][3];
+    const ft = legs[leg][legs[leg].length - 1];
     if (ft[2] < 3) continue;
     const a = P(ft), b = P([ft[0], ft[1], 0]);
     ctx.beginPath();
@@ -3936,23 +3946,23 @@ function v3Draw() {
     const v = camDir(o);
     V3.topVisible = (n[0] - o[0]) * v[0] + (n[1] - o[1]) * v[1] + (n[2] - o[2]) * v[2] > 0;
   }
-  const W_MM = [15, 11, 8];  // Coxa, Femur, Tibia
   for (let leg = 0; leg < 6; ++leg) {
     const sp = legs[leg].map(P);
     const color = !c.tq ? col.muted : swing(leg) ? col.accent : col.text;
-    for (let k = 0; k < 3; ++k) {
+    const last = sp.length - 2;
+    for (let k = 0; k <= last; ++k) {
       const a = sp[k], b = sp[k + 1];
       items.push({ z: (a[2] + b[2]) / 2, draw() {
         ctx.strokeStyle = color;
-        ctx.lineWidth = px(W_MM[k], (a[2] + b[2]) / 2);
+        ctx.lineWidth = px(V3_LEG_WIDTH[k], (a[2] + b[2]) / 2);
         ctx.beginPath();
         ctx.moveTo(a[0], a[1]);
         ctx.lineTo(b[0], b[1]);
         ctx.stroke();
-        if (k < 3) {  // Gelenk
+        if (k < 2 || k === last) {  // Femur-Achse, Knie, Fußspitze
           ctx.beginPath();
-          ctx.arc(b[0], b[1], px(k === 2 ? 4 : 5.5, b[2]), 0, 2 * Math.PI);
-          ctx.fillStyle = k === 2 ? color : col.surface;
+          ctx.arc(b[0], b[1], px(k === last ? 4 : 5.5, b[2]), 0, 2 * Math.PI);
+          ctx.fillStyle = k === last ? color : col.surface;
           ctx.fill();
           ctx.lineWidth = Math.max(1, W / 600);
           ctx.stroke();
