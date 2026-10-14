@@ -22,6 +22,7 @@ void Sequencer::reset(State s) {
   state_ = s;
   phase_ = 0;
   t_ = 0;
+  latch_ = s == State::StandingUp;
 }
 
 bool Sequencer::requestStand() {
@@ -30,6 +31,7 @@ bool Sequencer::requestStand() {
     state_ = State::StandingUp;
     phase_ = 0;
     t_ = 0;
+    latch_ = true;
   }
   return true;
 }
@@ -52,10 +54,15 @@ Output Sequencer::update(float dt, float stand_height, float stand_stance, float
       return {true, cfg_.sit_height, cfg_.sit_stance};
 
     case State::StandingUp:
+      if (latch_) {
+        latch_ = false;
+        h1_ = stand_height;
+        s1_ = stand_stance;
+      }
       if (phase_ == 0) {
         // 1. anheben, Füße bleiben weit außen stehen
         float s = gait::smoothStep5(t_ / cfg_.rise_s);
-        float h = cfg_.sit_height + (stand_height - cfg_.sit_height) * s;
+        float h = cfg_.sit_height + (h1_ - cfg_.sit_height) * s;
         if (t_ >= cfg_.rise_s) {
           phase_ = 1;
           t_ = 0;
@@ -67,7 +74,7 @@ Output Sequencer::update(float dt, float stand_height, float stand_stance, float
         state_ = State::Standing;
         return {false, stand_height, stand_stance};
       }
-      return {true, stand_height, stand_stance};
+      return {true, h1_, s1_};
 
     case State::SittingDown:
       if (phase_ == 0) {

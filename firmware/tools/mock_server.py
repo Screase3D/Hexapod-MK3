@@ -544,6 +544,10 @@ def handle(cmd):
         state["us"] = [cal["center_us"] for cal in state["cal"]]
     elif c == "slew":
         state["slew"] = float(cmd["deg_per_s"])
+    elif c in ("cal_center", "cal_ref", "cal_invert", "cal_set", "cal_reload", "cal_reset") and state["mode"] == "pose":
+        # wie die Firmware: Kalibrierung ändern schaltet in den Handbetrieb
+        state["mode"] = "manual"
+        return handle(cmd)
     elif c == "cal_get":
         if i is None:
             out["calibration"] = {"version": 3, "servos": state["cal"], "dirty": state["dirty"]}
@@ -672,6 +676,7 @@ async def calibration_post(request):
     data = await request.json()
     if len(data.get("servos", [])) != 18:
         return web.json_response({"ok": False, "msg": "erwarte 18 Servos"}, status=400)
+    state["mode"] = "manual"  # wie die Firmware
     state["cal"] = sorted(data["servos"], key=lambda c: c["id"])
     saved_cal[:] = json.loads(json.dumps(state["cal"]))
     state["dirty"] = False

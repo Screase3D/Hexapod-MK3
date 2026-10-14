@@ -173,6 +173,9 @@ esp_err_t calibrationPostHandler(httpd_req_t* req) {
   JsonDocument doc;
   String err;
   if (!readJsonBody(req, doc, err)) return sendResult(req, false, err);
+  // Neue Kalibrierung ändert die Abbildung Winkel -> Puls: im IK-Betrieb würden alle Gelenke
+  // springen. Im Handbetrieb bleiben die Pulse stehen, die Haltung übernimmt sie beim Zurückschalten weich.
+  motion::setMode(motion::Mode::Manual);
   if (!servos.calibrationFromJson(doc.as<JsonVariantConst>(), err)) return sendResult(req, false, err);
   bool saved = servos.saveCalibration();
   return sendResult(req, saved, saved ? "Kalibrierung importiert und gespeichert"
@@ -389,13 +392,16 @@ int g_ws_errno = 0;  // letzter Sendefehler (nur im HTTP-Server-Task)
 // teilweise Schreibvorgänge zurück; der HTTP-Server wertet die als Erfolg und schickt den
 // nächsten Frame mitten in den Rest des vorigen – der Browser bricht die Verbindung dann
 // mit einem Protokollfehler ab. Hier: alles senden oder Fehler (Verbindung wird geschlossen).
+// Die Frist gilt ab dem letzten Fortschritt: Die Sendefunktion gilt für alle Verbindungen,
+// auch für die Oberfläche selbst (app.js, ~50 KB in einem Aufruf) bei schwachem WLAN.
 int wsSend(httpd_handle_t, int fd, const char* buf, size_t len, int flags) {
-  const uint32_t start = millis();
+  uint32_t start = millis();
   size_t sent = 0;
   while (sent < len) {
     const int r = send(fd, buf + sent, len - sent, flags);
     if (r > 0) {
       sent += r;
+      start = millis();
       continue;
     }
     const int err = r < 0 ? errno : ENOTCONN;  // 0 Bytes: Verbindung ist zu
@@ -428,11 +434,19 @@ void logWsSendFailure(const char* what, esp_err_t err) {
   suppressed = 0;
 }
 
+// Neue Verbindung: eigene Sendefunktion (sendet ganz oder meldet einen Fehler). Der
+// Server ruft den WebSocket-Handler nach dem Handshake nicht auf – daher hier, für jede
+// Verbindung (auch REST, schadet nicht).
+bool noteStall(int fd, bool stalled, uint32_t now);
+
+esp_err_t sessionOpen(httpd_handle_t hd, int fd) {
+  httpd_sess_set_send_override(hd, fd, wsSend);
+  noteStall(fd, false, 0);  // Nummer einer früheren, hängenden Verbindung: neu zählen
+  return ESP_OK;
+}
+
 esp_err_t wsHandler(httpd_req_t* req) {
-  if (req->method == HTTP_GET) {  // Handshake abgeschlossen
-    httpd_sess_set_send_override(req->handle, httpd_req_to_sockfd(req), wsSend);
-    return ESP_OK;
-  }
+  if (req->method == HTTP_GET) return ESP_OK;  // Handshake (nicht in jeder IDF-Version)
 
   httpd_ws_frame_t frame = {};
   frame.type = HTTPD_WS_TYPE_TEXT;
@@ -498,6 +512,39 @@ bool socketWritable(int fd) {
   return select(fd + 1, nullptr, &w, nullptr, &tv) > 0 && FD_ISSET(fd, &w);
 }
 
+// Seit wann ein Client nichts mehr abnimmt (nur im Server-Task benutzt). Nach
+// STALL_CLOSE_MS wird er getrennt – sonst bliebe ein totes Handy (gesperrt, aus dem WLAN)
+// minutenlang verbunden, bis lwIP aufgibt.
+constexpr uint32_t STALL_CLOSE_MS = 10000;
+struct Stall {
+  int fd = -1;
+  uint32_t since = 0;
+};
+Stall g_stalls[8];
+
+// true = Client hängt schon zu lange (Verbindung schließen)
+bool noteStall(int fd, bool stalled, uint32_t now) {
+  Stall* slot = nullptr;
+  for (auto& st : g_stalls) {
+    if (st.fd == fd) slot = &st;
+  }
+  if (!stalled) {
+    if (slot) slot->fd = -1;
+    return false;
+  }
+  if (!slot) {
+    for (auto& st : g_stalls) {
+      if (st.fd < 0) slot = &st;
+    }
+    if (!slot) return false;
+    slot->fd = fd;
+    slot->since = now;
+  }
+  if (now - slot->since < STALL_CLOSE_MS) return false;
+  slot->fd = -1;
+  return true;
+}
+
 // Läuft im Kontext des HTTP-Server-Tasks (httpd_queue_work) -> thread-sicher
 void broadcastWork(void* arg) {
   BroadcastJob* job = static_cast<BroadcastJob*>(arg);
@@ -514,8 +561,14 @@ void broadcastWork(void* arg) {
       // diese Nachricht für diesen Client auslassen statt zu warten
       if (!socketWritable(fds[i])) {
         g_ws_dropped.fetch_add(1);
+        if (!job->live && noteStall(fds[i], true, now)) {
+          EV_WARN("WebSocket: Gerät nimmt seit %u s nichts mehr ab – Verbindung getrennt",
+                  (unsigned)(STALL_CLOSE_MS / 1000));
+          httpd_sess_trigger_close(g_server, fds[i]);
+        }
         continue;
       }
+      if (!job->live) noteStall(fds[i], false, now);
       httpd_ws_frame_t f = {};
       f.type = HTTPD_WS_TYPE_TEXT;
       f.payload = (uint8_t*)job->data;
@@ -553,6 +606,7 @@ bool begin() {
   config.max_uri_handlers = 28;
   config.max_open_sockets = 7;
   config.lru_purge_enable = true;
+  config.open_fn = sessionOpen;
   config.stack_size = 8192;
   config.core_id = 0;
   config.uri_match_fn = httpd_uri_match_wildcard;

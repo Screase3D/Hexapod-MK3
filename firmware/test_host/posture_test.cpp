@@ -147,10 +147,46 @@ static void testStandUpAndSitDown() {
   CHECK(s.limit_hits == 0);
   CHECK(s.max_vz < 100.0f);
 }
+// Standhöhe/Fußabstand ändern sich mitten im Aufstehen (Regler, Profil laden):
+// der Ablauf bleibt bei den Werten vom Beginn, nichts springt
+static void testStandTargetChange() {
+  auto run = [](bool change, float& max_dh, int& steps) {
+    posture::Sequencer seq{posture::Config{SIT_HEIGHT, SIT_STANCE, SIT_RISE_S}};
+    seq.reset(posture::State::Sitting);
+    seq.requestStand();
+    float h = SIT_HEIGHT, sh = POSE_LIMITS.height_default, ss = POSE_LIMITS.stance_default;
+    float last_stance = SIT_STANCE;
+    max_dh = 0;
+    for (steps = 0; steps < 500; ++steps) {
+      if (change && steps == (int)(0.3f * SIT_RISE_S / DT)) sh = POSE_LIMITS.height_max;
+      if (change && steps == (int)(SIT_RISE_S / DT) + 2) {
+        sh = POSE_LIMITS.height_min;
+        ss = POSE_LIMITS.stance_max;
+      }
+      posture::Output o = seq.update(DT, sh, ss, h, steps > SIT_RISE_S / DT + 5);
+      if (!o.active) break;
+      max_dh = std::fmax(max_dh, std::fabs(o.height - h));
+      // Fußabstand springt nur einmal (die Gangart setzt die Füße um), danach steht er
+      if (o.stance != last_stance) CHECK(last_stance == SIT_STANCE);
+      last_stance = o.stance;
+      h = o.height;
+    }
+    CHECK(seq.state() == posture::State::Standing);
+    CHECK_NEAR(h, POSE_LIMITS.height_default, 1e-3);
+    CHECK_NEAR(last_stance, POSE_LIMITS.stance_default, 1e-3);
+  };
+  float ref_dh, dh;
+  int ref_steps, n;
+  run(false, ref_dh, ref_steps);
+  run(true, dh, n);
+  CHECK_NEAR(dh, ref_dh, 1e-4);
+  CHECK(n == ref_steps);
+}
 
 int main() {
   testSitPose();
   testStandUpAndSitDown();
+  testStandTargetChange();
   std::printf("%d Prüfungen, %d Fehler\n", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

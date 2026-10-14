@@ -33,6 +33,7 @@ void begin() {
   ArduinoOTA.onStart([]() {
     g_active = true;
     prepare();
+    servos.setInhibit("Firmware-Update");  // loop() steht während des Uploads; danach setzt main.cpp sie zurück
     EV_INFO("Firmware-Update über PlatformIO gestartet");
   });
   ArduinoOTA.onEnd([]() {

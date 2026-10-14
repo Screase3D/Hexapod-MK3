@@ -25,7 +25,7 @@ Oberfläche dreht das Bild um weitere 90° – eigene Clients müssen das bei 90
 |---|---|---|
 | `GET /api/status` | – | `fw` (Version aus `firmware/VERSION`), `git` (Commit, `+` = mit lokalen Änderungen gebaut), `build` (Datum), `ui` (Kennung der eingebetteten Oberfläche), Chip, Speicher, WLAN, Kamera, Geräte, Akku |
 | `GET /api/calibration` | – | `{"version":2,"servos":[…18…],"dirty":bool}`, je Servo u. a. `ref_deg`, `center_us`, `us_per_deg`, `min_deg`, `max_deg` (siehe [kalibrierung.md](kalibrierung.md)) |
-| `POST /api/calibration` | wie GET (ohne `dirty`) | übernimmt alle 18 Servos und **speichert sofort**; Dateien mit `version` 1 (`center_us` = Puls bei 0°) werden umgerechnet |
+| `POST /api/calibration` | wie GET (ohne `dirty`) | übernimmt alle 18 Servos und **speichert sofort**; Dateien mit `version` 1 (`center_us` = Puls bei 0°) werden umgerechnet. Schaltet in den manuellen Modus (siehe `cal_*`) |
 | `GET /api/camera` | – | Einstellungen, verfügbare Auflösungen, `sensor`, `awake` (Kamera wach), `bt_framesize`, `framesize_active`, `image` {…}, `sharpness_ok` |
 | `POST /api/camera` | `{"framesize","quality","vflip","hmirror","max_fps","rotation","xclk_mhz","bt_framesize"}` und Bild: `brightness`, `contrast`, `saturation`, `sharpness`, `ae_level` (je −2..2), `gainceiling` (0..6 = 2×..128×), `wb_mode` (0 auto, 1 Sonne, 2 Wolken, 3 Büro, 4 Zuhause), `aec2`, `lenc`, `bpc` (bool) – jeweils Teilmenge | neue Einstellungen (persistent); `rotation` 0/90/180/270; `xclk_mhz` 10/16/20 wirkt beim nächsten Aufwecken; `bt_framesize` = höchste Auflösung, solange Bluetooth an ist (0 = keine Anpassung). Schärfe nur OV5640/OV3660 |
 | `GET /api/wifi` | – | WLAN-Status: `mode` (`ap`/`ap+sta`/`sta`), `ap` {active, ip, clients, off_in_s}, `sta` {state, ssid, ip, rssi, reason}, `saved_ssid` |
@@ -98,6 +98,12 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `cal_save` | – | Kalibrierung in NVS speichern |
 | `cal_reload` | – | gespeicherte Kalibrierung laden (Änderungen verwerfen) |
 | `cal_reset` | – | Standardwerte (noch nicht gespeichert) |
+| `client_log` | `text` (bis 100 Zeichen) | Meldung der Oberfläche ins Ereignisprotokoll (Warnung), höchstens alle 10 s, dazwischen gezählt. **Ohne Antwort** |
+
+Alle Befehle, die die Kalibrierung ändern (`cal_set`, `cal_center`, `cal_ref`, `cal_invert`, `cal_reload`,
+`cal_reset`), schalten in den manuellen Modus: Im IK-Modus würde die neue Zuordnung Winkel → Puls alle
+betroffenen Gelenke springen lassen. Im manuellen Modus bleiben die Pulse stehen; beim Zurückschalten
+in den IK-Modus fährt die Haltung weich an.
 
 Beispiel:
 
@@ -135,7 +141,8 @@ Beispiel:
             "wake_ms": 640, "wakes": 3},
   "heap": 182000,
   "ws": 1,
-  "ws_drop": 0
+  "ws_drop": 0,
+  "ctl": {"hz": 50.0, "max_us": 2100}
 }
 ```
 
@@ -143,6 +150,12 @@ Beispiel:
 Live-Nachrichten: Ist der Sendepuffer eines Clients voll (WLAN kommt nicht nach), lässt der Roboter
 diese regelmäßigen Nachrichten für ihn aus, statt zu warten – so bleiben eingehende Befehle (Fahren!)
 nicht hängen. Die Oberfläche zeigt die Anzahl der letzten Minute im Tooltip der Verbindungsanzeige.
+Kommt ein Client 10 s lang gar nicht mehr nach (Verbindung tot, aber noch nicht abgemeldet), trennt ihn
+der Roboter; die Oberfläche verbindet sich dann neu.
+
+`ctl`: Regel-Task (Gang, IK, Servos) – erreichte Frequenz `hz` (Soll 50) und längste Rechenzeit eines
+Zyklus in der letzten Sekunde `max_us`. `cam.bt_fs`: nur bei verbundenem Bluetooth-Controller, wenn die
+Kamera deshalb mit kleinerer Auflösung läuft (Kennung wie `framesize` in `GET /api/camera`).
 
 `bat.state`: `off` (Überwachung ausgeschaltet – `v` ist dann nur ein ungeprüfter Messwert),
 `usb` (kein Akku), `ok`, `warn`, `critical`. `servo.inhibit` enthält den Grund einer

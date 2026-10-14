@@ -82,15 +82,17 @@ void updateSafety() {
     esp_deep_sleep_start();  // ohne Weckquelle: nur Reset/Neustart weckt auf
   }
 
-  static bool inhibited = false;
-  if (g_battery_cutoff && !inhibited) {
-    servos.setInhibit("Akku leer");
-    inhibited = true;
+  // Sperre der Servos: Firmware-Update (nichts darf sich bewegen, während der Flash
+  // geschrieben wird – auch nicht per Controller) bzw. leerer Akku
+  static bool bat_inhibit = false;
+  if (g_battery_cutoff && !bat_inhibit) {
+    bat_inhibit = true;
     Serial.println("[Akku] Unterspannung - Servos abgeschaltet");
-  } else if (inhibited && battery.state() != BatteryMonitor::State::Critical) {
-    servos.setInhibit("");
-    inhibited = false;
+  } else if (bat_inhibit && battery.state() != BatteryMonitor::State::Critical) {
+    bat_inhibit = false;
   }
+  const char* reason = ota::active() ? "Firmware-Update" : (bat_inhibit ? "Akku leer" : "");
+  if (servos.inhibitReason() != reason) servos.setInhibit(reason);
 }
 
 void updateLeds() {

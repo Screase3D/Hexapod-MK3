@@ -226,6 +226,7 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     result(out, true);
   } else if (strcmp(cmd, "cal_set") == 0) {
     if (!validId(in, id, out)) return;
+    motion::setMode(motion::Mode::Manual);  // siehe calibrationPostHandler: sonst springen die Gelenke
     ServoCal c = servos.getCal(id);
     if (in["center_us"].is<float>()) c.center_us = in["center_us"];
     if (in["us_per_deg"].is<float>()) c.us_per_deg = in["us_per_deg"];
@@ -235,15 +236,18 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     attachCal(out, id);
   } else if (strcmp(cmd, "cal_center") == 0) {
     if (!validId(in, id, out)) return;
+    motion::setMode(motion::Mode::Manual);
     result(out, servos.captureCenter(id, err), err.isEmpty() ? "Montagestellung übernommen" : err);
     attachCal(out, id);
   } else if (strcmp(cmd, "cal_ref") == 0) {
     if (!validId(in, id, out)) return;
+    motion::setMode(motion::Mode::Manual);
     bool ok = servos.captureReference(id, in["deg"] | 45.0f, err);
     result(out, ok, ok ? "Referenzwinkel übernommen" : err);
     attachCal(out, id);
   } else if (strcmp(cmd, "cal_invert") == 0) {
     if (!validId(in, id, out)) return;
+    motion::setMode(motion::Mode::Manual);
     servos.invertDirection(id);
     result(out, true, "Drehrichtung umgekehrt");
     attachCal(out, id);
@@ -253,9 +257,11 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     else EV_ERROR("Kalibrierung speichern fehlgeschlagen");
     result(out, ok, ok ? "Kalibrierung gespeichert" : "Speichern fehlgeschlagen");
   } else if (strcmp(cmd, "cal_reload") == 0) {
+    motion::setMode(motion::Mode::Manual);
     bool ok = servos.reloadCalibration();
     result(out, true, ok ? "Gespeicherte Kalibrierung geladen" : "Keine gespeicherte Kalibrierung - Standardwerte");
   } else if (strcmp(cmd, "cal_reset") == 0) {
+    motion::setMode(motion::Mode::Manual);
     servos.resetCalibration();
     result(out, true, "Standardwerte gesetzt (noch nicht gespeichert)");
   } else {

@@ -63,6 +63,8 @@ uint32_t g_ap_off_at = 0;
 // eine Sekunde später klappt dann. Erst mehrere Ablehnungen in Folge heißen „Passwort falsch“.
 constexpr uint32_t RETRY_GAP_MS = 1000;      // Pause zwischen zwei Anläufen
 constexpr int AUTH_FAILS_WRONG_PASS = 3;     // so viele Ablehnungen in Folge -> Passwort falsch
+// Heimnetz weg, während der Access Point nach dem Verbinden noch läuft: nach 3 s selbst neu versuchen
+constexpr uint32_t AP_LINGER_LOST_MS = 3000;
 constexpr uint32_t AP_RETRY_FIRST_MS = 10000;  // im AP-Modus: erster neuer Versuch, dann doppelt so lang
 constexpr uint32_t AP_RETRY_WITH_CLIENTS_MS = 180000;  // mit Geräten am AP seltener (Kanalwechsel stört sie)
 std::atomic<int> g_disc_events{0};  // Zähler der Trennungen (Ereignis-Task)
@@ -381,6 +383,16 @@ void loop() {
           unlock();
           g_last_retry = now;
           startAccessPoint();
+        } else if (g_ap && now - g_lost_since > AP_LINGER_LOST_MS) {
+          // Weg, während der Access Point nach dem Verbinden noch läuft: Dort ist das
+          // automatische Wiederverbinden aus – selbst erneut versuchen, AP bleibt an
+          g_sta = StaState::Failed;
+          lock();
+          g_fail_reason = "Verbindung zum Heimnetz verloren";
+          unlock();
+          g_last_retry = now;
+          g_ap_off_at = 0;
+          g_ap_retry_ms = AP_RETRY_FIRST_MS;
         }
       } else {
         g_lost_since = 0;
@@ -408,7 +420,8 @@ void loop() {
   }
 
   // Access Point nach erfolgreicher Verbindung abschalten
-  if (g_ap && g_ap_off_at && (int32_t)(now - g_ap_off_at) >= 0 && g_sta == StaState::Connected) {
+  if (g_ap && g_ap_off_at && (int32_t)(now - g_ap_off_at) >= 0 && g_sta == StaState::Connected &&
+      st == WL_CONNECTED) {
     stopAccessPoint();
   }
 

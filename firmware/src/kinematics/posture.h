@@ -54,6 +54,12 @@ class Sequencer {
   int phase_ = 0;
   float t_ = 0;
   float h0_ = 0;  // Höhe zu Beginn des Absenkens
+  // Standhöhe und Fußabstand zu Beginn des Aufstehens: Änderungen währenddessen
+  // (Regler, Profil) würden sonst ungeglättet durchschlagen; danach gleitet die
+  // Haltung zum neuen Wert
+  bool latch_ = false;
+  float h1_ = 0;
+  float s1_ = 0;
 };
 
 }  // namespace posture

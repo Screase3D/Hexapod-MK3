@@ -4,6 +4,29 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.12.2
+
+Weitere Fehlerbehebungen aus der Durchsicht:
+
+- **Aufstehen:** Wurde die Standhöhe oder der Fußabstand während des Aufstehens geändert (Regler, Profil,
+  Controller), sprang der Körper – im ungünstigsten Fall um 65 mm in einem Regelschritt. Das Aufstehen
+  läuft jetzt mit den Werten vom Beginn zu Ende, danach gleitet die Haltung zum neuen Wert.
+- **Kalibrierung im Stehen:** Drehrichtung umkehren, Standardwerte, gespeicherte Werte laden oder eine
+  Kalibrierung importieren wirkte im IK-Betrieb sofort auf alle Gelenke – sie sprangen. Diese Befehle
+  schalten jetzt zuerst in den manuellen Modus (Servos bleiben stehen).
+- **Firmware-Update über PlatformIO:** Die Servos wurden zwar abgeschaltet, ließen sich aber während des
+  Uploads wieder einschalten; jetzt gesperrt wie beim Upload über die Weboberfläche. Die Sperre bei leerem
+  Akku und die beim Update kommen sich nicht mehr in die Quere.
+- **WLAN:** Riss die Verbindung zum Heimnetz ab, während der eigene Zugangspunkt noch kurz offen war, wurde
+  er trotzdem abgeschaltet – der Roboter war dann gar nicht mehr erreichbar, bis das Heimnetz wiederkam.
+  Jetzt bleibt der Zugangspunkt offen und das Heimnetz wird nach 10 s neu versucht (wie nach einem
+  gescheiterten Verbinden).
+- **Webserver:** Der Gegendruck bei schwachem WLAN (0.11.0) griff nur für Clients, die schon einmal einen
+  Befehl geschickt hatten; jetzt für alle ab dem Verbinden. Clients, die 10 s lang gar nichts mehr
+  annehmen (tote Verbindung), werden getrennt statt weiter Speicher zu belegen. Die Sendefrist zählt ab dem
+  letzten Fortschritt, damit die Oberfläche auch bei sehr schwachem WLAN vollständig lädt.
+- Doku: Telemetrie `ctl` und `cam.bt_fs`, Befehl `client_log`.
+
 ## 0.12.1
 
 Fehlerbehebungen nach einer gründlichen Durchsicht des ganzen Codes:
