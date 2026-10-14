@@ -886,3 +886,30 @@ html.fpv-on, html.fpv-on body { overflow: hidden; }
 }
 .profile-del:hover { color: var(--danger-text); border-color: var(--danger); }
 .profile-add { border-style: dashed; color: var(--muted); }
+
+/* ---- Spielereien */
+.fun-now { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; margin: 0 0 var(--gap);
+  padding: 8px 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
+.fun-now[hidden] { display: none; }
+.fun-now .ic { color: var(--accent); flex: none; }
+.fun-now-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.emote-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; margin: 6px 0 8px; }
+.emote-grid .btn { min-height: 44px; }
+.emote-grid .btn.running, .fun-row .btn.running { border-color: var(--accent); background: var(--accent-soft); }
+.fun-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.fun-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.fun-row:last-child { border-bottom: 0; }
+.fun-row-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fun-row-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fun-steps { list-style: none; counter-reset: step; padding: 0; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.fun-steps > li { counter-increment: step; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+.fun-steps > li.running { border-color: var(--accent); background: var(--accent-soft); }
+.fun-step-head { display: flex; align-items: center; gap: 6px; }
+.fun-step-head::before { content: counter(step); min-width: 1.4em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fun-step-head select { flex: 1; min-width: 0; }
+.fun-step-tools { display: inline-flex; gap: 2px; }
+.fun-step-tools .btn { min-width: 32px; padding: 4px 6px; }
+.fun-params { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 6px 0 2px 1.9em; }
+.fun-params > select { flex: 1; min-width: 0; }
+.fun-num { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+.fun-num input { width: 68px; }

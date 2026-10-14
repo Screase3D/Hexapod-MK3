@@ -4,6 +4,20 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.14.0
+
+- **Neue Seite „Spielereien“:**
+  - **Emotes** auf einen Tipp: Hallo (Vorderbeine heben und winken), Verbeugen, Freuen, Umschauen,
+    Ängstlich, Strecken sowie die Gesten Kreisen, Ja, Nein, Liegestütz und Tanzen. Sitzt der Roboter, steht er
+    vorher auf.
+  - **Choreografien:** Abfolgen aus Emotes, Gesten, Körperbewegungen (verschieben/neigen/drehen), Höhe,
+    Laufen, Vorderbeinen, Winken und Pausen, zusammengestellt im Editor (Schritte hinzufügen, verschieben,
+    entfernen, Endlosschleife, Entwurf direkt abspielen). Vorlagen: Disco, Begrüßung, Wache schieben – als
+    Kopie bearbeitbar. Eigene Choreografien liegen im Browser, Export/Import als JSON.
+  - Leertaste, zweiter Tipp, Stopp in der Leiste, Seitenwechsel oder Verbindungsabbruch halten an; danach
+    geht der Körper in die Haltung zurück, die Vorderbeine werden abgesetzt und die Höhe wiederhergestellt.
+    Höhenschritte bleiben im erreichbaren Bereich (`motion.range`).
+
 ## 0.13.0
 
 - **Haltungs-Regler passen sich an:** Unter jedem Regler (Höhe, Fußabstand, Verschieben, Neigen, Gieren)

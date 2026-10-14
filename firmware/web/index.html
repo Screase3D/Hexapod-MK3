@@ -31,6 +31,7 @@
       <symbol id="i-gear" viewBox="0 0 24 24"><path d="M18.9 10.6 21.5 10.9 21.5 13.1 18.9 13.4 17.8 15.9 19.6 17.9 17.9 19.6 15.9 17.8 13.4 18.9 13.1 21.5 10.9 21.5 10.6 18.9 8.1 17.8 6.1 19.6 4.4 17.9 6.2 15.9 5.1 13.4 2.5 13.1 2.5 10.9 5.1 10.6 6.2 8.1 4.4 6.1 6.1 4.4 8.1 6.2 10.6 5.1 10.9 2.5 13.1 2.5 13.4 5.1 15.9 6.2 17.9 4.4 19.6 6.1 17.8 8.1Z"/><circle cx="12" cy="12" r="3"/></symbol>
       <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
       <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none"/></symbol>
@@ -72,6 +73,8 @@
       <nav class="sb-nav">
         <a class="nav-item" href="#steuerung" data-page="control" title="Steuerung">
           <svg class="ic"><use href="#i-control"/></svg><span class="nav-label">Steuerung</span></a>
+        <a class="nav-item" href="#spielereien" data-page="fun" title="Spielereien">
+          <svg class="ic"><use href="#i-sparkle"/></svg><span class="nav-label">Spielereien</span></a>
         <a class="nav-item" href="#kalibrierung" data-page="cal" title="Kalibrierung &amp; Justierung">
           <svg class="ic"><use href="#i-sliders"/></svg><span class="nav-label">Kalibrierung &amp; Justierung</span>
           <span id="nav-cal-dot" class="nav-dot" title="Ungespeicherte Kalibrierung" hidden></span></a>
@@ -427,6 +430,60 @@
         </section>
 
         <!-- ======================= KALIBRIERUNG & JUSTIERUNG ======================= -->
+        <section id="page-fun" class="page" data-title="Spielereien">
+          <div class="fun-now" id="fun-now" hidden>
+            <svg class="ic"><use href="#i-play"/></svg>
+            <span id="fun-now-text" class="fun-now-text"></span>
+            <button id="fun-now-stop" class="btn btn-small" type="button"><svg class="ic"><use href="#i-stop"/></svg>Stopp</button>
+          </div>
+          <div class="grid-2">
+            <div class="stack">
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-sparkle"/></svg>Emotes</h2>
+                <div class="emote-grid" id="fun-emotes"></div>
+                <p class="muted small">Ein Tipp genügt – sitzt der Roboter, steht er vorher auf (Servos müssen an
+                  sein). <kbd>Leertaste</kbd> oder ein zweiter Tipp hält an, <kbd>Esc</kbd> ist wie immer Not-Aus.</p>
+              </div>
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-play"/></svg>Choreografien</h2>
+                <div class="fun-list" id="fun-list"></div>
+                <div class="row wrap">
+                  <button id="fun-new" class="btn btn-primary" type="button">Neue Choreografie</button>
+                  <button id="fun-export" class="btn btn-ghost" type="button" title="Eigene Choreografien als JSON-Datei sichern"><svg class="ic"><use href="#i-download"/></svg>Export</button>
+                  <label class="btn btn-ghost file-btn" title="Choreografien aus einer JSON-Datei hinzufügen"><svg class="ic"><use href="#i-upload"/></svg>Import<input id="fun-import" type="file" accept=".json,application/json"></label>
+                </div>
+                <p class="muted small">Eigene Choreografien werden in diesem Browser gespeichert – mit Export/Import
+                  auf andere Geräte übertragen. Vorlagen lassen sich als Kopie bearbeiten.</p>
+              </div>
+            </div>
+            <div class="card" id="fun-editor" hidden>
+              <h2><svg class="ic"><use href="#i-sliders"/></svg><span id="fun-ed-title">Choreografie bearbeiten</span></h2>
+              <div class="form-grid">
+                <label for="fun-name">Name</label>
+                <input id="fun-name" type="text" maxlength="40" autocomplete="off">
+              </div>
+              <label class="switch">
+                <input id="fun-loop" type="checkbox">
+                <span class="slider"></span>
+                <span class="switch-label">Endlos wiederholen</span>
+              </label>
+              <ol class="fun-steps" id="fun-steps"></ol>
+              <div class="row wrap">
+                <select id="fun-add-type" aria-label="Art des neuen Schritts"></select>
+                <button id="fun-add" class="btn" type="button">Schritt hinzufügen</button>
+              </div>
+              <p class="muted small">Körper und Laufen in % des Joystick-Ausschlags (Körper: ±30 mm verschieben,
+                ±12° neigen, ±15° drehen; + = vor/links/Nase hoch/links drehen), Höhe in mm relativ zur eingestellten
+                Haltung. Bewegungen werden weich gefahren; was die Beine nicht erreichen, wird begrenzt.</p>
+              <div class="row wrap">
+                <button id="fun-try" class="btn" type="button"><svg class="ic"><use href="#i-play"/></svg>Abspielen</button>
+                <button id="fun-save" class="btn btn-primary" type="button">Speichern</button>
+                <button id="fun-close" class="btn btn-ghost" type="button">Schließen</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section id="page-cal" class="page" data-title="Kalibrierung &amp; Justierung" data-short="Kalibrierung">
           <div class="card">
             <div class="card-head">

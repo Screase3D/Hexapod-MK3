@@ -194,6 +194,7 @@ function wsClosed(ws, ev) {
   S.ws = null;
   if (S.wsOpen && !document.hidden) S.wsLastClose = describeClose(ev);  // Handy gesperrt: kein Fehler
   S.wsOpen = false;
+  funStop();  // Choreografie nicht blind weiterlaufen lassen
   if (!S.wsDownSince) {
     S.wsDownSince = Date.now();
     setTimeout(renderConnection, WS_BANNER_DELAY_MS + 50);
@@ -1340,10 +1341,512 @@ function bindEditor() {
   $('ed-go-max').onclick = () => S.cal[S.sel] && setTestDeg(S.cal[S.sel].max_deg);
 }
 
+// ----------------------------------------------------------- Spielereien ----
+// Emotes und Choreografien: Abfolgen aus Gesten, Körperbewegungen, Höhe, Laufen und
+// Vorderbeinen. Der Browser spielt sie mit denselben Befehlen ab wie die Handsteuerung
+// (Körper/Laufen alle 100 ms erneuert); eigene Choreografien liegen im Browser.
+
+const FUN_KEY = 'hexapod.choreos';
+const FUN_TICK_MS = 100;
+const FUN_GESTURES = { circle: 'Kreisen', nod: 'Ja', shake: 'Nein', pushup: 'Liegestütz', dance: 'Tanzen' };
+const FUN_TYPES = {
+  emote: 'Emote', gesture: 'Geste', body: 'Körper', height: 'Höhe', walk: 'Laufen', arms: 'Vorderbeine',
+  wave: 'Winken', pause: 'Pause',
+};
+// Körper: x vor, y links, roll, pitch (+ Nase hoch), yaw (+ links) in % des Joystick-Ausschlags
+const fb = (x, y, roll, pitch, yaw, s) => ({ t: 'body', x, y, roll, pitch, yaw, s });
+const fh = (dz, s) => ({ t: 'height', dz, s });
+const FUN_EMOTES = [
+  { id: 'hello', name: 'Hallo', steps: [{ t: 'arms', up: true }, { t: 'wave' }, { t: 'arms', up: false }] },
+  { id: 'bow', name: 'Verbeugen', steps: [fb(20, 0, 0, -100, 0, 1.4), fb(0, 0, 0, 0, 0, 0.8)] },
+  { id: 'happy', name: 'Freuen', steps: [fh(-12, 0.45), fh(0, 0.45), fh(-12, 0.45), fh(0, 0.45),
+    fb(0, 0, 0, 30, 60, 0.4), fb(0, 0, 0, 30, -60, 0.4), fb(0, 0, 0, 30, 60, 0.4), fb(0, 0, 0, 0, 0, 0.5)] },
+  { id: 'look', name: 'Umschauen', steps: [fb(0, 0, 0, 40, 100, 1.2), fb(0, 0, 0, 40, -100, 1.6), fb(0, 0, 0, 0, 0, 0.8)] },
+  { id: 'scared', name: 'Ängstlich', steps: [fh(-18, 0.6), fb(-100, 0, 0, 50, 0, 0.7),
+    fb(-100, 0, 25, 50, 0, 0.15), fb(-100, 0, -25, 50, 0, 0.15), fb(-100, 0, 25, 50, 0, 0.15),
+    fb(-100, 0, -25, 50, 0, 0.15), fb(-100, 0, 0, 50, 0, 0.6), fb(0, 0, 0, 0, 0, 0.6), fh(0, 0.6)] },
+  { id: 'stretch', name: 'Strecken', steps: [fh(25, 1.0), fb(0, 0, 0, 100, 0, 1.2), fb(0, 0, 0, -60, 0, 1.0),
+    fb(0, 0, 0, 0, 0, 0.6), fh(0, 0.8)] },
+  ...Object.entries(FUN_GESTURES).map(([g, name]) => ({ id: g, name, steps: [{ t: 'gesture', name: g }] })),
+];
+const FUN_TEMPLATES = [
+  { id: 'tpl-disco', name: 'Disco', builtin: true, loop: false, steps: [
+    fb(0, 0, 100, 0, 0, 0.4), fb(0, 0, -100, 0, 0, 0.4), fb(0, 0, 100, 0, 0, 0.4), fb(0, 0, -100, 0, 0, 0.4),
+    fh(-12, 0.3), fh(0, 0.3), fh(-12, 0.3), fh(0, 0.3), { t: 'gesture', name: 'dance' },
+    fb(0, 100, 0, 0, 0, 0.5), fb(0, -100, 0, 0, 0, 0.5), fb(0, 0, 0, 0, 0, 0.4), { t: 'gesture', name: 'circle' }] },
+  { id: 'tpl-greet', name: 'Begrüßung', builtin: true, loop: false, steps: [
+    { t: 'emote', id: 'hello' }, { t: 'emote', id: 'bow' }, { t: 'gesture', name: 'nod' }] },
+  { id: 'tpl-patrol', name: 'Wache schieben', builtin: true, loop: true, steps: [
+    { t: 'walk', vx: 60, vy: 0, turn: 0, s: 3 }, { t: 'walk', vx: 0, vy: 0, turn: 70, s: 2.6 },
+    { t: 'emote', id: 'look' }, { t: 'pause', s: 1 }] },
+];
+
+const FUN = { run: null, own: [], edit: null };
+
+function funLoad() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FUN_KEY) || '[]');
+    FUN.own = (Array.isArray(raw) ? raw : []).map(funCleanChoreo).filter(Boolean);
+  } catch (e) {
+    FUN.own = [];
+  }
+}
+
+function funStore() {
+  try {
+    localStorage.setItem(FUN_KEY, JSON.stringify(FUN.own));
+    return true;
+  } catch (e) {
+    toast('Speichern im Browser nicht möglich (privater Modus?) – Export verwenden', true);
+    return false;
+  }
+}
+
+// Eingelesene Schritte prüfen und begrenzen (Import, Speicher)
+function funCleanStep(st) {
+  if (!st || !FUN_TYPES[st.t]) return null;
+  const num = (v, lo, hi, d = 0) => (Number.isFinite(+v) ? clamp(Math.round(+v * 100) / 100, lo, hi) : d);
+  const s = num(st.s, 0, 30, 1);
+  switch (st.t) {
+    case 'emote': return FUN_EMOTES.some((e) => e.id === st.id) ? { t: 'emote', id: st.id } : null;
+    case 'gesture': return FUN_GESTURES[st.name] ? { t: 'gesture', name: st.name } : null;
+    case 'body': return { t: 'body', x: num(st.x, -100, 100), y: num(st.y, -100, 100), roll: num(st.roll, -100, 100),
+      pitch: num(st.pitch, -100, 100), yaw: num(st.yaw, -100, 100), s };
+    case 'height': return { t: 'height', dz: num(st.dz, -60, 60), s };
+    case 'walk': return { t: 'walk', vx: num(st.vx, -100, 100), vy: num(st.vy, -100, 100), turn: num(st.turn, -100, 100), s };
+    case 'arms': return { t: 'arms', up: !!st.up };
+    case 'wave': return { t: 'wave' };
+    default: return { t: 'pause', s };
+  }
+}
+
+function funCleanChoreo(c) {
+  if (!c || typeof c.name !== 'string' || !Array.isArray(c.steps)) return null;
+  const steps = c.steps.slice(0, 200).map(funCleanStep).filter(Boolean);
+  return { id: typeof c.id === 'string' && c.id ? c.id : funId(), name: c.name.slice(0, 40) || 'Choreografie',
+    loop: !!c.loop, steps };
+}
+
+const funId = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const funTel = () => (S.tel && S.tel.motion) || {};
+const funFind = (id) => FUN_TEMPLATES.find((c) => c.id === id) || FUN.own.find((c) => c.id === id) ||
+  FUN_EMOTES.find((e) => `emote-${e.id}` === id) ||
+  (FUN_TEMPLATES.draft && FUN_TEMPLATES.draft.id === id ? FUN_TEMPLATES.draft : null);
+
+// ---- Abspielen
+
+function funSleep(ms, run) {
+  return new Promise((resolve) => {
+    const end = Date.now() + ms;
+    const tick = () => (run.stopped || Date.now() >= end ? resolve() : setTimeout(tick, Math.min(50, end - Date.now())));
+    tick();
+  });
+}
+
+async function funUntil(cond, ms, run) {
+  const end = Date.now() + ms;
+  while (!run.stopped && Date.now() < end) {
+    if (cond()) return true;
+    await funSleep(50, run);
+  }
+  return !run.stopped && cond();
+}
+
+// Befehl für die Dauer ms alle 100 ms wiederholen (Firmware hält sonst nach 0,6 s an)
+async function funHold(ms, fn, run) {
+  const end = Date.now() + ms;
+  while (!run.stopped && Date.now() < end) {
+    if (!fn()) {
+      run.stopped = true;
+      break;
+    }
+    await funSleep(Math.min(FUN_TICK_MS, end - Date.now()), run);
+  }
+}
+
+// Steht der Roboter (IK-Betrieb, Haltung „stehen“)? Sonst aufstehen und warten.
+async function funPrepare(run) {
+  const t = S.tel;
+  if (!wsReady() || !t) {
+    toast('Keine Verbindung zum Hexapod', true);
+    return false;
+  }
+  if (t.servo && t.servo.estop) {
+    toast('Not-Aus ist aktiv', true);
+    return false;
+  }
+  if (t.servo && !t.servo.torque) {
+    toast('Servos sind aus – erst „Torque“ einschalten', true);
+    return false;
+  }
+  if (W.timer || W.keys.size) walkStopAll();
+  const standing = () => funTel().mode === 'pose' && funTel().posture === 'standing';
+  if (!standing()) {
+    if (funTel().mode !== 'pose' || funTel().posture === 'sitting') send('stand');
+    run.label = 'steht auf …';
+    renderFun();
+    if (!await funUntil(standing, 12000, run)) {
+      if (!run.stopped) toast('Roboter steht nicht – Choreografie abgebrochen', true);
+      return false;
+    }
+  }
+  run.z0 = funTel().pose ? funTel().pose.z : 0;
+  return true;
+}
+
+async function funArms(up, run) {
+  const want = up ? 'up' : 'down';
+  if (funTel().arms === want) return true;
+  if (up) await funUntil(() => !funTel().gait || !funTel().gait.walking, 3000, run);
+  send('arms', { up });
+  run.used.arms = true;
+  return funUntil(() => funTel().arms === want, 8000, run);
+}
+
+async function funStep(st, next, run) {
+  const ms = Math.max(0, +st.s || 0) * 1000;
+  switch (st.t) {
+    case 'emote': {
+      const e = FUN_EMOTES.find((x) => x.id === st.id);
+      for (let i = 0; e && i < e.steps.length && !run.stopped; ++i) await funStep(e.steps[i], e.steps[i + 1] || next, run);
+      return;
+    }
+    case 'gesture':
+      if (!await funArms(false, run)) return;
+      send('gesture', { name: st.name });
+      run.used.gesture = true;
+      await funUntil(() => funTel().gesture === st.name, 1500, run);
+      await funUntil(() => !funTel().gesture, 20000, run);
+      return;
+    case 'body':
+      if (!await funArms(false, run)) return;
+      run.used.body = true;
+      await funHold(ms, () => send('body', { x: st.x / 100, y: st.y / 100, roll: st.roll / 100, pitch: st.pitch / 100,
+        yaw: st.yaw / 100 }), run);
+      return;
+    case 'walk':
+      if (!await funArms(false, run)) return;
+      run.used.walk = true;
+      await funHold(ms, () => send('walk', { vx: st.vx / 100, vy: st.vy / 100, turn: st.turn / 100 }), run);
+      if (!next || next.t !== 'walk') send('stop');  // sonst liefe er noch 0,6 s weiter
+      return;
+    case 'height': {
+      const r = (funTel().range && funTel().range.z) || [-Infinity, Infinity];
+      const z = clamp(run.z0 + st.dz, r[0], r[1]);
+      const from = funTel().pose ? funTel().pose.z : run.z0;
+      send('pose', { z: Math.round(z) });
+      run.used.height = true;
+      // ohne Dauer: so lange, wie die Bewegung braucht (80 mm/s)
+      await funSleep(ms || Math.abs(z - from) / 80 * 1000 + 300, run);
+      return;
+    }
+    case 'arms':
+      await funArms(st.up, run);
+      return;
+    case 'wave':
+      if (!await funArms(true, run)) return;
+      send('wave');
+      await funSleep(3200, run);
+      return;
+    default:
+      await funSleep(ms, run);
+  }
+}
+
+async function funPlay(id) {
+  const c = funFind(id);
+  if (!c) return;
+  if (FUN.run) {
+    const same = FUN.run.id === id;
+    funStop();
+    if (same) return;  // zweiter Tipp = anhalten
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  const run = { id, name: c.name, steps: c.steps, loop: !!c.loop, step: -1, stopped: false, used: {}, label: '' };
+  FUN.run = run;
+  renderFun();
+  try {
+    if (!await funPrepare(run)) return;
+    do {
+      for (let i = 0; i < run.steps.length && !run.stopped; ++i) {
+        run.step = i;
+        run.label = '';
+        renderFun();
+        await funStep(run.steps[i], run.steps[i + 1] || (run.loop ? run.steps[0] : null), run);
+      }
+    } while (run.loop && !run.stopped && run.steps.length);
+  } finally {
+    funFinish(run);
+  }
+}
+
+// Aufräumen: Körper zurück, anhalten, Vorderbeine ab, Höhe wie vorher
+function funFinish(run) {
+  if (run.done) return;
+  run.done = true;
+  if (FUN.run === run) FUN.run = null;
+  if (wsReady()) {
+    const tel = funTel();
+    if (run.used.body) send('body', { x: 0, y: 0, roll: 0, pitch: 0, yaw: 0 });
+    if (run.used.walk) send('stop');
+    if (run.stopped && tel.gesture) send('gesture', { name: 'stop' });
+    if (run.used.arms && tel.arms && tel.arms !== 'down') send('arms', { up: false });
+    if (run.used.height && run.z0) send('pose', { z: Math.round(run.z0) });
+  }
+  renderFun();
+}
+
+function funStop() {
+  const run = FUN.run;
+  if (!run) return;
+  run.stopped = true;
+  funFinish(run);
+}
+
+// ---- Anzeige
+
+function renderFun() {
+  const run = FUN.run;
+  $('fun-now').hidden = !run;
+  if (run) {
+    const pos = run.step >= 0 ? ` – Schritt ${run.step + 1}/${run.steps.length}` : '';
+    $('fun-now-text').textContent = `${run.name}${run.label ? ` ${run.label}` : pos}${run.loop ? ' (Endlosschleife)' : ''}`;
+  }
+  document.querySelectorAll('[data-fun-play]').forEach((b) => {
+    const on = !!run && run.id === b.dataset.funPlay;
+    b.classList.toggle('running', on);
+    if (b.dataset.toggleLabel) {
+      b.innerHTML = on ? '<svg class="ic"><use href="#i-stop"/></svg>Stopp' : '<svg class="ic"><use href="#i-play"/></svg>Abspielen';
+    }
+  });
+  document.querySelectorAll('#fun-steps > li').forEach((li, i) => {
+    li.classList.toggle('running', !!run && FUN.edit && run.id === `edit-${FUN.edit.id}` && run.step === i);
+  });
+}
+
+function renderFunEmotes() {
+  $('fun-emotes').innerHTML = FUN_EMOTES.map((e) =>
+    `<button type="button" class="btn" data-fun-play="emote-${e.id}">${escapeHtml(e.name)}</button>`).join('');
+}
+
+function renderFunList() {
+  const row = (c, own) => `<div class="fun-row">
+      <div class="fun-row-name"><b>${escapeHtml(c.name)}</b>
+        <span class="muted small">${c.steps.length} Schritt${c.steps.length === 1 ? '' : 'e'}${c.loop ? ' · Schleife' : ''}${own ? '' : ' · Vorlage'}</span></div>
+      <button type="button" class="btn btn-small" data-fun-play="${c.id}" data-toggle-label="1"></button>
+      <button type="button" class="btn btn-small btn-ghost" data-fun-edit="${c.id}" title="${own ? 'Bearbeiten' : 'Als Kopie bearbeiten'}">${own ? 'Bearbeiten' : 'Kopie'}</button>
+      ${own ? `<button type="button" class="btn btn-small btn-ghost" data-fun-del="${c.id}" title="Löschen" aria-label="${escapeHtml(c.name)} löschen"><svg class="ic"><use href="#i-x"/></svg></button>` : ''}
+    </div>`;
+  $('fun-list').innerHTML = FUN_TEMPLATES.map((c) => row(c, false)).join('') + FUN.own.map((c) => row(c, true)).join('');
+  renderFun();
+}
+
+// ---- Editor
+
+const FUN_FIELDS = {
+  body: [['x', 'Vor'], ['y', 'Links'], ['roll', 'Rollen'], ['pitch', 'Nicken'], ['yaw', 'Drehen'], ['s', 's']],
+  walk: [['vx', 'Vor'], ['vy', 'Links'], ['turn', 'Drehen'], ['s', 's']],
+  height: [['dz', 'mm'], ['s', 's']],
+  pause: [['s', 's']],
+};
+
+function funNewStep(t) {
+  switch (t) {
+    case 'emote': return { t, id: 'hello' };
+    case 'gesture': return { t, name: 'nod' };
+    case 'body': return { t, x: 0, y: 0, roll: 0, pitch: 0, yaw: 0, s: 1 };
+    case 'walk': return { t, vx: 50, vy: 0, turn: 0, s: 2 };
+    case 'height': return { t, dz: -10, s: 0.5 };
+    case 'arms': return { t, up: true };
+    case 'wave': return { t };
+    default: return { t: 'pause', s: 1 };
+  }
+}
+
+function renderFunEditor() {
+  const ed = FUN.edit;
+  $('fun-editor').hidden = !ed;
+  if (!ed) return;
+  const opts = (map, cur) => Object.entries(map).map(([k, v]) =>
+    `<option value="${k}"${k === cur ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
+  $('fun-steps').innerHTML = ed.steps.map((st, i) => {
+    let params = '';
+    if (st.t === 'emote') params = `<select data-k="id" aria-label="Emote">${opts(Object.fromEntries(FUN_EMOTES.map((e) => [e.id, e.name])), st.id)}</select>`;
+    else if (st.t === 'gesture') params = `<select data-k="name" aria-label="Geste">${opts(FUN_GESTURES, st.name)}</select>`;
+    else if (st.t === 'arms') params = `<select data-k="up" aria-label="Vorderbeine">${opts({ 1: 'heben', 0: 'absetzen' }, st.up ? '1' : '0')}</select>`;
+    else if (FUN_FIELDS[st.t]) {
+      params = FUN_FIELDS[st.t].map(([k, label]) => {
+        const lim = k === 's' ? 'min="0" max="30" step="0.1"' : (k === 'dz' ? 'min="-60" max="60" step="1"' : 'min="-100" max="100" step="5"');
+        return `<label class="fun-num"><span>${label}</span><input type="number" inputmode="decimal" data-k="${k}" ${lim} value="${st[k]}"></label>`;
+      }).join('');
+    }
+    return `<li data-i="${i}"><div class="fun-step-head"><select data-type aria-label="Art">${opts(FUN_TYPES, st.t)}</select>
+      <span class="fun-step-tools">
+        <button type="button" class="btn btn-small btn-ghost" data-move="-1" title="nach oben" aria-label="nach oben"${i ? '' : ' disabled'}>↑</button>
+        <button type="button" class="btn btn-small btn-ghost" data-move="1" title="nach unten" aria-label="nach unten"${i < ed.steps.length - 1 ? '' : ' disabled'}>↓</button>
+        <button type="button" class="btn btn-small btn-ghost" data-remove title="entfernen" aria-label="Schritt entfernen"><svg class="ic"><use href="#i-x"/></svg></button>
+      </span></div>${params ? `<div class="fun-params">${params}</div>` : ''}</li>`;
+  }).join('') || '<li class="muted small">Noch keine Schritte</li>';
+  renderFun();
+}
+
+function funOpenEditor(id) {
+  const src = id ? funFind(id) : null;
+  if (src && src.builtin) {
+    FUN.edit = { id: null, name: `${src.name} (Kopie)`, loop: src.loop, steps: JSON.parse(JSON.stringify(src.steps)) };
+  } else if (src) {
+    FUN.edit = JSON.parse(JSON.stringify(src));
+  } else {
+    FUN.edit = { id: null, name: 'Meine Choreografie', loop: false, steps: [{ t: 'emote', id: 'hello' }] };
+  }
+  $('fun-name').value = FUN.edit.name;
+  $('fun-loop').checked = FUN.edit.loop;
+  $('fun-ed-title').textContent = FUN.edit.id ? 'Choreografie bearbeiten' : 'Neue Choreografie';
+  renderFunEditor();
+  $('fun-editor').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function bindFun() {
+  funLoad();
+  renderFunEmotes();
+  renderFunList();
+  $('fun-add-type').innerHTML = Object.entries(FUN_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  $('page-fun').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.funPlay) funPlay(b.dataset.funPlay);
+    else if (b.dataset.funEdit) funOpenEditor(b.dataset.funEdit);
+    else if (b.dataset.funDel) {
+      const c = FUN.own.find((x) => x.id === b.dataset.funDel);
+      if (!c || !confirm(`„${c.name}“ löschen?`)) return;
+      if (FUN.run && FUN.run.id === c.id) funStop();
+      FUN.own = FUN.own.filter((x) => x !== c);
+      funStore();
+      if (FUN.edit && FUN.edit.id === c.id) FUN.edit = null;
+      renderFunList();
+      renderFunEditor();
+    }
+  });
+  $('fun-now-stop').onclick = funStop;
+  $('fun-new').onclick = () => funOpenEditor(null);
+  $('fun-close').onclick = () => {
+    if (FUN.run && FUN.edit && FUN.run.id === `edit-${FUN.edit.id}`) funStop();
+    FUN.edit = null;
+    renderFunEditor();
+  };
+  $('fun-name').oninput = (e) => { if (FUN.edit) FUN.edit.name = e.target.value; };
+  $('fun-loop').onchange = (e) => { if (FUN.edit) FUN.edit.loop = e.target.checked; };
+  $('fun-add').onclick = () => {
+    if (!FUN.edit) return;
+    FUN.edit.steps.push(funNewStep($('fun-add-type').value));
+    renderFunEditor();
+  };
+  const steps = $('fun-steps');
+  steps.addEventListener('change', (e) => {
+    const li = e.target.closest('li[data-i]');
+    if (!li || !FUN.edit) return;
+    const i = +li.dataset.i;
+    const st = FUN.edit.steps[i];
+    if (e.target.hasAttribute('data-type')) {
+      FUN.edit.steps[i] = funNewStep(e.target.value);
+      renderFunEditor();
+      return;
+    }
+    const k = e.target.dataset.k;
+    if (!k) return;
+    if (k === 'up') st.up = e.target.value === '1';
+    else if (k === 'id' || k === 'name') st[k] = e.target.value;
+    else st[k] = +e.target.value;
+    FUN.edit.steps[i] = funCleanStep(st) || st;
+    if (e.target.type === 'number') e.target.value = FUN.edit.steps[i][k];
+  });
+  steps.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    const li = e.target.closest('li[data-i]');
+    if (!b || !li || !FUN.edit) return;
+    const i = +li.dataset.i;
+    const list = FUN.edit.steps;
+    if (b.hasAttribute('data-remove')) list.splice(i, 1);
+    else if (b.dataset.move) {
+      const j = i + +b.dataset.move;
+      if (j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    renderFunEditor();
+  });
+  $('fun-try').onclick = () => {
+    if (!FUN.edit) return;
+    const id = `edit-${FUN.edit.id}`;
+    if (FUN.run && FUN.run.id === id) {
+      funStop();
+      return;
+    }
+    // Entwurf abspielen (auch ungespeichert)
+    FUN_TEMPLATES.draft = { id, name: FUN.edit.name || 'Entwurf', loop: FUN.edit.loop,
+      steps: FUN.edit.steps.map(funCleanStep).filter(Boolean) };
+    funPlay(id);
+  };
+  $('fun-save').onclick = () => {
+    const ed = FUN.edit;
+    if (!ed) return;
+    const clean = funCleanChoreo({ ...ed, name: ed.name.trim() || 'Choreografie', id: ed.id || funId() });
+    const i = FUN.own.findIndex((c) => c.id === clean.id);
+    if (i >= 0) FUN.own[i] = clean;
+    else FUN.own.push(clean);
+    if (funStore()) toast(`„${clean.name}“ gespeichert`);
+    FUN.edit = JSON.parse(JSON.stringify(clean));
+    $('fun-ed-title').textContent = 'Choreografie bearbeiten';
+    renderFunList();
+    renderFunEditor();
+  };
+  $('fun-export').onclick = () => {
+    if (!FUN.own.length) {
+      toast('Noch keine eigenen Choreografien', true);
+      return;
+    }
+    const blob = new Blob([JSON.stringify({ version: 1, choreos: FUN.own }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `hexapod-choreografien-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  $('fun-import').onchange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const list = (Array.isArray(data) ? data : data.choreos || []).map(funCleanChoreo).filter(Boolean);
+      if (!list.length) throw new Error('keine Choreografien in der Datei');
+      for (const c of list) {
+        c.id = funId();  // nie eine vorhandene überschreiben
+        FUN.own.push(c);
+      }
+      funStore();
+      renderFunList();
+      toast(`${list.length} Choreografie${list.length === 1 ? '' : 'n'} importiert`);
+    } catch (err) {
+      toast(`Import fehlgeschlagen: ${err.message}`, true);
+    }
+  };
+  document.addEventListener('keydown', (e) => {
+    if (S.tab !== 'fun' || e.code !== 'Space' || e.defaultPrevented) return;
+    const el = e.target;
+    if (el && el.closest && el.closest('input, select, textarea, button')) return;
+    if (FUN.run) {
+      funStop();
+      e.preventDefault();
+    }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) funStop(); });
+}
+
 // ------------------------------------------------- Globale Bedienelemente ---
 
 function bindGlobal() {
   const estop = () => {
+    funStop();
     walkStopAll();
     if (!send('estop')) api('/api/estop', {}).catch(() => {});
   };
@@ -1404,7 +1907,7 @@ function bindGlobal() {
 
 // Seite -> Adresse (#steuerung …), damit Neuladen und Zurück-Taste funktionieren
 const PAGES = {
-  control: 'steuerung', cal: 'kalibrierung', system: 'system', leds: 'leds', pad: 'controller', settings: 'einstellungen',
+  control: 'steuerung', fun: 'spielereien', cal: 'kalibrierung', system: 'system', leds: 'leds', pad: 'controller', settings: 'einstellungen',
 };
 const pageFromHash = () => Object.keys(PAGES).find((k) => location.hash === `#${PAGES[k]}`) || 'control';
 
@@ -1412,6 +1915,7 @@ function showTab(name) {
   if (!PAGES[name]) name = 'control';
   if (name !== 'control') closeFpv();
   if (name !== 'control' && (W.timer || W.keys.size)) walkStopAll();
+  if (name !== 'fun') funStop();
   S.tab = name;
   if (location.hash !== `#${PAGES[name]}`) history.replaceState(null, '', `#${PAGES[name]}`);
   document.querySelectorAll('.nav-item[data-page]').forEach((a) => {
@@ -4320,6 +4824,7 @@ function init() {
   bindImu();
   bindModel();
   bindRssi();
+  bindFun();
   selectServo(0);
   showCalView('cal');
   showTab(pageFromHash());
