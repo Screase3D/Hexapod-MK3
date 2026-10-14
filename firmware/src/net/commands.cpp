@@ -214,6 +214,9 @@ void handle(JsonVariantConst in, JsonDocument& out) {
     result(out, true);
 
   // --- Kalibrierung ---
+  } else if (strcmp(cmd, "life") == 0) {
+    // "Lebendig wirken": breathe, bored, lift, walk_fx, gaze, sleep_min (Teilmenge)
+    result(out, motion::applyLifeJson(in, err), err);
   } else if (strcmp(cmd, "eyes") == 0) {
     // Augen kurz vorgeben (Spielereien): color, effect, ms (bis 120 s); reset = wieder automatisch
     if (in["reset"] | false) {

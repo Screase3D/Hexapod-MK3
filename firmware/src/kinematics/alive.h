@@ -17,9 +17,11 @@
 
 namespace alive {
 
-enum class Action : uint8_t { None, Look, Shift, Tilt, Lift, Tap, Shuffle };
-constexpr int NUM_ACTIONS = 7;
-const char* actionName(Action a);  // "none", "look", "shift", "tilt", "lift", "tap", "shuffle"
+// Yawn/Sigh/Stretch wählt er nie zufällig – nur über play() (Langeweile, Aufwachen)
+enum class Action : uint8_t { None, Look, Shift, Tilt, Lift, Tap, Shuffle, Yawn, Sigh, Stretch };
+constexpr int NUM_ACTIONS = 10;
+// "none", "look", "shift", "tilt", "lift", "tap", "shuffle", "yawn", "sigh", "stretch"
+const char* actionName(Action a);
 
 struct Output {
   gestures::Offset body;     // Körperversatz (zur Haltung addieren, wie Gesten)
@@ -38,6 +40,10 @@ class Animator {
   Action action() const { return act_; }
   bool silent() const { return level_ <= 0.0f; }  // gibt nichts aus
   void start(Action a);  // nächste Aktion sofort (Tests)
+  // Aktion abspielen, auch wenn "Lebendig" aus ist (sobald allowed); ersetzt eine laufende
+  void play(Action a);
+  bool playing() const { return forced_; }
+  void setBreath(bool on) { breath_on_ = on; }  // eigenes leichtes Atmen (aus, wenn life atmet)
   void seed(uint32_t s) { rng_ = s ? s : 1u; }
   void reset();          // sofort still (z. B. IK aus)
 
@@ -69,6 +75,8 @@ class Animator {
   float pause_ = 0.0f;         // Wartezeit bis zur nächsten Aktion
   float level_ = 0.0f;         // Ein-/Ausblenden 0..1
   float breath_t_ = 0.0f;
+  bool forced_ = false;        // Aktion über play(): läuft auch ohne "Lebendig"
+  bool breath_on_ = true;
 };
 
 }  // namespace alive

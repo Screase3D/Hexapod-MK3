@@ -303,6 +303,7 @@ bool Imu::update(float dt_s) {
 
   accel_g_ = attitude::toBody(mount_, acc);
   const attitude::V3 gyro_body = attitude::toBody(mount_, gyro);
+  gyro_dps_ = gyro_body;
   if (filter_reset_) {
     filter_.reset(accel_g_);
     filter_reset_ = false;

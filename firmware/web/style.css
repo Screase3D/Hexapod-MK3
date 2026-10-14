@@ -926,3 +926,8 @@ html.fpv-on, html.fpv-on body { overflow: hidden; }
 #fun-dice-out { font-size: 1.6rem; }
 a.pill { color: inherit; text-decoration: none; }
 a.pill:hover { border-color: var(--accent); }
+.life-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
+.life-list .switch { align-items: flex-start; }
+.life-list .switch-label { line-height: 1.35; }
+.life-sleep { margin: -2px 0 2px 52px; }
+.life-list .switch-label .muted { font-weight: 400; }

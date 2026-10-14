@@ -4,6 +4,23 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.16.0
+
+**Lebendig wirken** – alles einzeln schaltbar unter *Einstellungen → Lebendig wirken* (Standard: an):
+
+- **Atmen:** Im Stand hebt und senkt sich der Körper ganz leicht (±2 mm alle 4 s), die Augen atmen im Takt mit.
+- **Langeweile:** Steht er lange untätig, wird er gelangweilt – gähnt, seufzt, schaut sich um, Augen gedimmt –
+  und legt sich nach der Einschlafzeit (2–30 min, Standard 5) schlafen: setzt sich hin, Augen schlafen blau.
+  Fahren, Körper-Joystick, Gesten oder Aufstehen wecken ihn: er steht auf und streckt sich.
+- **Zappeln beim Hochheben:** Der Lagesensor erkennt das Anheben; er strampelt dann mit den Beinen, Augen orange
+  blitzend. Immer nur drei Beine in der Luft – bei einer Fehlerkennung auf dem Boden steht er trotzdem sicher.
+- **Laufen mit Charakter:** lehnt sich beim Anfahren zurück, schwingt beim Anhalten nach, schaut in die Kurve und
+  beim Seitwärtslaufen in die Laufrichtung, Hüftschwung im Schritttakt; nach längerem Laufen schaut er sich
+  beim Anhalten manchmal um.
+- **Augen schauen mit:** Beim Drehen, Seitwärtslaufen und Umschauen leuchtet das Auge auf der Seite heller.
+- Firmware: neuer Baustein `life` mit PC-Tests (auch in der CI), Befehl `life`, Telemetrie `motion.life`;
+  „Lebendig“ kennt jetzt Gähnen, Seufzen und Strecken.
+
 ## 0.15.0
 
 - **Mehr Emotes, jetzt mit Augen:** neu Neugierig, Sauer (rot flackernd, stampft), Angriff (duckt sich, stößt

@@ -998,6 +998,55 @@
             </div>
 
             <div class="stack">
+              <div class="card" id="life-card">
+                <h2><svg class="ic"><use href="#i-sparkle"/></svg>Lebendig wirken</h2>
+                <p class="small" id="life-mood">–</p>
+                <div class="life-list">
+                  <label class="switch">
+                    <input id="life-breathe" type="checkbox" data-life="breathe">
+                    <span class="slider"></span>
+                    <span class="switch-label">Atmen <span class="muted small">– im Stand hebt und senkt sich der Körper
+                      ganz leicht, die Augen atmen mit</span></span>
+                  </label>
+                  <label class="switch">
+                    <input id="life-bored" type="checkbox" data-life="bored">
+                    <span class="slider"></span>
+                    <span class="switch-label">Langeweile <span class="muted small">– steht er lange untätig, gähnt und
+                      seufzt er und legt sich schließlich schlafen; Steuern weckt ihn</span></span>
+                  </label>
+                  <div class="form-grid life-sleep">
+                    <label for="life-sleep">Einschlafen nach</label>
+                    <select id="life-sleep">
+                      <option value="2">2 min</option>
+                      <option value="5">5 min</option>
+                      <option value="10">10 min</option>
+                      <option value="20">20 min</option>
+                      <option value="30">30 min</option>
+                    </select>
+                  </div>
+                  <label class="switch">
+                    <input id="life-lift" type="checkbox" data-life="lift">
+                    <span class="slider"></span>
+                    <span class="switch-label">Zappeln beim Hochheben <span class="muted small">– erkennt das Anheben am
+                      Lagesensor; zappelt immer nur mit drei Beinen, steht also auch bei einer Fehlerkennung</span></span>
+                  </label>
+                  <label class="switch">
+                    <input id="life-walk" type="checkbox" data-life="walk_fx">
+                    <span class="slider"></span>
+                    <span class="switch-label">Laufen mit Charakter <span class="muted small">– lehnt sich beim Anfahren
+                      zurück, schwingt beim Anhalten nach, schaut in die Kurve, Hüftschwung; schaut sich nach längerem
+                      Laufen manchmal um</span></span>
+                  </label>
+                  <label class="switch">
+                    <input id="life-gaze" type="checkbox" data-life="gaze">
+                    <span class="slider"></span>
+                    <span class="switch-label">Augen schauen mit <span class="muted small">– beim Drehen und Umschauen
+                      leuchtet das Auge auf der Seite heller</span></span>
+                  </label>
+                </div>
+                <p class="muted small">Alles nur im IK-Betrieb. Die zufälligen kleinen Bewegungen im Stand schaltet
+                  „Lebendig“ auf der Seite Steuerung.</p>
+              </div>
               <div class="card">
                 <h2><svg class="ic"><use href="#i-servo"/></svg>Servos</h2>
                 <label class="slider-row stacked">

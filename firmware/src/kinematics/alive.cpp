@@ -15,7 +15,7 @@ constexpr float PAUSE_MIN = 2.5f;    // Pause zwischen zwei Aktionen
 constexpr float PAUSE_MAX = 7.0f;
 
 // Häufigkeit je Aktion (Index = Action)
-constexpr uint8_t WEIGHT[NUM_ACTIONS] = {0, 28, 18, 14, 16, 12, 12};
+constexpr uint8_t WEIGHT[NUM_ACTIONS] = {0, 28, 18, 14, 16, 12, 12, 0, 0, 0};
 
 float approach(float cur, float target, float step) {
   float d = target - cur;
@@ -44,6 +44,9 @@ const char* actionName(Action a) {
     case Action::Lift:    return "lift";
     case Action::Tap:     return "tap";
     case Action::Shuffle: return "shuffle";
+    case Action::Yawn:    return "yawn";
+    case Action::Sigh:    return "sigh";
+    case Action::Stretch: return "stretch";
     default:              return "none";
   }
 }
@@ -84,6 +87,7 @@ gestures::Offset Animator::away(int leg, float mm) const {
 
 void Animator::reset() {
   act_ = Action::None;
+  forced_ = false;
   level_ = 0.0f;
   pause_ = rnd(1.0f, 2.0f);
 }
@@ -91,6 +95,12 @@ void Animator::reset() {
 void Animator::start(Action a) {
   plan(a);
   pause_ = 0.0f;
+}
+
+void Animator::play(Action a) {
+  if (a == Action::None) return;
+  plan(a);
+  forced_ = true;
 }
 
 void Animator::plan(Action a) {
@@ -171,6 +181,42 @@ void Animator::plan(Action a) {
       add(0.3f, 0.0f);
       break;
     }
+    case Action::Yawn: {  // gähnen: Kopf hoch, Körper streckt sich, dann zusammensacken
+      Key& k = add(1.2f, rnd(0.8f, 1.3f));
+      k.body.pitch = rnd(7.0f, 10.0f);
+      k.body.z = rnd(3.0f, 5.0f);
+      k.body.x = -2.0f;
+      k.body.roll = side * rnd(0.0f, 2.0f);
+      Key& s = add(0.9f, 0.4f);
+      s.body.pitch = -3.0f;
+      s.body.z = -3.0f;
+      add(1.0f, 0.0f);
+      break;
+    }
+    case Action::Sigh: {  // seufzen: langsam ausatmen und zusammensinken
+      Key& k = add(0.8f, 0.2f);
+      k.body.z = 2.0f;
+      k.body.pitch = 2.0f;
+      Key& s = add(1.6f, rnd(0.4f, 0.9f));
+      s.body.z = -rnd(5.0f, 7.0f);
+      s.body.pitch = -3.0f;
+      add(1.4f, 0.0f);
+      break;
+    }
+    case Action::Stretch: {  // strecken nach dem Aufwachen: hoch, nach hinten, nach vorne
+      Key& up = add(1.0f, 0.7f);
+      up.body.z = rnd(8.0f, 11.0f);
+      up.body.pitch = 6.0f;
+      Key& back = add(0.9f, 0.6f);
+      back.body.x = -8.0f;
+      back.body.pitch = -5.0f;
+      back.body.z = 2.0f;
+      Key& fwd = add(0.9f, 0.4f);
+      fwd.body.x = 6.0f;
+      fwd.body.pitch = 3.0f;
+      add(0.8f, 0.0f);
+      break;
+    }
     default:
       break;
   }
@@ -195,7 +241,7 @@ Output Animator::sample() const {
 }
 
 Output Animator::update(float dt, bool enabled, bool allowed) {
-  const bool on = enabled && allowed;
+  const bool on = (enabled || forced_) && allowed;
   level_ = approach(level_, on ? 1.0f : 0.0f, dt / FADE_S);
   breath_t_ += dt;
   if (breath_t_ > BREATH_S) breath_t_ -= BREATH_S;
@@ -204,6 +250,7 @@ Output Animator::update(float dt, bool enabled, bool allowed) {
     // ganz aus: Aktion abbrechen; danach erst nach einer Weile wieder (beim
     // Einschalten bald, nach Laufen o. Ä. etwas später)
     act_ = Action::None;
+    forced_ = false;
     pause_ = enabled ? rnd(PAUSE_MIN, 4.5f) : rnd(1.0f, 2.0f);
     return Output();
   }
@@ -236,13 +283,14 @@ Output Animator::update(float dt, bool enabled, bool allowed) {
       if (++key_ >= nkeys_) {
         last_ = act_;
         act_ = Action::None;
+        forced_ = false;
         pause_ = rnd(PAUSE_MIN, PAUSE_MAX);
       }
     }
   }
 
   Output o = sample();
-  o.body.z += BREATH_MM * std::sin(TWO_PI * breath_t_ / BREATH_S);
+  if (breath_on_) o.body.z += BREATH_MM * std::sin(TWO_PI * breath_t_ / BREATH_S);
   const float g = gait::smoothStep5(level_);
   o.body.x *= g;
   o.body.y *= g;

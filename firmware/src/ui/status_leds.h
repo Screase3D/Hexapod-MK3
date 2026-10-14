@@ -23,6 +23,17 @@ class StatusLeds {
   void showOverride(const ledfx::Style& s, uint32_t ms);
   bool overrideStyle(ledfx::Style& out);  // true, solange eine Vorgabe bzw. Vorschau gilt
 
+  // "Lebendig wirken" (aus dem Regel-Task): Blick (-1 rechts … +1 links), Abdunkeln beim
+  // Atmen (0..1, 0 = voll hell), Dimmen (1 = normal), eigener Stil (schläft, zappelt)
+  struct Life {
+    float gaze = 0.0f;
+    float breath = 0.0f;
+    float dim = 1.0f;
+    bool style_on = false;
+    ledfx::Style style;
+  };
+  void setLife(const Life& l);
+
   // Einstellungen (aus dem Web-Task)
   void configToJson(JsonObject obj);
   bool applyJson(JsonVariantConst in, String& err);
@@ -37,6 +48,7 @@ class StatusLeds {
   ledfx::Style preview_;
   uint32_t preview_until_ = 0;   // millis(), 0 = keine Vorschau (auch für showOverride)
   uint32_t dirty_ms_ = 0;        // letzte Änderung (0 = gespeichert)
+  Life life_;
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   ledfx::Rgb last_[2];
   ledfx::Rgb last_board_;

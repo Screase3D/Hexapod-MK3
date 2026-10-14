@@ -11,10 +11,12 @@
 #include "kinematics/gestures.h"
 #include "kinematics/kinematics.h"
 #include "kinematics/leveling.h"
+#include "kinematics/life.h"
 #include "kinematics/posture.h"
 #include "robot_geometry.h"
 #include "sensors/imu.h"
 #include "servo/servo_controller.h"
+#include "ui/status_leds.h"
 
 namespace motion {
 namespace {
@@ -79,6 +81,9 @@ bool g_offset_limited = false;          // Körper-Joystick/Vorderbeine an der R
 bool g_body_active = false;
 bool g_alive = false;                   // "Lebendig" eingeschaltet
 alive::Action g_alive_act = alive::Action::None;
+life::Config g_life;                    // "Lebendig wirken"
+life::Mood g_mood = life::Mood::Awake;  // für die Telemetrie
+bool g_flailing = false;
 
 // --- nur im Regel-Task ---
 PoseState g_current;
@@ -89,6 +94,15 @@ leveling::Controller g_level;
 arms::Controller g_arms;
 gestures::Player g_gest;
 alive::Animator g_anim{LEG_MOUNTS};
+life::Moods g_moods;
+life::Breath g_breath;
+life::LiftDetector g_lift;
+life::Flail g_flail;
+life::WalkFx g_walkfx;
+alive::Action g_mood_play = alive::Action::None;  // wartet, bis "Lebendig" frei ist
+uint32_t g_look_at = 0;                            // nach dem Anhalten umschauen (millis, 0 = nein)
+float g_gaze = 0.0f;
+bool g_life_eyes = false;                          // Augen-Vorgaben gesetzt
 bool g_pending_sit = false;   // Hinsetzen, sobald die Vorderbeine unten sind
 float g_lo[NUM_SERVOS], g_hi[NUM_SERVOS];
 uint32_t g_limits_ms = 0;
@@ -400,6 +414,17 @@ struct SettingsBlob {
   float slew;
 };
 
+// "Lebendig wirken": eigener Eintrag (fehlt er, ist alles an)
+constexpr const char* NVS_KEY_LIFE = "life";
+constexpr uint32_t LIFE_MAGIC = 0x48584C31;  // "HXL1"
+constexpr uint8_t LIFE_BREATHE = 1, LIFE_BORED = 2, LIFE_LIFT = 4, LIFE_WALK = 8, LIFE_GAZE = 16;
+struct LifeBlob {
+  uint32_t magic;
+  uint16_t version;
+  uint8_t flags;
+  uint8_t sleep_min;
+};
+
 void markDirty() {
   uint32_t now = millis();
   g_dirty_ms = now ? now : 1;
@@ -434,6 +459,41 @@ void loadSettings() {
   if (b.slew > 0.0f) servos.setSlewDegPerS(b.slew);
 }
 
+void loadLife() {
+  Preferences prefs;
+  if (!prefs.begin(NVS_NAMESPACE, true)) return;
+  LifeBlob b;
+  size_t len = prefs.getBytes(NVS_KEY_LIFE, &b, sizeof(b));
+  prefs.end();
+  if (len != sizeof(b) || b.magic != LIFE_MAGIC || b.version != 1) return;
+  g_life.breathe = b.flags & LIFE_BREATHE;
+  g_life.bored = b.flags & LIFE_BORED;
+  g_life.lift = b.flags & LIFE_LIFT;
+  g_life.walk_fx = b.flags & LIFE_WALK;
+  g_life.gaze = b.flags & LIFE_GAZE;
+  g_life.sleep_s = 60.0f * constrain(b.sleep_min, 1, 60);
+}
+
+void saveLife() {
+  portENTER_CRITICAL(&g_mux);
+  const life::Config c = g_life;
+  portEXIT_CRITICAL(&g_mux);
+  LifeBlob b = {};
+  b.magic = LIFE_MAGIC;
+  b.version = 1;
+  b.flags = (c.breathe ? LIFE_BREATHE : 0) | (c.bored ? LIFE_BORED : 0) | (c.lift ? LIFE_LIFT : 0) |
+            (c.walk_fx ? LIFE_WALK : 0) | (c.gaze ? LIFE_GAZE : 0);
+  b.sleep_min = static_cast<uint8_t>(lroundf(c.sleep_s / 60.0f));
+  Preferences prefs;
+  if (!prefs.begin(NVS_NAMESPACE, false)) return;
+  LifeBlob old;
+  // nur schreiben, wenn sich etwas geändert hat (Haltung wird viel öfter gespeichert)
+  if (prefs.getBytes(NVS_KEY_LIFE, &old, sizeof(old)) != sizeof(old) || memcmp(&old, &b, sizeof(b)) != 0) {
+    prefs.putBytes(NVS_KEY_LIFE, &b, sizeof(b));
+  }
+  prefs.end();
+}
+
 void saveSettings() {
   portENTER_CRITICAL(&g_mux);
   PoseState t = g_target;
@@ -460,6 +520,7 @@ void saveSettings() {
   if (!prefs.begin(NVS_NAMESPACE, false)) return;
   prefs.putBytes(NVS_KEY, &b, sizeof(b));
   prefs.end();
+  saveLife();
 }
 
 }  // namespace
@@ -469,6 +530,7 @@ void begin() {
   g_current = sitState();
   g_gait_params = defaultGait();
   loadSettings();  // zuletzt eingestellte Haltung, Gang, Lageausgleich, Lebendig, Stellgeschwindigkeit
+  loadLife();
   g_anim.seed(esp_random());
   g_gait.setParams(g_gait_params);
   kin::Vec3 n[NUM_LEGS];
@@ -575,6 +637,30 @@ void resetPose() {
   g_target = defaults();
   markDirty();
   portEXIT_CRITICAL(&g_mux);
+}
+
+bool applyLifeJson(JsonVariantConst in, String& err) {
+  portENTER_CRITICAL(&g_mux);
+  life::Config c = g_life;
+  portEXIT_CRITICAL(&g_mux);
+  if (in["breathe"].is<bool>()) c.breathe = in["breathe"];
+  if (in["bored"].is<bool>()) c.bored = in["bored"];
+  if (in["lift"].is<bool>()) c.lift = in["lift"];
+  if (in["walk_fx"].is<bool>()) c.walk_fx = in["walk_fx"];
+  if (in["gaze"].is<bool>()) c.gaze = in["gaze"];
+  if (in["sleep_min"].is<float>()) {
+    const float m = in["sleep_min"];
+    if (!(m >= 1.0f && m <= 60.0f)) {
+      err = "sleep_min muss 1–60 sein";
+      return false;
+    }
+    c.sleep_s = 60.0f * roundf(m);
+  }
+  portENTER_CRITICAL(&g_mux);
+  g_life = c;
+  markDirty();
+  portEXIT_CRITICAL(&g_mux);
+  return true;
 }
 
 void setAlive(bool on) {
@@ -843,6 +929,7 @@ void updateStep(float dt) {
   bool req_sit = g_req_sit;
   bool leveling_on = g_leveling && !g_level_fault;
   bool alive_on = g_alive;
+  const life::Config lc = g_life;
   g_enter_pose = g_leave_pose = g_req_stand = g_req_sit = false;
   gait::Params gp = g_gait_params;
   float cmd[3] = {g_walk_cmd[0], g_walk_cmd[1], g_walk_cmd[2]};
@@ -867,8 +954,18 @@ void updateStep(float dt) {
     g_arms.reset();
     g_gest.reset();
     g_anim.reset();
+    g_flail.reset();
+    g_walkfx.reset();
+    g_moods = life::Moods(millis() | 1u);
+    g_mood_play = alive::Action::None;
   }
-  if (m != Mode::Pose) return;
+  if (m != Mode::Pose) {
+    if (g_life_eyes) {  // Augen wieder nur nach Zustand
+      statusLeds.setLife(StatusLeds::Life());
+      g_life_eyes = false;
+    }
+    return;
+  }
 
   const uint32_t now = millis();
   if (now - g_limits_ms > LIMITS_REFRESH_MS) {
@@ -893,6 +990,8 @@ void updateStep(float dt) {
     g_arms.reset();
     g_gest.reset();
     g_anim.reset();
+    g_flail.reset();
+    g_walkfx.reset();
     g_pending_sit = false;
     servos.setSlewFloor(0.0f);
     g_settling = true;
@@ -930,6 +1029,24 @@ void updateStep(float dt) {
   const bool arm_fresh = now - arm_ms < WALK_TIMEOUT_MS;
   g_arms.setControl(arm_fresh ? arm_cmd[0] : 0.0f, arm_fresh ? arm_cmd[1] : 0.0f,
                     arm_fresh ? arm_cmd[2] : 0.0f, arm_fresh ? arm_cmd[3] : 0.0f, arm_fresh ? arm_cmd[4] : 0.0f);
+
+  // Eingaben (für "gelangweilt"): frische Fahr-, Körper- und Vorderbein-Befehle, Gesten,
+  // Aufstehen/Hinsetzen, geänderte Zielhaltung
+  auto nonzero = [](const float* v, int n) {
+    for (int i = 0; i < n; ++i) {
+      if (fabsf(v[i]) > 0.02f) return true;
+    }
+    return false;
+  };
+  const bool move_in = (now - walk_ms < WALK_TIMEOUT_MS && nonzero(cmd, 3)) ||
+                       (now - body_ms < WALK_TIMEOUT_MS && nonzero(body_cmd, 5)) ||
+                       (now - arm_ms < WALK_TIMEOUT_MS && nonzero(arm_cmd, 5)) ||
+                       req_gesture != gestures::Type::None || req_arms == 1 || req_wave || req_stand;
+  static PoseState last_target = target;
+  bool target_changed = false;
+  for (int i = 0; i < 7; ++i) target_changed |= fieldValue(target, i) != fieldValue(last_target, i);
+  last_target = target;
+  const bool activity = move_in || req_sit || req_arms != 0 || req_gesture_stop || target_changed;
 
   // Sicherheit: ohne frische Befehle, Torque oder bei Not-Aus nicht laufen;
   // laufen nur im Stehen und mit abgesetzten Vorderbeinen
@@ -990,15 +1107,85 @@ void updateStep(float dt) {
   // "Lebendig": kleine Bewegungen, nur wenn er still steht und sonst nichts läuft
   const bool alive_allowed = standing && !po.active && g_gait.idle() && !walk_cmd && !g_arms.active() &&
                              g_gest.active() == gestures::Type::None && !body_fresh;
+
+  // "Lebendig wirken": Stimmung – gelangweilt (gähnt, seufzt, schaut sich um), schläft
+  // schließlich ein (setzt sich), Eingaben wecken ihn (steht auf, streckt sich)
+  life::MoodIn mi;
+  mi.dt = dt;
+  mi.enabled = lc.bored && powered;
+  mi.standing = standing;
+  mi.still = alive_allowed && !g_flail.active();
+  mi.activity = activity;
+  mi.move = move_in;
+  const life::MoodOut mo = g_moods.update(mi, lc.sleep_s);
+  if (activity) {
+    g_mood_play = alive::Action::None;
+    g_look_at = 0;
+  }
+  if (mo.play != alive::Action::None) g_mood_play = mo.play;
+  if (mo.sit && !g_arms.active()) g_seq.requestSit();
+  if (mo.stand && powered) g_seq.requestStand();
+  if (g_look_at && (int32_t)(now - g_look_at) >= 0) {  // nach dem Anhalten umschauen
+    if (g_mood_play == alive::Action::None) g_mood_play = alive::Action::Look;
+    g_look_at = 0;
+  }
+  if (g_mood_play != alive::Action::None && alive_allowed && !g_flail.active() &&
+      g_anim.action() == alive::Action::None) {
+    g_anim.play(g_mood_play);
+    g_mood_play = alive::Action::None;
+  }
+  g_anim.setBreath(!lc.breathe);  // sonst atmet "life"
   const alive::Output al = g_anim.update(dt, alive_on, alive_allowed);
+
+  // Hochgehoben? -> zappeln (Dreiergruppen abwechselnd: steht auch bei Fehlerkennung sicher)
+  float acc[3], gyr[3];
+  imu.accelG(acc);
+  imu.gyroDps(gyr);
+  const bool lift_armed = lc.lift && imu.ok() && alive_allowed && g_anim.action() == alive::Action::None &&
+                          !g_flail.active();
+  if (g_lift.update(dt, lift_armed, acc, gyr)) g_flail.start();
+  if (!standing || po.active || walk_cmd || body_fresh || g_arms.active() || g_gest.active() != gestures::Type::None) {
+    g_flail.stop();
+  }
+  alive::Output lo = g_flail.update(dt);
+
+  // Atmen (im Stand) und Laufen mit Charakter (Trägheit, Blick voraus, Hüftschwung)
+  lo.body.z += g_breath.update(dt, lc.breathe && standing && !po.active && g_gait.idle() && !walk_cmd &&
+                                      !g_arms.active());
+  if (lc.walk_fx && standing && !po.active && !g_arms.active()) {
+    life::WalkIn wi;
+    wi.dt = dt;
+    wi.on = !g_gait.idle();
+    wi.vx = g_gait.speedX();
+    wi.vy = g_gait.speedY();
+    wi.wz = g_gait.turnRate() * RAD2DEG;
+    wi.max_speed = g_gait.maxSpeed();
+    wi.max_turn = g_gait.maxTurn() * RAD2DEG;
+    wi.phase = g_gait.phase();
+    const gestures::Offset wf = g_walkfx.update(wi);
+    lo.body.x += wf.x;
+    lo.body.y += wf.y;
+    lo.body.z += wf.z;
+    lo.body.roll += wf.roll;
+    lo.body.pitch += wf.pitch;
+    lo.body.yaw += wf.yaw;
+    if (g_walkfx.stopped() && random(100) < 45) g_look_at = (now + 900) | 1u;
+  } else {
+    g_walkfx.reset();
+  }
+  bool life_on = false;
+  for (const kin::Vec3& f : lo.foot) life_on |= f.z != 0.0f || f.x != 0.0f;
+  life_on |= lo.body.x != 0.0f || lo.body.y != 0.0f || lo.body.z != 0.0f || lo.body.roll != 0.0f ||
+             lo.body.pitch != 0.0f || lo.body.yaw != 0.0f;
 
   // Lageausgleich: nur im Stehen/Laufen, mit gültigem Lagesensor. Sonst baut sich
   // die Korrektur langsam ab. Soll-Lage inkl. Geste, damit er nicht dagegen regelt.
   if (!leveling_on) g_level.clearFault();
   const bool level_active = leveling_on && imu.ok() && standing && !po.active;
   g_level.setGain(g_gait.idle() ? LEVEL_GAIN_STAND : LEVEL_GAIN_WALK);
-  g_level.update(dt, level_active, imu.rollDeg(), imu.pitchDeg(), goal.pose.roll_deg + go.roll + al.body.roll,
-                 goal.pose.pitch_deg + go.pitch + al.body.pitch);
+  g_level.update(dt, level_active, imu.rollDeg(), imu.pitchDeg(),
+                 goal.pose.roll_deg + go.roll + al.body.roll + lo.body.roll,
+                 goal.pose.pitch_deg + go.pitch + al.body.pitch + lo.body.pitch);
   goal.pose.roll_deg = clampf(goal.pose.roll_deg + g_level.rollDeg(), -LEVEL_TILT_MAX, LEVEL_TILT_MAX);
   goal.pose.pitch_deg = clampf(goal.pose.pitch_deg + g_level.pitchDeg(), -LEVEL_TILT_MAX, LEVEL_TILT_MAX);
 
@@ -1042,7 +1229,7 @@ void updateStep(float dt) {
   // wären kurz vier Beine in der Luft. Kleine Änderungen (Fußabstand) folgen weiter direkt.
   static kin::Vec3 held[NUM_LEGS];
   static bool have_held = false;
-  if (!g_anim.silent()) {
+  if (!g_anim.silent() || g_flail.active()) {
     cmd[0] = cmd[1] = cmd[2] = 0.0f;
     bool jump = false;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
@@ -1070,6 +1257,31 @@ void updateStep(float dt) {
 
   // "Lebendig" zuletzt dazu – so weit, wie die Beine es in dieser Haltung erlauben
   if (!g_anim.silent()) applyAlive(pose, feet, al);
+  if (life_on) applyAlive(pose, feet, lo);
+
+  // Augen: atmen mit, gelangweilt gedimmt, Blick in die Bewegungsrichtung, schläft/zappelt
+  StatusLeds::Life le;
+  if (lc.breathe) le.breath = g_breath.eyeDim();
+  if (g_moods.mood() == life::Mood::Bored) le.dim = 0.65f;
+  if (lc.gaze) {
+    const float wzn = g_gait.maxTurn() > 1e-3f ? g_gait.turnRate() / g_gait.maxTurn() : 0.0f;
+    const float vyn = g_gait.maxSide() > 1.0f ? g_gait.speedY() / g_gait.maxSide() : 0.0f;
+    const float g = life::gaze(wzn, vyn, al.body.yaw + lo.body.yaw + go.yaw);
+    g_gaze += (g - g_gaze) * fminf(1.0f, dt / 0.15f);
+    le.gaze = g_gaze;
+  }
+  if (g_flail.active()) {
+    le.style_on = true;
+    le.style = {{255, 120, 0}, ledfx::Effect::Strobe};
+  } else if (g_moods.mood() == life::Mood::Asleep) {
+    le.style_on = true;
+    le.style = {{40, 70, 255}, ledfx::Effect::Sleepy};
+  } else if (g_anim.action() == alive::Action::Yawn) {
+    le.style_on = true;
+    le.style = {{90, 110, 255}, ledfx::Effect::Sleepy};
+  }
+  statusLeds.setLife(le);
+  g_life_eyes = true;
 
   // Gelenkwinkel aller Beine per IK; unerreichbare Beine behalten ihre Werte
   uint8_t unreachable = solveIk(pose, feet, g_angles);
@@ -1101,6 +1313,8 @@ void updateStep(float dt) {
   g_offset_limited = offset_limited || g_arms.limited();
   g_body_active = body_fresh;
   g_alive_act = g_anim.action();
+  g_mood = g_moods.mood();
+  g_flailing = g_flail.active();
   g_level_active = level_active;
   g_level_corr[0] = g_level.rollDeg();
   g_level_corr[1] = g_level.pitchDeg();
@@ -1170,6 +1384,9 @@ void toJson(JsonObject obj) {
   gestures::Type gest = g_gesture;
   bool offset_limited = g_offset_limited, body_active = g_body_active;
   bool alive_on = g_alive;
+  const life::Config lcfg = g_life;
+  const life::Mood mood = g_mood;
+  const bool flailing = g_flailing;
   alive::Action alive_act = g_alive_act;
   portEXIT_CRITICAL(&g_mux);
 
@@ -1200,6 +1417,15 @@ void toJson(JsonObject obj) {
   lv["pitch"] = roundf(lvl_p * 10.0f) / 10.0f;
   if (lvl_fault) lv["fault"] = true;
 
+  JsonObject lf = obj["life"].to<JsonObject>();
+  lf["breathe"] = lcfg.breathe;
+  lf["bored"] = lcfg.bored;
+  lf["lift"] = lcfg.lift;
+  lf["walk_fx"] = lcfg.walk_fx;
+  lf["gaze"] = lcfg.gaze;
+  lf["sleep_min"] = lroundf(lcfg.sleep_s / 60.0f);
+  lf["mood"] = life::moodName(mood);
+  if (flailing) lf["flail"] = true;
   JsonObject al = obj["alive"].to<JsonObject>();
   al["on"] = alive_on;
   if (alive_act != alive::Action::None) al["act"] = alive::actionName(alive_act);

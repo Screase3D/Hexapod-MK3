@@ -110,6 +110,7 @@ void StatusLeds::update() {
   const ledfx::Config cfg = cfg_;
   const bool preview = preview_until_ && (int32_t)(preview_until_ - now) > 0;
   const ledfx::Style pv = preview_;
+  const Life life = life_;
   if (!preview) preview_until_ = 0;
   const bool save_now = dirty_ms_ && now - dirty_ms_ >= SAVE_DELAY_MS;
   if (save_now) dirty_ms_ = 0;
@@ -117,13 +118,22 @@ void StatusLeds::update() {
   if (save_now) save();
 
   const ledfx::State s = state_;
-  // Vorschau nicht über Warnungen (Not-Aus, Akku) legen
-  const ledfx::Style style = preview && ledfx::configurable(s) ? pv : ledfx::styleFor(cfg, s);
+  // Vorschau/Vorgabe und "Lebendig" nicht über Warnungen (Not-Aus, Akku) legen
+  const bool own = ledfx::configurable(s);
+  const bool life_style = own && !preview && life.style_on;
+  const ledfx::Style style = preview && own ? pv : (life_style ? life.style : ledfx::styleFor(cfg, s));
   ledfx::Rgb eyes[2];
   ledfx::render(style, now, eyes);
-  const float k = cfg.brightness / 100.0f * LED_MAX_BRIGHTNESS / 255.0f;
-  eyes[0] = ledfx::scale(eyes[0], k);
-  eyes[1] = ledfx::scale(eyes[1], k);
+  float k[2];
+  k[0] = k[1] = cfg.brightness / 100.0f * LED_MAX_BRIGHTNESS / 255.0f;
+  if (own && !preview && !life_style) {
+    // atmen, gelangweilt dimmen, in die Bewegungsrichtung schauen (Auge 0 = links)
+    const float b = (1.0f - life.breath) * life.dim;
+    k[0] *= b * (life.gaze < 0.0f ? 1.0f + 0.75f * life.gaze : 1.0f);
+    k[1] *= b * (life.gaze > 0.0f ? 1.0f - 0.75f * life.gaze : 1.0f);
+  }
+  eyes[0] = ledfx::scale(eyes[0], k[0]);
+  eyes[1] = ledfx::scale(eyes[1], k[1]);
 
   // Board-LED (vor der Kamera): standardmäßig nur, solange das Netz noch nicht steht
   ledfx::Rgb board;
@@ -137,6 +147,12 @@ void StatusLeds::showOverride(const ledfx::Style& st, uint32_t ms) {
   preview_ = st;
   const uint32_t until = millis() + ms;
   preview_until_ = ms ? (until ? until : 1) : 0;
+  portEXIT_CRITICAL(&mux_);
+}
+
+void StatusLeds::setLife(const Life& l) {
+  portENTER_CRITICAL(&mux_);
+  life_ = l;
   portEXIT_CRITICAL(&mux_);
 }
 

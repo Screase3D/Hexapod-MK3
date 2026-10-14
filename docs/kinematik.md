@@ -400,6 +400,22 @@ nahe an den Grenzen fallen die Bewegungen so viel kleiner aus, wie die Beine erl
 Joystick, Gesten, Vorderbeine oder Hinsetzen blenden ihn in 0,4 s aus; danach wartet er 2,5–4,5 s, bevor
 er wieder etwas tut. Die Oberfläche zeigt neben dem Schalter, was er gerade macht.
 
+## Lebendig wirken
+
+Unabhängig vom Schalter *Lebendig*, einzeln in *Einstellungen → Lebendig wirken* (gespeichert, Standard: alles
+an; [`life.cpp`](../firmware/src/kinematics/life.cpp)). Alle Versätze wendet die Bewegungssteuerung nur so weit
+an, wie die Beine es in der aktuellen Haltung erlauben.
+
+| Funktion | Verhalten |
+|---|---|
+| Atmen | im Stand hebt und senkt sich der Körper alle 4,2 s um ±2 mm (blendet in 1 s ein/aus); die Augen werden im Takt bis zu 22 % dunkler. Ersetzt das leichte Atmen von *Lebendig* |
+| Langeweile | steht er still und kommt keine Eingabe, wird er nach 40 % der Einschlafzeit (einstellbar 2–30 min, Standard 5) gelangweilt: gähnt, danach alle 18–35 s gähnen, seufzen oder umschauen, Augen gedimmt. Nach der Einschlafzeit gähnt er ein letztes Mal und setzt sich hin – die Augen „schlafen“ blau. Fahren, Körper-Joystick, Gesten, Vorderbeine oder Aufstehen wecken ihn: er steht auf und streckt sich. Andere Eingaben (z. B. Hinsetzen, Haltung ändern) wecken ihn, ohne dass er aufsteht |
+| Zappeln beim Hochheben | steht er still, achtet er auf den Lagesensor: deutliche Beschleunigung (> 0,25 g Abweichung) bzw. Drehung (> 70 °/s) über mehrere Takte – ein einzelner Stoß reicht nicht – heißt „hochgehoben“. Dann strampelt er 2,2 s, Augen orange blitzend; immer nur eine Dreiergruppe (wie beim Tripod) in der Luft, er steht also auch bei einer Fehlerkennung sicher. Hält man ihn weiter in der Hand, zappelt er erneut |
+| Laufen mit Charakter | Trägheit: beim Anfahren bleibt der Körper bis 7 mm zurück, beim Anhalten schwingt er nach vorne und pendelt sich ein (Feder 1,3 Hz). Blick voraus: in Kurven bis 9° in die Drehrichtung, seitwärts bis 6° in die Laufrichtung; vorwärts Nase 2° runter. Hüftschwung: ±1,6° rollen und ±1,2 mm wippen im Schritttakt, stärker mit dem Tempo. Nach mindestens 2,5 s Laufen schaut er sich beim Anhalten manchmal um |
+| Augen schauen mit | beim Drehen, Seitwärtslaufen und bei jedem Gieren des Körpers (Umschauen, Gesten) wird das Auge auf der anderen Seite bis zu 75 % dunkler |
+
+Gähnen, Seufzen und Strecken sind Aktionen von *Lebendig*, laufen aber auch, wenn der Schalter aus ist.
+
 ## Tests
 
 Die Mathematik ist hardwareunabhängig und wird auf dem PC getestet, auch in der CI bei jedem Push:

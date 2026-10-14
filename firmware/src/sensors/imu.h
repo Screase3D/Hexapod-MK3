@@ -27,6 +27,9 @@ class Imu {
   bool ok() const { return ok_; }
   float pitchDeg() const { return pitch_out_; }
   float rollDeg() const { return roll_out_; }
+  // letzte Messung in Körper-Achsen (Beschleunigung in g, Drehrate in °/s; aus dem Regel-Task)
+  void accelG(float out[3]) const { out[0] = accel_g_.x, out[1] = accel_g_.y, out[2] = accel_g_.z; }
+  void gyroDps(float out[3]) const { out[0] = gyro_dps_.x, out[1] = gyro_dps_.y, out[2] = gyro_dps_.z; }
 
   // Kalibrierung: Roboter ca. 2 s ruhig halten. level = aktuelle Lage zusätzlich
   // als waagerecht übernehmen (sonst nur der Gyro-Nullpunkt).
@@ -80,6 +83,7 @@ class Imu {
   attitude::Filter filter_;
   bool filter_reset_ = true;
   attitude::V3 accel_g_ = {0, 0, 0};  // Körper-Achsen
+  attitude::V3 gyro_dps_ = {0, 0, 0};
   float pitch_out_ = 0.0f;
   float roll_out_ = 0.0f;
 

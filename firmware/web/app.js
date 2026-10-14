@@ -1020,17 +1020,52 @@ const GESTURE_TEXT = { circle: 'kreist', nod: 'nickt', shake: 'schüttelt', push
 const ALIVE_TEXT = {
   look: 'schaut sich um', shift: 'verlagert das Gewicht', tilt: 'legt den Kopf schief',
   lift: 'hebt ein Bein', tap: 'tippt mit dem Fuß', shuffle: 'setzt die Füße neu',
+  yawn: 'gähnt', sigh: 'seufzt', stretch: 'streckt sich',
 };
 let aliveTouched = 0;
+const MOOD_TEXT = { awake: 'wach', bored: 'gelangweilt', asleep: 'schläft – Steuern weckt ihn' };
+const LIFE = { touched: 0 };
+
+// Einstellungen „Lebendig wirken“ und Stimmung
+function renderLife(l) {
+  if (!l) return;
+  if (Date.now() - LIFE.touched > LOCAL_PRIORITY_MS) {
+    document.querySelectorAll('[data-life]').forEach((i) => { i.checked = !!l[i.dataset.life]; });
+    $('life-sleep').value = String(l.sleep_min);
+    if ($('life-sleep').value !== String(l.sleep_min)) {  // eigener Wert (per API)
+      $('life-sleep').add(new Option(`${l.sleep_min} min`, String(l.sleep_min)));
+      $('life-sleep').value = String(l.sleep_min);
+    }
+  }
+  $('life-sleep').disabled = !l.bored;
+  $('life-mood').textContent = l.flail ? 'Stimmung: zappelt (hochgehoben?)' : `Stimmung: ${MOOD_TEXT[l.mood] || l.mood}`;
+}
+
+function bindLife() {
+  document.querySelectorAll('[data-life]').forEach((i) => {
+    i.onchange = () => {
+      LIFE.touched = Date.now();
+      if (!send('life', { [i.dataset.life]: i.checked })) i.checked = !i.checked;
+    };
+  });
+  $('life-sleep').onchange = (e) => {
+    LIFE.touched = Date.now();
+    send('life', { sleep_min: +e.target.value });
+  };
+}
 
 function renderAlive(m) {
   const a = m.alive;
   if (!a) return;
   if (Date.now() - aliveTouched > LOCAL_PRIORITY_MS) $('alive-on').checked = a.on;
   let info = '';
-  if (a.act) info = ALIVE_TEXT[a.act] || a.act;
+  if (m.life && m.life.flail) info = 'zappelt';
+  else if (a.act) info = ALIVE_TEXT[a.act] || a.act;
+  else if (m.life && m.life.mood === 'asleep' && m.mode === 'pose') info = MOOD_TEXT.asleep;
   else if (a.on && !(m.mode === 'pose' && m.posture === 'standing')) info = 'wirkt im Stand';
+  else if (m.life && m.life.mood === 'bored' && m.mode === 'pose') info = 'langweilt sich';
   $('alive-info').textContent = info;
+  renderLife(m.life);
 }
 
 function renderWalk(m) {
@@ -5014,6 +5049,7 @@ function init() {
   bindModel();
   bindRssi();
   bindFun();
+  bindLife();
   selectServo(0);
   showCalView('cal');
   showTab(pageFromHash());

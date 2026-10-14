@@ -449,7 +449,9 @@ static void testAlive() {
   std::printf("Info: Lebendig in 10 min: %d Aktionen (Umschauen %d, Gewicht %d, Kopf schief %d, Bein heben %d, "
               "Tippen %d, Neu setzen %d), Stabilitätsreserve >= %.0f mm, Sprung je Zyklus Körper %.2f, Fuß %.2f mm\n",
               starts, seen[1], seen[2], seen[3], seen[4], seen[5], seen[6], min_margin, body_jump, foot_jump);
-  for (int i = 1; i < alive::NUM_ACTIONS; ++i) CHECK(seen[i] > 0);
+  // zufällig: alle bis "Neu setzen" (Gähnen, Seufzen, Strecken nur über die Stimmung)
+  for (int i = 1; i <= static_cast<int>(alive::Action::Shuffle); ++i) CHECK(seen[i] > 0);
+  for (int i = static_cast<int>(alive::Action::Yawn); i < alive::NUM_ACTIONS; ++i) CHECK(seen[i] == 0);
   CHECK(starts > 50 && starts < 120);  // etwa alle 5–12 s
   CHECK(bad == 0);
   CHECK(two_up == 0);

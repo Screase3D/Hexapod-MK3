@@ -66,6 +66,10 @@ bool gesture(const char* name, String& err);
 // verlagern, ein Bein kurz heben, ...). Jederzeit an/aus, wird gespeichert.
 void setAlive(bool on);
 
+// "Lebendig wirken": breathe, bored, lift (Zappeln), walk_fx, gaze (bool), sleep_min
+// (Einschlafen nach 1–60 min) – Teilmenge; wird gespeichert
+bool applyLifeJson(JsonVariantConst in, String& err);
+
 // Lageausgleich: hält den Körper mit dem Lagesensor waagerecht (bzw. auf der
 // eingestellten Neigung). Schaltet sich bei falscher Sensorrichtung selbst ab.
 void setLeveling(bool on);

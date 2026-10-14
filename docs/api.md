@@ -78,6 +78,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `pad` | `lx`, `ly`, `rx`, `ry` (−1…1, y oben +), `lt`, `rt` (0…1), `b` (Tasten-Bits: a, b, x, y, lb, rb, view, menu, xbox, ls, rs, up, down, left, right, share, p1–p4) | Gamepad im Browser, wertet die Firmware wie einen Bluetooth-Controller aus. **Ohne Antwort**, etwa alle 50 ms senden; nach 0,3 s ohne Befehl gilt er als getrennt |
 | `live` | `on` (bool, Standard `true`) | Live-Ansicht: dieser Client bekommt 3 s lang `{"type":"live"}` mit 20 Hz (siehe unten). **Ohne Antwort**; die Oberfläche erneuert das alle 1,5 s, solange die 3D-Ansicht sichtbar ist, `on: false` beendet es sofort |
 | `alive` | `on` (bool) | „Lebendig“: im Stand ab und zu kleine zufällige Bewegungen, siehe [kinematik.md](kinematik.md#lebendig); wird gespeichert |
+| `life` | `breathe`, `bored`, `lift`, `walk_fx`, `gaze` (bool), `sleep_min` (1–60) – Teilmenge | „Lebendig wirken“: Atmen, Langeweile/Einschlafen nach `sleep_min`, Zappeln beim Hochheben, Laufen mit Charakter, Augen schauen mit, siehe [kinematik.md](kinematik.md#lebendig-wirken); wird gespeichert |
 | `wave` | – | rechtes Vorderbein winkt (nur wenn oben) |
 | `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wechselt auch im Lauf fließend (`motion.gait.switching` = Übergang läuft) |
 | `leveling` | `on` (bool) | Lageausgleich an/aus, siehe [kinematik.md](kinematik.md#lageausgleich) |
@@ -130,6 +131,8 @@ Beispiel:
                        "roll": [-9.8, 9.8], "pitch": [-10.1, 10.1], "yaw": [-25, 25]},
              "level": {"on": true, "active": true, "roll": -3.2, "pitch": 1.1},
              "alive": {"on": true, "act": "look"},
+             "life": {"breathe": true, "bored": true, "lift": true, "walk_fx": true, "gaze": true, "sleep_min": 5,
+                      "mood": "awake"},
              "gait": {"type": "tripod", "swing_s": 0.4, "step_height": 15, "active": "tripod",
                       "walking": true, "swing": 21, "vx": 100, "vy": 0, "wz": 0,
                       "max_speed": 125, "max_side": 95, "max_turn": 39, "nominal": 125, "cadence": 1.0},
@@ -179,7 +182,8 @@ Reichweitengrenze (ist `max_speed` deutlich kleiner, schränkt die Haltung das L
 `down`, `shift_back`, `raise`, `up`, `lower`, `shift_forward`; `motion.gesture` nur während einer
 Geste; `motion.body` solange der Körper-Joystick wirkt, `offset_limited` wenn er bzw. ein Vorderbein an
 der Reichweitengrenze ist. `motion.alive`: Einstellung `on`, `act` = laufende Aktion (`look`, `shift`,
-`tilt`, `lift`, `tap`, `shuffle`). `led`: Zustand der Augen-LEDs (wie `GET /api/leds`). `pad`: Quelle
+`tilt`, `lift`, `tap`, `shuffle`, bei Langeweile/Aufwachen `yawn`, `sigh`, `stretch`). `motion.life`: Einstellungen,
+`mood` = `awake`, `bored` oder `asleep`, `flail: true` solange er zappelt. `led`: Zustand der Augen-LEDs (wie `GET /api/leds`). `pad`: Quelle
 (`ble`, `web` oder leer), Modus, Tempo in %, Bluetooth-Zustand (`off`, `idle`, `searching`, `pairing` mit
 `pair_left`, `connecting`, `connected` mit `name`, `bat`), `in` = aktueller Controller-Zustand (nur wenn aktiv),
 `msg`/`seq` = letzte Meldung (neue Meldung = neue `seq`). `log`: Nummer des neuesten Eintrags im

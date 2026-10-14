@@ -42,6 +42,8 @@ state = {
     "gesture": None, "gesture_t": 0.0,
     "body": [0.0] * 5, "body_t": 0.0,
     "alive": False,
+    "life": {"breathe": True, "bored": True, "lift": True, "walk_fx": True, "gaze": True, "sleep_min": 5},
+    "mood": "awake", "active_t": 0.0,
     # Lagesensor (wie imu.cpp) und Lageausgleich (wie motion.cpp)
     "imu_mount": "vorne", "imu_flip": False, "imu_level": [0.0, 0.0],
     "imu_cal": None, "imu_cal_t": 0.0, "imu_cal_level": False, "imu_cal_msg": "",
@@ -253,10 +255,28 @@ def eyes_tel():
     return {"eyes": {"color": e["color"], "effect": e["effect"]}}
 
 
+def life_tel(g):
+    # wie life.cpp (vereinfacht, Zeiten in Sekunden statt Minuten): gelangweilt nach 40 %,
+    # schläft (sitzt) nach der Einschlafzeit; Eingaben (Befehle) wecken ihn
+    lf = state["life"]
+    if not lf["bored"] or state["mode"] != "pose" or not state["torque"]:
+        state["mood"] = "awake"
+    elif state["mood"] != "asleep" and posture() == "standing" and not g["walking"]:
+        idle = time.time() - state["active_t"]
+        scale = float(os.environ.get("MOCK_LIFE_SCALE", "60"))  # Sekunden je "Minute"
+        if idle >= lf["sleep_min"] * scale:
+            state["mood"] = "asleep"
+            state["posture"], state["posture_t"] = "sitting_down", time.time()
+        elif idle >= 0.4 * lf["sleep_min"] * scale:
+            state["mood"] = "bored"
+    return {**lf, "mood": state["mood"]}
+
+
 def motion_tel():
     g = gait_status()
     m = {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "range": pose_range(), "gait": g,
-         "level": level_tel(time.time()), "arms": arms(), "alive": alive_tel(g), "unreachable": [], "clamped": []}
+         "level": level_tel(time.time()), "arms": arms(), "alive": alive_tel(g), "life": life_tel(g),
+         "unreachable": [], "clamped": []}
     if gesture():
         m["gesture"] = gesture()
     body_on = time.time() - state["body_t"] < 0.6 and any(abs(v) > 1e-3 for v in state["body"])
@@ -409,6 +429,16 @@ def level_tel(t):
 
 def handle(cmd):
     c = cmd.get("cmd", "")
+    if c in ("walk", "body", "stand", "sit", "gesture", "arms", "wave", "pose") and any(
+            abs(float(cmd.get(k, 0))) > 0.02 for k in ("vx", "vy", "turn", "x", "y", "roll", "pitch", "yaw")) or \
+            c in ("stand", "sit", "gesture", "arms", "wave", "pose"):
+        state["active_t"] = time.time()
+        if state["mood"] == "asleep" and c != "sit":  # Bewegungswunsch weckt ihn
+            state["mood"] = "awake"
+            if c != "stand" and state["torque"] and posture() in ("sitting", "sitting_down"):
+                state["posture"], state["posture_t"] = "standing_up", time.time()
+        elif state["mood"] == "bored":
+            state["mood"] = "awake"
     if c == "ping":
         return {"type": "pong"}
     if c == "client_log":  # wie die Firmware: ins Ereignisprotokoll, ohne Antwort
@@ -570,6 +600,15 @@ def handle(cmd):
         # wie die Firmware: Kalibrierung ändern schaltet in den Handbetrieb
         state["mode"] = "manual"
         return handle(cmd)
+    elif c == "life":
+        for k in ("breathe", "bored", "lift", "walk_fx", "gaze"):
+            if k in cmd:
+                state["life"][k] = bool(cmd[k])
+        if "sleep_min" in cmd:
+            m = float(cmd["sleep_min"])
+            if not 1 <= m <= 60:
+                return {**out, "ok": False, "msg": "sleep_min muss 1–60 sein"}
+            state["life"]["sleep_min"] = round(m)
     elif c == "eyes":  # wie commands.cpp: Augen kurz vorgeben
         if cmd.get("reset"):
             state["eyes"] = None
