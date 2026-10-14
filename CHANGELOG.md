@@ -4,6 +4,14 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.13.0
+
+- **Haltungs-Regler passen sich an:** Unter jedem Regler (Höhe, Fußabstand, Verschieben, Neigen, Gieren)
+  zeigt ein Band, wie weit die Beine bei den übrigen Einstellungen noch reichen – stellt man z. B. den
+  Körper tief, schrumpfen die Bänder für Verschieben und Neigen. Der Regler lässt sich nur bis zum Rand des
+  Bandes ziehen, am Rand wird der Wert gelb. Die Grenzen rechnet die Firmware mit der echten Kinematik und
+  den Gelenkgrenzen der Kalibrierung (`motion.range` in der Telemetrie).
+
 ## 0.12.2
 
 Weitere Fehlerbehebungen aus der Durchsicht:

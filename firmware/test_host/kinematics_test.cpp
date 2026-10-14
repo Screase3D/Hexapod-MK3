@@ -210,7 +210,34 @@ static void testCheckPose() {
   CHECK(r.limited == (1u << 1));
 }
 
+// Zulässiger Bereich einer Größe: Grenzen gefunden, nur der zusammenhängende Teil um cur
+static void testFeasibleInterval() {
+  struct Band { float a, b, c, d; };  // zulässig: [a, b] und [c, d]
+  auto ok = [](void* ctx, float v) {
+    const Band* band = static_cast<const Band*>(ctx);
+    return (v >= band->a && v <= band->b) || (v >= band->c && v <= band->d);
+  };
+  Band band{10.0f, 37.3f, 60.0f, 70.0f};
+  float lo, hi;
+  feasibleInterval(ok, &band, 20.0f, 0.0f, 100.0f, 16, 6, lo, hi);
+  CHECK_NEAR(lo, 10.0, 0.2);
+  CHECK(lo >= 10.0f);
+  CHECK_NEAR(hi, 37.3, 0.2);
+  CHECK(hi <= 37.3f);
+  // ganz zulässig -> statische Grenzen
+  Band all{-1e9f, 1e9f, 0, 0};
+  feasibleInterval(ok, &all, 5.0f, -30.0f, 30.0f, 16, 6, lo, hi);
+  CHECK(lo == -30.0f && hi == 30.0f);
+  // aktueller Wert unzulässig -> leerer Bereich an cur
+  feasibleInterval(ok, &band, 50.0f, 0.0f, 100.0f, 16, 6, lo, hi);
+  CHECK(lo == 50.0f && hi == 50.0f);
+  // cur an der Grenze
+  feasibleInterval(ok, &band, 10.0f, 0.0f, 100.0f, 16, 6, lo, hi);
+  CHECK_NEAR(lo, 10.0, 1e-3);
+}
+
 int main() {
+  testFeasibleInterval();
   testCheckPose();
   testNeutralPose();
   testFkOfZero();

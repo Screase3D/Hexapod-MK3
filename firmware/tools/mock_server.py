@@ -231,9 +231,23 @@ def alive_tel(g):
     return a
 
 
+def pose_range():
+    """Grobe Nachbildung von motion.range: tief unten wenig Spielraum, Verschieben/Neigen kostet Höhe"""
+    p = state["pose"]
+    k = min(1.0, max(0.15, (p["z"] - 30) / 22))
+    z_lo = min(p["z"], 35 + (abs(p["x"]) + abs(p["y"])) / 2 + (abs(p["roll"]) + abs(p["pitch"])) * 1.5)
+    z_hi = max(p["z"], min(100, z_max(p["stance"])))
+    def sym(lim, cur):
+        m = max(abs(cur), lim * k)
+        return [round(-m, 1), round(m, 1)]
+    return {"z": [round(z_lo, 1), round(z_hi, 1)], "stance": [min(p["stance"], 75 + max(0, 40 - p["z"])), 135],
+            "x": sym(40, p["x"]), "y": sym(40, p["y"]), "roll": sym(20, p["roll"]), "pitch": sym(20, p["pitch"]),
+            "yaw": [-25, 25]}
+
+
 def motion_tel():
     g = gait_status()
-    m = {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "gait": g,
+    m = {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "range": pose_range(), "gait": g,
          "level": level_tel(time.time()), "arms": arms(), "alive": alive_tel(g), "unreachable": [], "clamped": []}
     if gesture():
         m["gesture"] = gesture()

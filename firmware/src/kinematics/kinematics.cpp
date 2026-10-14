@@ -126,4 +126,36 @@ bool footReachable(const LegGeometry& g, const LegMount& m, const BodyPose& pose
   return 90.0f + a.tibia >= knee_min_deg;
 }
 
+namespace {
+// letzter zulässiger Wert auf dem Weg von cur (zulässig) nach end
+float feasibleEdge(bool (*ok)(void*, float), void* ctx, float cur, float end, int steps, int iters) {
+  float good = cur;
+  for (int i = 1; i <= steps; ++i) {
+    const float v = i == steps ? end : cur + (end - cur) * i / steps;
+    if (!ok(ctx, v)) {
+      float bad = v;
+      for (int k = 0; k < iters; ++k) {
+        const float mid = 0.5f * (good + bad);
+        if (ok(ctx, mid)) good = mid;
+        else bad = mid;
+      }
+      return good;
+    }
+    good = v;
+  }
+  return end;
+}
+}  // namespace
+
+void feasibleInterval(bool (*ok)(void*, float), void* ctx, float cur, float lo, float hi, int steps,
+                      int iters, float& out_lo, float& out_hi) {
+  cur = cur < lo ? lo : (cur > hi ? hi : cur);
+  if (!ok(ctx, cur)) {
+    out_lo = out_hi = cur;
+    return;
+  }
+  out_lo = feasibleEdge(ok, ctx, cur, lo, steps, iters);
+  out_hi = feasibleEdge(ok, ctx, cur, hi, steps, iters);
+}
+
 }  // namespace kin

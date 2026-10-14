@@ -293,6 +293,76 @@ float fieldValue(const PoseState& s, int i) {
   }
 }
 
+void setFieldValue(PoseState& s, int i, float v) {
+  switch (i) {
+    case 0:  s.pose.z = v; break;
+    case 1:  s.stance = v; break;
+    case 2:  s.pose.x = v; break;
+    case 3:  s.pose.y = v; break;
+    case 4:  s.pose.roll_deg = v; break;
+    case 5:  s.pose.pitch_deg = v; break;
+    default: s.pose.yaw_deg = v; break;
+  }
+}
+
+void fieldLimits(int i, float& lo, float& hi) {
+  const PoseLimits& L = POSE_LIMITS;
+  switch (i) {
+    case 0:  lo = L.height_min, hi = L.height_max; break;
+    case 1:  lo = L.stance_min, hi = L.stance_max; break;
+    case 2:
+    case 3:  lo = -L.shift_max, hi = L.shift_max; break;
+    case 4:
+    case 5:  lo = -L.tilt_max, hi = L.tilt_max; break;
+    default: lo = -L.yaw_max, hi = L.yaw_max; break;
+  }
+}
+
+// Zulässiger Bereich jeder Haltungsgröße bei den übrigen Zielwerten – für die Regler der
+// Oberfläche. Einige hundert Haltungsprüfungen (wenige ms) -> nur bei geändertem Ziel und
+// alle 2 s (Kalibrierung geändert). Nur aus dem Telemetrie-Aufbau (Hauptschleife).
+struct RangeCtx {
+  PoseState s;
+  int field;
+  const float* lo;
+  const float* hi;
+};
+bool fieldOk(void* ctx, float v) {
+  const RangeCtx* c = static_cast<const RangeCtx*>(ctx);
+  PoseState s = c->s;
+  setFieldValue(s, c->field, v);
+  return checkState(s, 0.0f, c->lo, c->hi).ok();
+}
+constexpr uint32_t RANGE_REFRESH_MS = 2000;
+void poseRanges(const PoseState& t, float out[7][2]) {
+  static PoseState last;
+  static bool have = false;
+  static uint32_t at = 0;
+  static float cache[7][2];
+  const uint32_t now = millis();
+  bool same = have && now - at < RANGE_REFRESH_MS;
+  for (int i = 0; same && i < 7; ++i) same = fieldValue(last, i) == fieldValue(t, i);
+  if (!same) {
+    float lo[NUM_SERVOS], hi[NUM_SERVOS];
+    readLimits(lo, hi);
+    RangeCtx c{t, 0, lo, hi};
+    // Ziel selbst nicht zulässig (z. B. nach neuer Kalibrierung): keine Einschränkung
+    // anzeigen, sonst ließe sich kein Regler mehr bewegen; das Begrenzen übernimmt applyPoseJson
+    const bool target_ok = checkState(t, 0.0f, lo, hi).ok();
+    for (int i = 0; i < 7; ++i) {
+      c.field = i;
+      float a, b;
+      fieldLimits(i, a, b);
+      if (target_ok) kin::feasibleInterval(fieldOk, &c, fieldValue(t, i), a, b, 16, 5, cache[i][0], cache[i][1]);
+      else cache[i][0] = a, cache[i][1] = b;
+    }
+    last = t;
+    have = true;
+    at = now;
+  }
+  for (int i = 0; i < 7; ++i) out[i][0] = cache[i][0], out[i][1] = cache[i][1];
+}
+
 // Reichweite für die Gangart: Coxa-Achsen im Lauf-System (Körper verschoben bzw.
 // gedreht) und erlaubter Fußabstand, damit das Knie beim Anheben nicht zu weit
 // einknickt. minFootRadius rechnet etwas länger -> nur bei Änderungen.
@@ -1113,6 +1183,15 @@ void toJson(JsonObject obj) {
   p["pitch"] = t.pose.pitch_deg;
   p["yaw"] = t.pose.yaw_deg;
   p["stance"] = t.stance;
+  // erreichbarer Bereich je Größe (die anderen wie eingestellt), auf 0,1 gerundet nach innen
+  float rng[7][2];
+  poseRanges(t, rng);
+  JsonObject r = obj["range"].to<JsonObject>();
+  for (int i = 0; i < 7; ++i) {
+    JsonArray a = r[POSE_FIELDS[i].key].to<JsonArray>();
+    a.add(ceilf(rng[i][0] * 10.0f) / 10.0f);
+    a.add(floorf(rng[i][1] * 10.0f) / 10.0f);
+  }
 
   JsonObject lv = obj["level"].to<JsonObject>();
   lv["on"] = lvl_on;

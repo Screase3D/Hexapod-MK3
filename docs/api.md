@@ -125,6 +125,8 @@ Beispiel:
             "cal": "running", "cal_pct": 40},
   "motion": {"mode": "pose", "posture": "standing", "pose": {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0,
              "stance": 100},
+             "range": {"z": [35, 100], "stance": [75, 135], "x": [-40, 40], "y": [-40, 40],
+                       "roll": [-9.8, 9.8], "pitch": [-10.1, 10.1], "yaw": [-25, 25]},
              "level": {"on": true, "active": true, "roll": -3.2, "pitch": 1.1},
              "alive": {"on": true, "act": "look"},
              "gait": {"type": "tripod", "swing_s": 0.4, "step_height": 15, "active": "tripod",
@@ -162,6 +164,10 @@ Kamera deshalb mit kleinerer Auflösung läuft (Kennung wie `framesize` in `GET 
 Sperre (z. B. „Akku leer“). `motion.unreachable` / `motion.clamped` listen Beine (0–5), die ihren
 Fußpunkt nicht erreichen bzw. an eine Gelenkgrenze stoßen. `motion.posture` (nur im IK-Modus):
 `sitting`, `standing_up`, `standing`, `sitting_down` – gelaufen wird nur in `standing`.
+`motion.range`: für jede Größe der Zielhaltung der Bereich, den die Beine bei den übrigen eingestellten
+Werten noch erreichen (Gelenkgrenzen der Kalibrierung eingeschlossen) – die Oberfläche zeigt ihn als Band
+unter dem Regler und lässt den Regler nur bis dahin ziehen. Wird nur bei geänderter Zielhaltung bzw. alle
+2 s neu berechnet; ist die Zielhaltung selbst nicht erreichbar, stehen hier die festen Grenzen.
 `motion.gait`: `type` = gewählte,
 `active` = laufende Gangart, `switching` = Gangwechsel im Lauf noch nicht abgeschlossen (nur wenn `true`), `swing` = Bitmaske der Beine in der Luft (Bit 0 = Bein 1),
 `vx`/`vy` in mm/s, `wz` in °/s, `max_*` = Höchstwerte bei den aktuellen Parametern (geradeaus

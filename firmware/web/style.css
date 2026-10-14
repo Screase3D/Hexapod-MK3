@@ -544,6 +544,14 @@ details.fold[open] summary { margin-bottom: 4px; }
 @media (hover: none) { .o-walk .hint { display: none; } }  /* Tastatur-Hinweise nur am PC */
 
 #pose-sliders .slider-row { margin: 6px 0; }
+/* Erreichbarer Bereich unter dem Regler (Daumen ~16 px: Skala beginnt/endet 8 px innen) */
+.pose-track { position: relative; display: block; min-width: 0; }
+.pose-track input { width: 100%; display: block; }
+.pose-band { position: absolute; bottom: 2px; height: 3px; border-radius: 2px; pointer-events: none;
+  background: var(--accent); opacity: 0.55;
+  left: calc(8px + (100% - 16px) * var(--a, 0)); width: calc((100% - 16px) * (var(--b, 1) - var(--a, 0))); }
+.pose-band[hidden] { display: none; }
+.slider-row > .mono.at-limit { color: var(--warn-text); }
 
 /* =========================================================== Kalibrierung */
 .grid-cal { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--gap); align-items: start; }

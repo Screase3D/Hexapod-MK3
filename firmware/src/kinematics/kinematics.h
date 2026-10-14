@@ -87,4 +87,10 @@ PoseCheck checkPose(const LegGeometry& g, const LegMount* mounts, int legs, cons
 bool footReachable(const LegGeometry& g, const LegMount& m, const BodyPose& pose, const Vec3& foot,
                    const float* lo, const float* hi, float margin_deg, float knee_min_deg);
 
+// Zusammenhängender zulässiger Bereich um cur innerhalb [lo, hi] (z. B. eine Haltungsgröße,
+// die anderen fest): ok(ctx, v) prüft einen Wert. Je Seite erst in steps groben Schritten
+// nach außen, dann die Grenze iters-mal halbieren. Ist cur selbst unzulässig: [cur, cur].
+void feasibleInterval(bool (*ok)(void*, float), void* ctx, float cur, float lo, float hi, int steps,
+                      int iters, float& out_lo, float& out_hi);
+
 }  // namespace kin

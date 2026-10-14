@@ -525,6 +525,7 @@ const POSE_FIELDS = [
   ['yaw', 'Gieren', '°', (l) => [-l.yaw_max, l.yaw_max]],
 ];
 const poseTouched = {};
+const poseRange = {};  // erreichbarer Bereich je Größe bei den übrigen Werten (Telemetrie motion.range)
 const poseSend = throttle((patch) => { send('pose', patch); posePending = {}; }, 60);
 let posePending = {};
 
@@ -537,14 +538,18 @@ function buildPose(kinem) {
     const [lo, hi] = range(kinem.limits);
     const row = document.createElement('label');
     row.className = 'slider-row';
-    row.innerHTML = `<span>${label}</span><input type="range" id="pose-${key}" step="1">` +
-      `<span class="mono" id="pose-${key}-val"></span>`;
+    row.innerHTML = `<span>${label}</span><span class="pose-track"><input type="range" id="pose-${key}" step="1">` +
+      `<i class="pose-band" id="pose-${key}-band" hidden></i></span><span class="mono" id="pose-${key}-val"></span>`;
     const input = row.querySelector('input');
     input.min = Math.floor(lo);
     input.max = Math.ceil(hi);
     input.oninput = () => {
       poseTouched[key] = Date.now();
+      // nur bis zum Wert, den die Beine bei den übrigen Einstellungen noch erreichen
+      const r = poseReach(key);
+      if (r) input.value = clamp(+input.value, r[0], r[1]);
       $(`pose-${key}-val`).textContent = `${input.value} ${unit}`;
+      markPoseLimit(key);
       posePending[key] = +input.value;
       poseSend(posePending);
     };
@@ -552,15 +557,50 @@ function buildPose(kinem) {
   }
 }
 
+// Erreichbarer Bereich als ganze Reglerwerte, null = keine Einschränkung bekannt
+function poseReach(key) {
+  const r = poseRange[key];
+  const input = $(`pose-${key}`);
+  if (!r || !input) return null;
+  const lo = Math.max(+input.min, Math.ceil(r[0] - 1e-6));
+  const hi = Math.min(+input.max, Math.floor(r[1] + 1e-6));
+  return lo <= hi ? [lo, hi] : null;
+}
+
+// Band unter dem Regler: erreichbarer Teil der Skala; Wert am Rand hervorheben
+function markPoseLimit(key) {
+  const input = $(`pose-${key}`);
+  const band = $(`pose-${key}-band`);
+  if (!input || !band) return;
+  const r = poseReach(key);
+  const min = +input.min, max = +input.max;
+  const narrowed = r && (r[0] > min || r[1] < max);
+  band.hidden = !narrowed;
+  if (narrowed) {
+    band.style.setProperty('--a', (r[0] - min) / (max - min));
+    band.style.setProperty('--b', (r[1] - min) / (max - min));
+  }
+  const v = +input.value;
+  const atEdge = narrowed && ((v >= r[1] && r[1] < max) || (v <= r[0] && r[0] > min));
+  $(`pose-${key}-val`).classList.toggle('at-limit', !!atEdge);
+  input.title = narrowed ? `erreichbar: ${r[0]} bis ${r[1]} (bei den übrigen Werten)` : '';
+}
+
 function renderPose(m) {
   if (!m) return;
   $('pose-mode').checked = m.mode === 'pose';
   for (const [key, , unit] of POSE_FIELDS) {
     const input = $(`pose-${key}`);
-    if (!input || Date.now() - (poseTouched[key] || 0) < LOCAL_PRIORITY_MS) continue;
-    if (document.activeElement === input) continue;
+    if (m.range && Array.isArray(m.range[key])) poseRange[key] = m.range[key];
+    else delete poseRange[key];
+    if (!input) continue;
+    if (Date.now() - (poseTouched[key] || 0) < LOCAL_PRIORITY_MS || document.activeElement === input) {
+      markPoseLimit(key);
+      continue;
+    }
     input.value = Math.round(m.pose[key]);
     $(`pose-${key}-val`).textContent = `${Math.round(m.pose[key])} ${unit}`;
+    markPoseLimit(key);
   }
   renderLevel(m.level);
   const warn = [];
