@@ -126,6 +126,20 @@ bool footReachable(const LegGeometry& g, const LegMount& m, const BodyPose& pose
   return 90.0f + a.tibia >= knee_min_deg;
 }
 
+bool estimateStance(const LegGeometry& g, const LegMount* mounts, int legs, const float* deg, float& height,
+                    float& stance) {
+  if (legs <= 0) return false;
+  float h = 0.0f, s = 0.0f;
+  for (int leg = 0; leg < legs; ++leg) {
+    const Vec3 f = legFk(g, mounts[leg], {deg[leg * 3], deg[leg * 3 + 1], deg[leg * 3 + 2]});
+    h += -f.z;
+    s += std::sqrt(f.x * f.x + f.y * f.y);
+  }
+  height = h / legs;
+  stance = s / legs;
+  return std::isfinite(height) && std::isfinite(stance) && height > -20.0f && height < 200.0f && stance > 0.0f;
+}
+
 namespace {
 // letzter zulässiger Wert auf dem Weg von cur (zulässig) nach end
 float feasibleEdge(bool (*ok)(void*, float), void* ctx, float cur, float end, int steps, int iters) {

@@ -4,6 +4,15 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.17.1
+
+- **Behoben: Sprung beim Einschalten von IK.** Nach dem Start sitzt der Roboter (Servos in Sitzhaltung,
+  IK aus). Schaltete man dann *IK* ein, fuhr er ohne Aufsteh-Ablauf mit voller Servogeschwindigkeit in die
+  Standhaltung – belastend für die Servos. Ebenso sprang *Hinsetzen* aus dem manuellen Modus erst hoch.
+  Jetzt schätzt die Firmware beim Einschalten die tatsächliche Haltung aus den Servowinkeln: Sitzt er, bleibt
+  er sitzen (Aufstehen per Knopf); steht er schon, geht es auf seiner Höhe weiter. Bis die IK-Haltung erreicht
+  ist, fahren die Servos höchstens 90 °/s.
+
 ## 0.17.0
 
 - **Zappeln reagiert sofort:** Das Anheben wurde bisher erst nach Sekunden erkannt (Schwellen zu hoch, und während

@@ -80,7 +80,8 @@ void ServoController::update(float dt_s) {
     }
   }
 
-  const float slew = slew_deg_per_s_ > slew_floor_ ? slew_deg_per_s_ : slew_floor_;
+  float slew = slew_deg_per_s_ > slew_floor_ ? slew_deg_per_s_ : slew_floor_;
+  if (slew_cap_ > 0.0f && slew > slew_cap_) slew = slew_cap_;
   for (int i = 0; i < NUM_SERVOS; ++i) {
     Channel& c = ch_[i];
     if (!c.active) continue;
@@ -252,6 +253,12 @@ void ServoController::setAllAssembly() {
 void ServoController::setSlewDegPerS(float v) {
   lock();
   slew_deg_per_s_ = constrain(v, 10.0f, 1000.0f);
+  unlock();
+}
+
+void ServoController::setSlewCap(float deg_per_s) {
+  lock();
+  slew_cap_ = constrain(deg_per_s, 0.0f, 1000.0f);
   unlock();
 }
 

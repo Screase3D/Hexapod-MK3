@@ -87,6 +87,12 @@ PoseCheck checkPose(const LegGeometry& g, const LegMount* mounts, int legs, cons
 bool footReachable(const LegGeometry& g, const LegMount& m, const BodyPose& pose, const Vec3& foot,
                    const float* lo, const float* hi, float margin_deg, float knee_min_deg);
 
+// Haltung aus den Gelenkwinkeln schätzen (Vorwärtskinematik, Füße auf dem Boden
+// angenommen): mittlere Höhe der Coxa-Achsen über den Füßen und mittlerer Fußabstand.
+// deg: je Bein Coxa, Femur, Tibia. false bei unplausiblen Werten.
+bool estimateStance(const LegGeometry& g, const LegMount* mounts, int legs, const float* deg, float& height,
+                    float& stance);
+
 // Zusammenhängender zulässiger Bereich um cur innerhalb [lo, hi] (z. B. eine Haltungsgröße,
 // die anderen fest): ok(ctx, v) prüft einen Wert. Je Seite erst in steps groben Schritten
 // nach außen, dann die Grenze iters-mal halbieren. Ist cur selbst unzulässig: [cur, cur].

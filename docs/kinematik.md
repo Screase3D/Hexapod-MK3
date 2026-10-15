@@ -198,6 +198,12 @@ Beim Einschalten von Torque fahren die Beine in die **Sitzhaltung**: Körper lie
 dem Boden im gleichen Abstand wie im Stand (100 mm, `SIT_STANCE`). So drücken die Beine einen auf
 dem Bauch liegenden Roboter nicht ruckartig hoch.
 
+Wird der IK-Betrieb eingeschaltet (Schalter *IK*, Aufstehen, Hinsetzen), schätzt die Firmware die
+tatsächliche Haltung aus den aktuellen Servowinkeln (Vorwärtskinematik, `estimateStance`): Sitzt bzw.
+liegt er, beginnt der IK-Betrieb im Sitzen – aufgestanden wird nur über **Aufstehen**. Steht er schon
+(z. B. Montagestellung), geht es auf der gemessenen Höhe weiter und die Haltung gleitet zum Ziel. Bis die
+Servos die IK-Haltung erreicht haben, fahren sie höchstens 90 °/s.
+
 Karte **Bewegung** → **Aufstehen** ([`posture.cpp`](../firmware/src/kinematics/posture.cpp)):
 
 1. Körper ruckfrei auf die eingestellte Höhe heben (1,5 s, Füße bleiben stehen),

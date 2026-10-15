@@ -479,7 +479,10 @@ def handle(cmd):
         out["msg"] = "Not-Aus freigegeben (Servos bleiben aus)"
     elif c == "mode":
         if cmd.get("mode") == "pose" and state["mode"] != "pose":
-            state["posture"] = "standing"
+            # wie motion.cpp: beginnt in der Haltung, in der er ist (nach dem Start: sitzt)
+            state["posture"] = "standing" if state.get("assembly") and state["torque"] else "sitting"
+        elif cmd.get("mode") != "pose" and state["mode"] == "pose":
+            state["assembly"] = posture() == "standing"  # Servos bleiben in der Standhaltung
         state["mode"] = cmd.get("mode", "manual")
         out["msg"] = "Körperhaltung (IK) aktiv" if state["mode"] == "pose" else "Manueller Modus"
     elif c == "pose":
@@ -586,14 +589,19 @@ def handle(cmd):
         out["msg"] = "Haltung zurückgesetzt"
     elif c == "servo_us":
         state["us"][i] = max(500, min(2500, cmd["us"]))
+        state["assembly"] = False
     elif c == "servo_deg":
         state["us"][i] = us_of(i, cmd["deg"])
+        state["assembly"] = False
     elif c == "all_us":
         state["us"] = [float(cmd.get("us", 1500))] * 18
+        state["assembly"] = False
     elif c == "all_deg":
         state["us"] = [us_of(k, cmd.get("deg", 0)) for k in range(18)]
+        state["assembly"] = False
     elif c == "all_assembly":
         state["us"] = [cal["center_us"] for cal in state["cal"]]
+        state["assembly"] = True  # Montagestellung = Standhaltung
     elif c == "slew":
         state["slew"] = float(cmd["deg_per_s"])
     elif c in ("cal_center", "cal_ref", "cal_invert", "cal_set", "cal_reload", "cal_reset") and state["mode"] == "pose":

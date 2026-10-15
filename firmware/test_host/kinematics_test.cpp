@@ -236,8 +236,32 @@ static void testFeasibleInterval() {
   CHECK_NEAR(lo, 10.0, 1e-3);
 }
 
+// Haltung aus den Winkeln zurückrechnen: Standhaltung und Sitzhaltung
+static void testEstimateStance() {
+  const float cases[][2] = {{POSE_LIMITS.height_default, POSE_LIMITS.stance_default}, {SIT_HEIGHT, SIT_STANCE},
+                            {POSE_LIMITS.height_max - 10.0f, POSE_LIMITS.stance_min + 10.0f}};
+  for (const auto& c : cases) {
+    BodyPose pose{0, 0, c[0], 0, 0, 0};
+    float deg[18];
+    bool ok = true;
+    for (int i = 0; i < 6; ++i) {
+      JointAngles a;
+      ok &= legIk(LEG_GEOMETRY, LEG_MOUNTS[i], bodyToLeg(LEG_MOUNTS[i], worldToBody(pose, stanceFoot(LEG_MOUNTS[i], c[1]))), a);
+      deg[i * 3] = a.coxa;
+      deg[i * 3 + 1] = a.femur;
+      deg[i * 3 + 2] = a.tibia;
+    }
+    CHECK(ok);
+    float h, s;
+    CHECK(estimateStance(LEG_GEOMETRY, LEG_MOUNTS, 6, deg, h, s));
+    CHECK_NEAR(h, c[0], 0.5);
+    CHECK_NEAR(s, c[1], 0.5);
+  }
+}
+
 int main() {
   testFeasibleInterval();
+  testEstimateStance();
   testCheckPose();
   testNeutralPose();
   testFkOfZero();

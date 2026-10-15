@@ -29,6 +29,9 @@ constexpr float LEVEL_TILT_MAX = 25.0f;  // Nutzer-Neigung + Lageausgleich zusam
 // Lageausgleich: im Stand schnell (Zeitkonstante 0,25 s), beim Laufen ruhiger – die Schritte
 // schaukeln den Körper, darauf soll er nicht jedes Mal reagieren
 constexpr float LEVEL_GAIN_STAND = 4.0f, LEVEL_GAIN_WALK = 1.5f;
+// Übergang in den IK-Betrieb: Servos höchstens so schnell (Rest zwischen der bisherigen
+// Stellung und der IK-Haltung), danach wieder die eingestellte Geschwindigkeit
+constexpr float ENTER_SLEW_DEG_PER_S = 90.0f;
 // Körper-Joystick: voller Ausschlag verschiebt bzw. neigt den Körper so weit
 constexpr float BODY_SHIFT_MM = 30.0f;
 constexpr float BODY_TILT_DEG = 12.0f;
@@ -45,7 +48,6 @@ portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
 Mode g_mode = Mode::Manual;
 PoseState g_target;
 bool g_enter_pose = false;      // beim Wechsel in den Pose-Modus Haltung übernehmen
-bool g_enter_sitting = false;   // ... und dabei in der Sitzhaltung beginnen
 bool g_leave_pose = false;      // Rampen-Untergrenze im Regel-Task zurücksetzen
 bool g_req_stand = false;
 bool g_req_sit = false;
@@ -557,7 +559,6 @@ void setMode(Mode m) {
   portENTER_CRITICAL(&g_mux);
   if (m == Mode::Pose && g_mode != Mode::Pose) {
     g_enter_pose = true;
-    g_enter_sitting = false;
   }
   const bool leave = m != Mode::Pose && g_mode == Mode::Pose;
   if (leave) {
@@ -715,8 +716,7 @@ void stand() {
   portENTER_CRITICAL(&g_mux);
   if (g_mode != Mode::Pose) {
     g_mode = Mode::Pose;
-    g_enter_pose = true;
-    g_enter_sitting = true;  // vom Boden aus aufstehen
+    g_enter_pose = true;  // beginnt in der Haltung, in der er gerade ist (sitzt meist)
   }
   g_req_stand = true;
   g_req_sit = false;
@@ -728,7 +728,6 @@ void sit() {
   if (g_mode != Mode::Pose) {
     g_mode = Mode::Pose;
     g_enter_pose = true;
-    g_enter_sitting = false;
   }
   g_req_sit = true;
   g_req_stand = false;
@@ -939,7 +938,6 @@ void updateStep(float dt) {
   Mode m = g_mode;
   PoseState target = g_target;
   bool entering = g_enter_pose;
-  bool enter_sitting = g_enter_sitting;
   bool leaving = g_leave_pose;
   bool req_stand = g_req_stand;
   bool req_sit = g_req_sit;
@@ -967,6 +965,7 @@ void updateStep(float dt) {
 
   if (leaving) {
     servos.setSlewFloor(0.0f);
+    servos.setSlewCap(0.0f);
     g_arms.reset();
     g_gest.reset();
     g_anim.reset();
@@ -995,12 +994,26 @@ void updateStep(float dt) {
   // Einschalten fahren die Beine dorthin, statt ihn hochzudrücken)
   bool collapse = !powered && g_seq.state() != posture::State::Sitting;
   if (entering || collapse) {
-    // Direkt mit der Zielhaltung starten; die Servo-Rampen sorgen für den
-    // weichen Übergang aus der bisherigen Stellung.
-    bool sitting = collapse || enter_sitting;
-    g_current = sitting ? sitState() : target;
+    // Von der tatsächlichen Haltung aus weitermachen (aus den Servowinkeln geschätzt) – nie
+    // in die Standhaltung springen. Sitzt bzw. liegt er (z. B. nach dem Start), beginnt der
+    // IK-Betrieb im Sitzen, Aufstehen per Befehl; steht er schon (z. B. Montagestellung),
+    // geht es auf seiner jetzigen Höhe weiter und die Haltung gleitet zum Ziel.
+    float h = SIT_HEIGHT, st = SIT_STANCE;
+    float deg[NUM_SERVOS];
+    servos.anglesDeg(deg);
+    const bool est = kin::estimateStance(LEG_GEOMETRY, LEG_MOUNTS, NUM_LEGS, deg, h, st);
+    const bool standing_now = !collapse && powered && est && h > SIT_HEIGHT + 6.0f &&
+                              h >= 0.5f * (SIT_HEIGHT + target.pose.z);
+    if (standing_now) {
+      const PoseLimits& L = POSE_LIMITS;
+      g_current = target;
+      g_current.pose = {0.0f, 0.0f, clampf(h, L.height_min, L.height_max), 0.0f, 0.0f, 0.0f};
+      g_current.stance = clampf(st, L.stance_min, L.stance_max);
+    } else {
+      g_current = sitState();
+    }
     for (float& v : g_pose_vel) v = 0.0f;
-    g_seq.reset(sitting ? posture::State::Sitting : posture::State::Standing);
+    g_seq.reset(standing_now ? posture::State::Standing : posture::State::Sitting);
     neutralFeet(g_current.stance, neutral);
     g_gait.reset(neutral);
     g_arms.reset();
@@ -1010,6 +1023,7 @@ void updateStep(float dt) {
     g_walkfx.reset();
     g_pending_sit = false;
     servos.setSlewFloor(0.0f);
+    servos.setSlewCap(ENTER_SLEW_DEG_PER_S);  // Rest zur IK-Haltung langsam fahren
     g_settling = true;
   }
   if (req_stand && powered) g_seq.requestStand();
@@ -1031,6 +1045,7 @@ void updateStep(float dt) {
   // Schrittbahnen ohne Verzögerung folgen
   if (g_settling && servos.atTarget(3.0f)) {
     g_settling = false;
+    servos.setSlewCap(0.0f);
     servos.setSlewFloor(GAIT_SERVO_SLEW_DEG_PER_S);
   }
   const bool standing = !g_settling && powered && g_seq.state() == posture::State::Standing;
