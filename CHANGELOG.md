@@ -4,6 +4,18 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.18.0
+
+- **IK-Zustand wird gespeichert:** War IK an, ist es nach einem Neustart wieder an (der Roboter beginnt ohne
+  Torque in der Sitzhaltung); war es aus, bleibt es aus.
+- **Nie mehr schlagartig hochdrücken – egal aus welchem Zustand:**
+  - *Servos einschalten:* Jeder Servo geht zuerst in die sichere Sitzhaltung und fährt dann mit höchstens 45 °/s
+    zu seinem Sollwert. Vorher sprang er mit voller Geschwindigkeit auf den letzten Sollwert – stand der z. B. noch
+    auf Montagestellung (= Standhaltung), drückte sich ein liegender Roboter schlagartig hoch.
+  - *„Alle auf 1500 µs / Montagestellung / gleicher Winkel“* fahren ebenfalls mit höchstens 45 °/s (vorher 240 °/s).
+  - IK einschalten, Aufstehen und Hinsetzen beginnen in der tatsächlichen Haltung (seit 0.17.1); Not-Aus,
+    Akku- und Update-Sperre schalten Torque ganz ab, danach gilt wieder das sichere Einschalten.
+
 ## 0.17.1
 
 - **Behoben: Sprung beim Einschalten von IK.** Nach dem Start sitzt der Roboter (Servos in Sitzhaltung,

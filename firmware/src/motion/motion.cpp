@@ -404,13 +404,13 @@ constexpr const char* NVS_NAMESPACE = "hexapod";
 constexpr const char* NVS_KEY = "motion";
 constexpr uint32_t BLOB_MAGIC = 0x48584D31;  // "HXM1"
 constexpr uint16_t BLOB_VERSION = 1;
-constexpr uint8_t FLAG_LEVELING = 1, FLAG_ALIVE = 2;
+constexpr uint8_t FLAG_LEVELING = 1, FLAG_ALIVE = 2, FLAG_POSE = 4;
 
 struct SettingsBlob {
   uint32_t magic;
   uint16_t version;
   uint8_t gait_type;
-  uint8_t flags;  // Bit 0: Lageausgleich, Bit 1: Lebendig (frühere Fassung: nur Lageausgleich 0/1)
+  uint8_t flags;  // Bit 0: Lageausgleich, Bit 1: Lebendig, Bit 2: IK-Betrieb (frühere Fassung: nur Lageausgleich 0/1)
   float x, y, z, roll, pitch, yaw, stance;
   float swing_s, step_height;
   float slew;
@@ -461,6 +461,11 @@ void loadSettings() {
   g_gait_params.max_stride = gaitStrideMax(g_gait_params.step_height);
   g_leveling = (b.flags & FLAG_LEVELING) != 0;
   g_alive = (b.flags & FLAG_ALIVE) != 0;
+  if (b.flags & FLAG_POSE) {
+    // IK-Betrieb wie vor dem Neustart; ohne Torque beginnt er in der Sitzhaltung
+    g_mode = Mode::Pose;
+    g_enter_pose = true;
+  }
   if (b.slew > 0.0f) servos.setSlewDegPerS(b.slew);
 }
 
@@ -510,12 +515,13 @@ void saveSettings() {
   gait::Params gp = g_gait_params;
   bool lvl = g_leveling;
   bool alv = g_alive;
+  const bool pose = g_mode == Mode::Pose;
   portEXIT_CRITICAL(&g_mux);
   SettingsBlob b = {};
   b.magic = BLOB_MAGIC;
   b.version = BLOB_VERSION;
   b.gait_type = static_cast<uint8_t>(gp.type);
-  b.flags = (lvl ? FLAG_LEVELING : 0) | (alv ? FLAG_ALIVE : 0);
+  b.flags = (lvl ? FLAG_LEVELING : 0) | (alv ? FLAG_ALIVE : 0) | (pose ? FLAG_POSE : 0);
   b.x = t.pose.x;
   b.y = t.pose.y;
   b.z = t.pose.z;
@@ -551,7 +557,10 @@ void begin() {
   // von Torque auf dem Bauch, drücken die Beine ihn so nicht ruckartig hoch.
   kin::Vec3 feet[NUM_LEGS];
   for (int leg = 0; leg < NUM_LEGS; ++leg) feet[leg] = g_gait.foot(leg);
-  if (solveIk(g_current.pose, feet, g_angles) == 0) servos.setAnglesDeg(g_angles);
+  if (solveIk(g_current.pose, feet, g_angles) == 0) {
+    servos.setAnglesDeg(g_angles);
+    servos.setSafePose(g_angles);  // Torque ein: immer erst hierher, dann langsam weiter
+  }
   readLimits(g_lo, g_hi);
 }
 
@@ -560,6 +569,7 @@ void setMode(Mode m) {
   if (m == Mode::Pose && g_mode != Mode::Pose) {
     g_enter_pose = true;
   }
+  if (m != g_mode) markDirty();  // IK-Zustand wird gespeichert
   const bool leave = m != Mode::Pose && g_mode == Mode::Pose;
   if (leave) {
     g_leave_pose = true;
@@ -717,6 +727,7 @@ void stand() {
   if (g_mode != Mode::Pose) {
     g_mode = Mode::Pose;
     g_enter_pose = true;  // beginnt in der Haltung, in der er gerade ist (sitzt meist)
+    markDirty();
   }
   g_req_stand = true;
   g_req_sit = false;
@@ -728,6 +739,7 @@ void sit() {
   if (g_mode != Mode::Pose) {
     g_mode = Mode::Pose;
     g_enter_pose = true;
+    markDirty();
   }
   g_req_sit = true;
   g_req_stand = false;

@@ -64,7 +64,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `torque` | `on` (bool) | Servos ein (gestaffelt) / aus |
 | `estop` | – | Not-Aus: alle Ausgänge sofort aus, Torque gesperrt |
 | `estop_clear` | – | Not-Aus freigeben (Servos bleiben aus) |
-| `mode` | `mode`: `"pose"` / `"manual"` | Körperhaltung per IK an/aus |
+| `mode` | `mode`: `"pose"` / `"manual"` | Körperhaltung per IK an/aus (wird gespeichert und gilt nach einem Neustart wieder; beginnt in der Haltung, in der er gerade ist – nie Sprung in die Standhaltung) |
 | `pose` | `x`, `y`, `z`, `roll`, `pitch`, `yaw`, `stance` (Teilmenge) | Zielhaltung (mm/Grad, wird begrenzt), siehe [kinematik.md](kinematik.md). Ist sie nicht erreichbar, gilt die nächste erreichbare; die Antwort enthält dann `"limited": true` und in `msg`, was begrenzt wurde |
 | `pose_reset` | – | Standardhaltung |
 | `walk` | `vx`, `vy`, `turn` (je −1…1) | Fahrbefehl: vor/zurück, links/rechts, drehen (+ = links). Wirkt nur im IK-Modus (vorher `stand`). **Ohne Antwort**; ohne neuen Befehl für 0,6 s hält der Roboter an – also während der Fahrt etwa alle 100 ms senden |

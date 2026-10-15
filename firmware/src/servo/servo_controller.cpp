@@ -61,6 +61,10 @@ float ServoController::clampUs(float us) {
   return us;
 }
 
+namespace {
+constexpr uint32_t GENTLE_MAX_MS = 6000;
+}  // namespace
+
 void ServoController::update(float dt_s) {
   uint16_t ticks[NUM_BOARDS][Pca9685::kChannels] = {};
 
@@ -69,12 +73,15 @@ void ServoController::update(float dt_s) {
   if (!want_on) {
     for (auto& c : ch_) c.active = false;
   } else {
-    // Gestaffeltes Einschalten: pro Zyklus ein weiterer Servo. Die echte
-    // Position ist unbekannt, daher springt der Servo direkt auf den Sollwert.
-    for (auto& c : ch_) {
+    // Gestaffeltes Einschalten: pro Zyklus ein weiterer Servo. Die echte Position ist
+    // unbekannt, der Servo springt also auf den ersten Wert: die sichere Sitzhaltung (sonst
+    // der Sollwert). Von dort fährt er langsam weiter zum Sollwert.
+    for (int i = 0; i < NUM_SERVOS; ++i) {
+      Channel& c = ch_[i];
       if (!c.active) {
         c.active = true;
-        c.current_us = c.target_us;
+        c.current_us = have_safe_ ? clampUs(cal_.degToUs(i, cal_.clampDeg(i, safe_deg_[i]))) : c.target_us;
+        startGentle();
         break;
       }
     }
@@ -82,6 +89,8 @@ void ServoController::update(float dt_s) {
 
   float slew = slew_deg_per_s_ > slew_floor_ ? slew_deg_per_s_ : slew_floor_;
   if (slew_cap_ > 0.0f && slew > slew_cap_) slew = slew_cap_;
+  if (gentle_ && slew > SERVO_GENTLE_DEG_PER_S) slew = SERVO_GENTLE_DEG_PER_S;
+  bool all_there = want_on;
   for (int i = 0; i < NUM_SERVOS; ++i) {
     Channel& c = ch_[i];
     if (!c.active) continue;
@@ -91,10 +100,15 @@ void ServoController::update(float dt_s) {
       c.current_us = c.target_us;
     } else {
       c.current_us += diff > 0 ? max_step : -max_step;
+      all_there = false;
     }
     const ServoMapEntry& m = SERVO_MAP[i];
     if (boards_[m.board]) ticks[m.board][m.channel] = boards_[m.board]->usToTicks(c.current_us);
   }
+  for (const auto& c : ch_) all_there &= c.active;  // gestaffeltes Einschalten noch nicht fertig
+  // alle am Ziel – oder Notbremse: bei sich ständig ändernden Zielen (z. B. Laufen) nicht
+  // dauerhaft langsam bleiben; 6 s reichen bei 45 °/s für jede Bewegung
+  if (all_there || (gentle_ && millis() - gentle_ms_ > GENTLE_MAX_MS)) gentle_ = false;
   unlock();
 
   // Ab hier nur noch I2C (ausschließlich dieser Task greift auf den Bus zu)
@@ -228,10 +242,12 @@ uint32_t ServoController::setAnglesDeg(const float* deg) {
   return clamped;
 }
 
+// "Alle …": alle Beine zugleich – langsam, sonst springt ein sitzender Roboter hoch
 void ServoController::setAllPulseUs(float us) {
   if (!isfinite(us)) return;
   lock();
   for (auto& c : ch_) c.target_us = clampUs(us);
+  startGentle();
   unlock();
 }
 
@@ -239,6 +255,7 @@ void ServoController::setAllAngleDeg(float deg) {
   if (!isfinite(deg)) return;
   lock();
   for (int i = 0; i < NUM_SERVOS; ++i) ch_[i].target_us = clampUs(cal_.degToUs(i, deg));
+  startGentle();
   unlock();
 }
 
@@ -247,12 +264,26 @@ void ServoController::setAllAssembly() {
   for (int i = 0; i < NUM_SERVOS; ++i) {
     ch_[i].target_us = clampUs(cal_.degToUs(i, Calibration::refDeg(i)));
   }
+  startGentle();
   unlock();
 }
 
 void ServoController::setSlewDegPerS(float v) {
   lock();
   slew_deg_per_s_ = constrain(v, 10.0f, 1000.0f);
+  unlock();
+}
+
+// (mit Lock aufrufen)
+void ServoController::startGentle() {
+  if (!gentle_) gentle_ms_ = millis();
+  gentle_ = true;
+}
+
+void ServoController::setSafePose(const float* deg) {
+  lock();
+  for (int i = 0; i < NUM_SERVOS; ++i) safe_deg_[i] = deg[i];
+  have_safe_ = true;
   unlock();
 }
 

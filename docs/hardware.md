@@ -74,6 +74,10 @@ Weicht die Verkabelung ab, nur die Tabelle `SERVO_MAP` in
 - **Gestaffeltes Einschalten:** Beim Aktivieren von Torque wird alle 20 ms ein weiterer Servo
   zugeschaltet, und die Pulsanfänge der Kanäle sind über die PWM-Periode verteilt. Das
   begrenzt die Stromspitzen auf den UBECs.
+- **Sicheres Einschalten:** Die echte Stellung der Servos ist vor dem Einschalten unbekannt. Jeder
+  Servo geht deshalb zuerst in die Sitzhaltung (drückt einen liegenden Roboter nicht hoch) und fährt
+  von dort mit höchstens 45 °/s zu seinem Sollwert – egal, welcher Sollwert zuletzt galt (z. B.
+  Montagestellung). Ebenso langsam fahren die „Alle …“-Befehle der Kalibrierung.
 - **PCA9685-Oszillator:** nominal 25 MHz, real oft 24–27 MHz. Über die Kalibrierung wird das
   ausgeglichen; wer es genau will, misst 1500 µs mit Oszilloskop/Logic-Analyzer und trägt den
   korrigierten Wert in `PCA1_OSC_HZ` / `PCA2_OSC_HZ` ein.

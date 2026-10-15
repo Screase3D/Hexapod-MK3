@@ -50,6 +50,15 @@ class ServoController {
   void setSlewFloor(float deg_per_s);
   // Obergrenze der Stellgeschwindigkeit (0 = keine), z. B. beim Übergang in den IK-Betrieb
   void setSlewCap(float deg_per_s);
+  // Sichere Haltung (Gelenkwinkel, Sitzhaltung): Beim Einschalten von Torque gehen die
+  // Servos zuerst dorthin und fahren dann langsam zu ihrem Sollwert – so drückt sich ein
+  // liegender Roboter nie schlagartig hoch, egal welcher Sollwert zuletzt galt.
+  void setSafePose(const float* deg);
+
+ private:
+  void startGentle();
+
+ public:
   // true, wenn alle eingeschalteten Servos ihren Sollwert erreicht haben
   bool atTarget(float tol_us);
 
@@ -95,6 +104,11 @@ class ServoController {
   float slew_deg_per_s_ = SERVO_SLEW_DEG_PER_S;
   float slew_floor_ = 0.0f;
   float slew_cap_ = 0.0f;
+  // Langsam, bis alle Servos ihr Ziel erreicht haben (nach dem Einschalten, "Alle …"-Befehle)
+  bool gentle_ = false;
+  uint32_t gentle_ms_ = 0;  // seit wann (höchstens GENTLE_MAX_MS, dann wieder normal)
+  float safe_deg_[NUM_SERVOS] = {};
+  bool have_safe_ = false;
 
   uint16_t last_ticks_[NUM_BOARDS][Pca9685::kChannels];
   bool force_write_ = true;

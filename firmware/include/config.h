@@ -101,6 +101,9 @@ constexpr float SERVO_DEFAULT_US_PER_DEG = 2000.0f / 180.0f;  // MG90S ~11.1 µs
 // Maximale Stellgeschwindigkeit (Rampen gegen Stromspitzen). MG90S schafft
 // ca. 600 °/s; für Kalibrierung und Tests deutlich langsamer fahren.
 constexpr float SERVO_SLEW_DEG_PER_S = 240.0f;
+// Nach dem Einschalten von Torque und bei "Alle …"-Befehlen: höchstens so schnell, bis alle
+// Servos ihr Ziel erreicht haben (der Roboter soll sich nie schlagartig hochdrücken)
+constexpr float SERVO_GENTLE_DEG_PER_S = 45.0f;
 
 // Regelschleife
 constexpr uint32_t CONTROL_PERIOD_MS = 20;  // 50 Hz = Servo-PWM-Rate
