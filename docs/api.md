@@ -78,7 +78,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `pad` | `lx`, `ly`, `rx`, `ry` (−1…1, y oben +), `lt`, `rt` (0…1), `b` (Tasten-Bits: a, b, x, y, lb, rb, view, menu, xbox, ls, rs, up, down, left, right, share, p1–p4) | Gamepad im Browser, wertet die Firmware wie einen Bluetooth-Controller aus. **Ohne Antwort**, etwa alle 50 ms senden; nach 0,3 s ohne Befehl gilt er als getrennt |
 | `live` | `on` (bool, Standard `true`) | Live-Ansicht: dieser Client bekommt 3 s lang `{"type":"live"}` mit 20 Hz (siehe unten). **Ohne Antwort**; die Oberfläche erneuert das alle 1,5 s, solange die 3D-Ansicht sichtbar ist, `on: false` beendet es sofort |
 | `alive` | `on` (bool) | „Lebendig“: im Stand ab und zu kleine zufällige Bewegungen, siehe [kinematik.md](kinematik.md#lebendig); wird gespeichert |
-| `life` | `breathe`, `bored`, `lift`, `walk_fx`, `gaze` (bool), `sleep_min` (1–60) – Teilmenge | „Lebendig wirken“: Atmen, Langeweile/Einschlafen nach `sleep_min`, Zappeln beim Hochheben, Laufen mit Charakter, Augen schauen mit, siehe [kinematik.md](kinematik.md#lebendig-wirken); wird gespeichert |
+| `life` | `breathe`, `bored`, `lift`, `walk_fx`, `gaze` (bool), `sleep_min` (1–60), `lift_sens` (1 gering, 2 mittel, 3 hoch) – Teilmenge | „Lebendig wirken“: Atmen, Langeweile/Einschlafen nach `sleep_min`, Zappeln beim Hochheben, Laufen mit Charakter, Augen schauen mit, siehe [kinematik.md](kinematik.md#lebendig-wirken); wird gespeichert |
 | `wave` | – | rechtes Vorderbein winkt (nur wenn oben) |
 | `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wechselt auch im Lauf fließend (`motion.gait.switching` = Übergang läuft) |
 | `leveling` | `on` (bool) | Lageausgleich an/aus, siehe [kinematik.md](kinematik.md#lageausgleich) |
@@ -99,7 +99,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `cal_save` | – | Kalibrierung in NVS speichern |
 | `cal_reload` | – | gespeicherte Kalibrierung laden (Änderungen verwerfen) |
 | `cal_reset` | – | Standardwerte (noch nicht gespeichert) |
-| `eyes` | `color` (`#rrggbb`), `effect`, `ms` (100–120000, Standard 3000) bzw. `reset: true` | Augen kurz vorgeben (Spielereien): Farbe und Effekt wie auf der Seite LEDs, nicht über Warnungen (Not-Aus, Akku); `reset` = wieder je Zustand. Solange die Vorgabe gilt, steht sie in der Telemetrie unter `eyes` |
+| `eyes` | `color` (`#rrggbb`), `effect`, `ms` (100–120000, Standard 3000) bzw. `reset: true` | Augen kurz vorgeben (Seite Verhalten): Farbe und Effekt wie auf der Seite LEDs, nicht über Warnungen (Not-Aus, Akku); `reset` = wieder je Zustand. Solange die Vorgabe gilt, steht sie in der Telemetrie unter `eyes` |
 | `client_log` | `text` (bis 100 Zeichen) | Meldung der Oberfläche ins Ereignisprotokoll (Warnung), höchstens alle 10 s, dazwischen gezählt. **Ohne Antwort** |
 
 Alle Befehle, die die Kalibrierung ändern (`cal_set`, `cal_center`, `cal_ref`, `cal_invert`, `cal_reload`,
@@ -132,6 +132,7 @@ Beispiel:
              "level": {"on": true, "active": true, "roll": -3.2, "pitch": 1.1},
              "alive": {"on": true, "act": "look"},
              "life": {"breathe": true, "bored": true, "lift": true, "walk_fx": true, "gaze": true, "sleep_min": 5,
+                      "lift_sens": 2,
                       "mood": "awake"},
              "gait": {"type": "tripod", "swing_s": 0.4, "step_height": 15, "active": "tripod",
                       "walking": true, "swing": 21, "vx": 100, "vy": 0, "wz": 0,

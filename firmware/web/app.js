@@ -442,17 +442,18 @@ function renderImuSettings(imu) {
   }
   for (const id of ['imu-cal', 'imu-cal2']) {
     const el = $(id);
+    if (!el) continue;
     el.hidden = !text;
     el.textContent = text;
     el.className = `small imu-cal ${cls}`;
   }
   const busy = imu.cal === 'running';
-  for (const id of ['imu-level', 'imu-level2', 'imu-gyro']) $(id).disabled = busy || !imu.ok;
+  for (const id of ['imu-level', 'imu-level2', 'imu-gyro']) if ($(id)) $(id).disabled = busy || !imu.ok;
 
   // Einbaulage (nicht überschreiben, während ausgewählt wird)
   if (imu.mount && document.activeElement !== $('imu-xdir')) $('imu-xdir').value = imu.mount;
   if (imu.flip !== undefined && document.activeElement !== $('imu-flip')) $('imu-flip').value = imu.flip ? '1' : '0';
-  if (S.tab === 'settings' && imu.level) {
+  if (S.tab === 'camera' && imu.level) {
     const [r, p] = imu.level;
     fillKv($('imu-info'), [
       ['Nullpunkt', r || p ? `Sensor um Roll ${fmtDeg(r)}°, Nick ${fmtDeg(p)}° geneigt` : 'nicht gesetzt'],
@@ -463,7 +464,7 @@ function renderImuSettings(imu) {
 
 function bindImu() {
   const level = () => send('imu_cal', { level: true });
-  $('imu-level').onclick = level;
+  if ($('imu-level')) $('imu-level').onclick = level;
   $('imu-level2').onclick = level;
   $('imu-gyro').onclick = () => send('imu_cal', { level: false });
   $('imu-level-reset').onclick = () => {
@@ -1038,6 +1039,8 @@ function renderLife(l) {
     }
   }
   $('life-sleep').disabled = !l.bored;
+  if (Date.now() - LIFE.touched > LOCAL_PRIORITY_MS && l.lift_sens) $('life-sens').value = String(l.lift_sens);
+  $('life-sens').disabled = !l.lift;
   $('life-mood').textContent = l.flail ? 'Stimmung: zappelt (hochgehoben?)' : `Stimmung: ${MOOD_TEXT[l.mood] || l.mood}`;
 }
 
@@ -1048,6 +1051,10 @@ function bindLife() {
       if (!send('life', { [i.dataset.life]: i.checked })) i.checked = !i.checked;
     };
   });
+  $('life-sens').onchange = (e) => {
+    LIFE.touched = Date.now();
+    send('life', { lift_sens: +e.target.value });
+  };
   $('life-sleep').onchange = (e) => {
     LIFE.touched = Date.now();
     send('life', { sleep_min: +e.target.value });
@@ -1058,12 +1065,10 @@ function renderAlive(m) {
   const a = m.alive;
   if (!a) return;
   if (Date.now() - aliveTouched > LOCAL_PRIORITY_MS) $('alive-on').checked = a.on;
+  // was er gerade tut (die Stimmung steht davor)
   let info = '';
-  if (m.life && m.life.flail) info = 'zappelt';
-  else if (a.act) info = ALIVE_TEXT[a.act] || a.act;
-  else if (m.life && m.life.mood === 'asleep' && m.mode === 'pose') info = MOOD_TEXT.asleep;
-  else if (a.on && !(m.mode === 'pose' && m.posture === 'standing')) info = 'wirkt im Stand';
-  else if (m.life && m.life.mood === 'bored' && m.mode === 'pose') info = 'langweilt sich';
+  if (a.act) info = ALIVE_TEXT[a.act] || a.act;
+  else if (a.on && !(m.mode === 'pose' && m.posture === 'standing')) info = '„Lebendig“ wirkt im Stand';
   $('alive-info').textContent = info;
   renderLife(m.life);
 }
@@ -1077,9 +1082,18 @@ function renderWalk(m) {
   const busy = posture === 'standing_up' || posture === 'sitting_down';
   const POSTURE_TEXT = { sitting: 'sitzt', standing_up: 'steht auf …', sitting_down: 'setzt sich …' };
   const arms = m.mode === 'pose' && m.arms ? m.arms : 'down';
+  const life = m.life || {};
+  st.title = '';
   if (m.mode !== 'pose') {
     st.textContent = 'IK aus';
     st.className = 'badge badge-muted';
+  } else if (life.flail) {
+    st.textContent = 'zappelt';
+    st.className = 'badge badge-warn';
+  } else if (life.mood === 'asleep' && (posture === 'sitting' || posture === 'sitting_down')) {
+    st.textContent = posture === 'sitting' ? 'schläft' : 'schläft ein …';
+    st.className = 'badge badge-muted';
+    st.title = 'Fahren, Körper oder Gesten wecken ihn';
   } else if (arms !== 'down') {
     st.textContent = ARMS_TEXT[arms] || arms;
     st.className = arms === 'up' ? 'badge badge-on' : 'badge badge-warn';
@@ -1376,7 +1390,7 @@ function bindEditor() {
   $('ed-go-max').onclick = () => S.cal[S.sel] && setTestDeg(S.cal[S.sel].max_deg);
 }
 
-// ----------------------------------------------------------- Spielereien ----
+// ------------------------------------------------- Verhalten (Spielereien) --
 // Emotes und Choreografien: Abfolgen aus Gesten, Körperbewegungen, Höhe, Laufen und
 // Vorderbeinen. Der Browser spielt sie mit denselben Befehlen ab wie die Handsteuerung
 // (Körper/Laufen alle 100 ms erneuert); eigene Choreografien liegen im Browser.
@@ -2101,9 +2115,12 @@ function bindGlobal() {
 
 // Seite -> Adresse (#steuerung …), damit Neuladen und Zurück-Taste funktionieren
 const PAGES = {
-  control: 'steuerung', fun: 'spielereien', cal: 'kalibrierung', system: 'system', leds: 'leds', pad: 'controller', settings: 'einstellungen',
+  control: 'steuerung', fun: 'verhalten', camera: 'kamera', cal: 'kalibrierung', system: 'system', leds: 'leds',
+  pad: 'controller', settings: 'einstellungen',
 };
-const pageFromHash = () => Object.keys(PAGES).find((k) => location.hash === `#${PAGES[k]}`) || 'control';
+const PAGE_ALIASES = { '#spielereien': 'fun' };  // alte Adressen (Lesezeichen)
+const pageFromHash = () => Object.keys(PAGES).find((k) => location.hash === `#${PAGES[k]}`) ||
+  PAGE_ALIASES[location.hash] || 'control';
 
 function showTab(name) {
   if (!PAGES[name]) name = 'control';
@@ -2135,6 +2152,7 @@ function showTab(name) {
   document.title = `${page.dataset.title} · Hexapod MK3`;
   setNavOpen(false);
   updateStream();
+  updatePreview();
   v3Tick();
   funEyeTick();
   clearInterval(S.statusTimer);
@@ -2212,7 +2230,27 @@ const camBase = () => `${location.protocol}//${location.hostname}:81`;
 let camRetryTimer = null;
 let camRetries = 0;
 
+// Vorschau auf der Seite "Kamera & Lagesensor": eigener Stream, nur solange die Seite offen ist
+function updatePreview() {
+  const img = $('cam-prev');
+  const view = $('cam-prev-view');
+  const on = S.tab === 'camera' && !document.hidden;
+  if (on && !view.classList.contains('live')) {
+    $('cam-prev-text').textContent = 'Vorschau startet …';
+    img.src = `${camBase()}/stream?t=${Date.now()}`;
+    view.classList.add('live');
+  } else if (!on && view.classList.contains('live')) {
+    img.src = 'data:,';  // Verbindung schließen
+    view.classList.remove('live');
+  }
+}
+
 function renderCamStats(t) {
+  if (S.tab === 'camera') {
+    const c = t.cam || {};
+    $('cam-prev-info').textContent = c.fps !== undefined && c.clients
+      ? `${c.fps.toFixed(1)} fps · ${c.kb || 0} KB` : '';
+  }
   const el = $('cam-stats');
   const c = t.cam || {};
   const live = $('cam-img').parentElement.classList.contains('live');
@@ -2306,6 +2344,7 @@ function renderCamera() {
   $('cam-xclk-note').hidden = !c.xclk_active_mhz || c.xclk_mhz === c.xclk_active_mhz;
   // 90°/270°: Sensor liefert 0°/180°, die Oberfläche dreht um weitere 90°
   $('cam-img').parentElement.classList.toggle('rot90', c.rotation === 90 || c.rotation === 270);
+  $('cam-prev-view').classList.toggle('rot90', c.rotation === 90 || c.rotation === 270);
   $('cam-vflip').checked = c.vflip;
   $('cam-hmirror').checked = c.hmirror;
   $('cam-info').textContent = c.ok ? (c.sensor || '') : 'Keine Kamera erkannt';
@@ -2508,11 +2547,6 @@ function bindCamera() {
     if (document.fullscreenElement) document.exitFullscreen();
     else view.requestFullscreen().catch(() => toast('Vollbild nicht möglich', true));
   };
-  $('cam-gear').onclick = () => {
-    const open = $('cam-settings').hidden;
-    $('cam-settings').hidden = !open;
-    $('cam-gear').setAttribute('aria-expanded', open);
-  };
   // Bricht der Stream ab (WLAN-Aussetzer), automatisch neu verbinden
   $('cam-img').onerror = () => {
     const view = $('cam-img').parentElement;
@@ -2542,6 +2576,14 @@ function bindCamera() {
   $('cam-vflip').onchange = (e) => setCamera({ vflip: e.target.checked });
   $('cam-hmirror').onchange = (e) => setCamera({ hmirror: e.target.checked });
   document.addEventListener('visibilitychange', updateStream);
+  document.addEventListener('visibilitychange', updatePreview);
+  $('cam-prev').onerror = () => {
+    const view = $('cam-prev-view');
+    if (!view.classList.contains('live')) return;
+    view.classList.remove('live');
+    $('cam-prev-text').textContent = 'Kamera nicht erreichbar – neuer Versuch …';
+    setTimeout(updatePreview, 3000);
+  };
 }
 
 // -------------------------------------------------------------- System ------
@@ -3405,7 +3447,7 @@ function ledFrame(now) {
   const id = (S.tel && S.tel.led) || L.cfg.state || 'idle';
   const fixed = L.cfg.fixed.some((s) => s.id === id);
   const preview = Date.now() < L.previewUntil && !fixed;
-  const eyes = !fixed && S.tel && S.tel.eyes;  // Vorgabe aus den Spielereien
+  const eyes = !fixed && S.tel && S.tel.eyes;  // Vorgabe aus "Verhalten" (Emotes, Augen)
   const style = preview ? L.preview : (eyes || ledStyleFor(L.cfg, id));
   const k = 0.3 + 0.7 * (L.cfg.brightness / 100);  // Helligkeit angedeutet
   ledRender(style, now).forEach((c, i) => {

@@ -42,7 +42,7 @@ state = {
     "gesture": None, "gesture_t": 0.0,
     "body": [0.0] * 5, "body_t": 0.0,
     "alive": False,
-    "life": {"breathe": True, "bored": True, "lift": True, "walk_fx": True, "gaze": True, "sleep_min": 5},
+    "life": {"breathe": True, "bored": True, "lift": True, "walk_fx": True, "gaze": True, "sleep_min": 5, "lift_sens": 2},
     "mood": "awake", "active_t": 0.0,
     # Lagesensor (wie imu.cpp) und Lageausgleich (wie motion.cpp)
     "imu_mount": "vorne", "imu_flip": False, "imu_level": [0.0, 0.0],
@@ -604,6 +604,10 @@ def handle(cmd):
         for k in ("breathe", "bored", "lift", "walk_fx", "gaze"):
             if k in cmd:
                 state["life"][k] = bool(cmd[k])
+        if "lift_sens" in cmd:
+            if int(cmd["lift_sens"]) not in (1, 2, 3):
+                return {**out, "ok": False, "msg": "lift_sens muss 1–3 sein"}
+            state["life"]["lift_sens"] = int(cmd["lift_sens"])
         if "sleep_min" in cmd:
             m = float(cmd["sleep_min"])
             if not 1 <= m <= 60:

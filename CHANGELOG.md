@@ -4,6 +4,25 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.17.0
+
+- **Zappeln reagiert sofort:** Das Anheben wurde bisher erst nach Sekunden erkannt (Schwellen zu hoch, und während
+  „Lebendig“-Bewegungen gar nicht). Jetzt drei Hinweise – Beschleunigung, Drehung und Neigung gegenüber der
+  gewollten Körperlage –, empfindlichere Schwellen, auch während eigener Bewegungen; im PC-Test erkennt er sanftes
+  Anheben nach 40 ms. **Empfindlichkeit** einstellbar (gering/mittel/hoch).
+- **Gähnen, Seufzen, Strecken deutlich ausdrucksstärker:** Kopf weit hoch, Körper hebt und senkt sich sichtbar, beim
+  Strecken Katzenbuckel und beide Vorderbeine nacheinander nach vorne gestreckt.
+- **Oberfläche neu geordnet:**
+  - *Steuerung* nur noch mit dem, was man zum Fahren braucht: Kamera, 3D-Ansicht, Bewegung (Gangart, Tempo), kompakte
+    Karte Haltung (Servos, IK, Profile). Der Zustand zeigt jetzt auch „schläft“ und „zappelt“.
+  - *Spielereien* heißt jetzt **Verhalten** und enthält alles zu Verhalten und Emotionen: Emotes, Spiele, Augen,
+    Choreografien und die neue Karte **Lebendigkeit** (Lebendig, Atmen, Langeweile, Zappeln, Laufen mit Charakter,
+    Augen schauen mit, Stimmung).
+  - Neue Seite **Kamera & Lagesensor**: Live-Vorschau, alle Kameraeinstellungen, Lage-Anzeige, Lagesensor einrichten.
+  - *Einstellungen* gegliedert in **Bewegung** (Haltung mit allen Reglern und Lageausgleich, Laufen, Servos),
+    **Verbindung** (WLAN, Signal messen) und **System** (Akku, Version, Firmware-Update, Oberfläche).
+  - Alte Adresse `#spielereien` führt weiter auf *Verhalten*.
+
 ## 0.16.0
 
 **Lebendig wirken** – alles einzeln schaltbar unter *Einstellungen → Lebendig wirken* (Standard: an):

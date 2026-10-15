@@ -73,8 +73,10 @@
       <nav class="sb-nav">
         <a class="nav-item" href="#steuerung" data-page="control" title="Steuerung">
           <svg class="ic"><use href="#i-control"/></svg><span class="nav-label">Steuerung</span></a>
-        <a class="nav-item" href="#spielereien" data-page="fun" title="Spielereien">
-          <svg class="ic"><use href="#i-sparkle"/></svg><span class="nav-label">Spielereien</span></a>
+        <a class="nav-item" href="#verhalten" data-page="fun" title="Verhalten">
+          <svg class="ic"><use href="#i-sparkle"/></svg><span class="nav-label">Verhalten</span></a>
+        <a class="nav-item" href="#kamera" data-page="camera" title="Kamera &amp; Lagesensor">
+          <svg class="ic"><use href="#i-camera"/></svg><span class="nav-label">Kamera &amp; Lagesensor</span></a>
         <a class="nav-item" href="#kalibrierung" data-page="cal" title="Kalibrierung &amp; Justierung">
           <svg class="ic"><use href="#i-sliders"/></svg><span class="nav-label">Kalibrierung &amp; Justierung</span>
           <span id="nav-cal-dot" class="nav-dot" title="Ungespeicherte Kalibrierung" hidden></span></a>
@@ -158,10 +160,178 @@
                   <button id="cam-full" class="btn btn-ghost btn-icon" type="button" title="Vollbild">
                     <svg class="ic"><use href="#i-expand"/></svg></button>
                   <span id="cam-stats" class="cam-stats muted small mono"></span>
-                  <button id="cam-gear" class="btn btn-ghost btn-icon" type="button" aria-expanded="false" aria-controls="cam-settings" title="Kameraeinstellungen">
-                    <svg class="ic"><use href="#i-gear"/></svg></button>
+                  <a id="cam-gear" class="btn btn-ghost btn-icon" href="#kamera" title="Kameraeinstellungen (Seite Kamera)">
+                    <svg class="ic"><use href="#i-gear"/></svg></a>
                 </div>
-                <div id="cam-settings" class="cam-settings" hidden>
+              </div>
+
+              <div class="card o-model" id="model-card">
+                <div class="card-head wrap">
+                  <h2><svg class="ic"><use href="#i-cube"/></svg>3D-Ansicht<span id="model-src" class="badge badge-muted" hidden></span></h2>
+                  <div class="seg model-views" id="model-view" role="radiogroup" aria-label="Blickwinkel">
+                    <button type="button" role="radio" data-value="3d" title="schräg von hinten">3D</button>
+                    <button type="button" role="radio" data-value="top" title="von oben">Oben</button>
+                    <button type="button" role="radio" data-value="side" title="von rechts">Seite</button>
+                    <button type="button" role="radio" data-value="front" title="von vorne">Vorne</button>
+                  </div>
+                </div>
+                <div class="model-wrap" id="model-wrap">
+                  <canvas id="model-canvas" role="img" aria-label="3D-Modell des Roboters mit den aktuellen Gelenkwinkeln"></canvas>
+                  <div class="model-legend small" aria-hidden="true">
+                    <span><i class="key key-stance"></i>Stand</span>
+                    <span><i class="key key-swing"></i>Schwung</span>
+                    <span><i class="key key-area"></i>Standfläche</span>
+                  </div>
+                </div>
+                <p id="model-info" class="muted small model-info"></p>
+                <p class="hint small">Ziehen dreht die Ansicht (mit der Maus auch hoch/runter), Strg + Mausrad zoomt,
+                  Doppelklick setzt zurück. Daten kommen nur, solange die Ansicht sichtbar ist.</p>
+              </div>
+            </div>
+
+            <div class="col col-side">
+              <div class="card o-walk" id="walk-card">
+                <div class="card-head">
+                  <h2><svg class="ic"><use href="#i-walk"/></svg>Bewegung<span id="pad-ind" class="badge badge-on pad-badge" hidden></span></h2>
+                  <span id="walk-state" class="badge badge-muted">–</span>
+                </div>
+                <div class="seg seg-mode" id="move-mode" role="tablist" aria-label="Was die Joysticks steuern">
+                  <button type="button" role="tab" data-value="walk" title="Laufen und Drehen">Laufen</button>
+                  <button type="button" role="tab" data-value="body" title="Körper verschieben und neigen (Schwerpunkt), Gesten">Körper</button>
+                  <button type="button" role="tab" data-value="arms" title="Vorderbeine heben und steuern">Vorderbeine</button>
+                </div>
+                <div class="btn-pair" id="posture-buttons">
+                  <button id="walk-stand" class="btn btn-primary" type="button">Aufstehen</button>
+                  <button id="walk-sit" class="btn" type="button">Hinsetzen</button>
+                </div>
+                <div class="btn-pair" id="arms-buttons" hidden>
+                  <button id="arms-toggle" class="btn btn-primary" type="button">Vorderbeine heben</button>
+                  <button id="arms-wave" class="btn" type="button">Winken</button>
+                </div>
+                <div class="joy-row">
+                  <div class="joy" id="joy-move" role="application" aria-label="Fahren">
+                    <div class="joy-cross"></div><div class="joy-knob"></div><span class="joy-label" id="joy-move-label">Fahren</span>
+                  </div>
+                  <div class="walk-legs" id="walk-legs" aria-label="angehobene Beine">
+                    <span data-leg="0"></span><span class="wl-body"></span><span data-leg="3"></span>
+                    <span data-leg="1"></span><span data-leg="4"></span>
+                    <span data-leg="2"></span><span data-leg="5"></span>
+                  </div>
+                  <div class="joy joy-h" id="joy-turn" role="application" aria-label="Drehen">
+                    <div class="joy-cross"></div><div class="joy-knob"></div><span class="joy-label" id="joy-turn-label">↶ Drehen ↷</span>
+                  </div>
+                </div>
+                <p id="walk-info" class="muted small mono walk-info"></p>
+                <p id="walk-limit" class="alert small" hidden></p>
+
+                <div id="walk-settings">
+                  <div class="field">
+                    <span class="field-label">Gangart</span>
+                    <div class="seg" id="gait-type" role="radiogroup" aria-label="Gangart">
+                      <button type="button" role="radio" data-value="tripod" title="drei Beine gleichzeitig – schnell">Dreifuß</button>
+                      <button type="button" role="radio" data-value="ripple" title="zwei Beine gleichzeitig – ruhiger">Ripple</button>
+                      <button type="button" role="radio" data-value="wave" title="ein Bein nach dem anderen – langsam, sehr stabil">Welle</button>
+                    </div>
+                  </div>
+                  <label class="slider-row">
+                    <span>Tempo</span>
+                    <input id="walk-scale" type="range" min="10" max="100" step="5" value="80">
+                    <span id="walk-scale-val" class="mono"></span>
+                  </label>
+                  <p class="hint small"><kbd>W</kbd><kbd>S</kbd> vor/zurück · <kbd>A</kbd><kbd>D</kbd> seitlich ·
+                    <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>R</kbd><kbd>F</kbd> höher/tiefer · <kbd>Leertaste</kbd> Stopp</p>
+                </div>
+
+                <div id="body-settings" hidden>
+                  <p class="muted small">Links: Körper verschieben (Schwerpunkt), rechts: neigen. Loslassen = zurück in die
+                    eingestellte Haltung. Die Füße bleiben stehen.</p>
+                  <p id="body-info" class="warn-note small"></p>
+                  <span class="field-label">Gesten</span>
+                  <div class="gesture-grid" id="gestures">
+                    <button type="button" class="btn" data-gesture="circle">Kreisen</button>
+                    <button type="button" class="btn" data-gesture="nod">Ja</button>
+                    <button type="button" class="btn" data-gesture="shake">Nein</button>
+                    <button type="button" class="btn" data-gesture="pushup">Liegestütz</button>
+                    <button type="button" class="btn" data-gesture="dance">Tanzen</button>
+                    <button type="button" class="btn btn-ghost" data-gesture="stop">Stopp</button>
+                  </div>
+                  <p class="hint small"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> verschieben ·
+                    <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>R</kbd><kbd>F</kbd> höher/tiefer</p>
+                </div>
+
+                <div id="arms-settings" hidden>
+                  <p id="arms-info" class="warn-note small"></p>
+                  <label class="check-row"><input id="arms-mirror" type="checkbox"> Gespiegelt: links bewegt beide Beine, rechts ↕ streckt sie aus</label>
+                  <p class="muted small">Heben: Er verlagert das Gewicht nach hinten, setzt die Mittelbeine vor und hebt
+                    dann die Vorderbeine. Je ein Joystick pro Bein, der Fuß folgt der Richtung: ↑ hoch / ↓ runter,
+                    ← → schwenken (nach vorne bzw. zur Seite). Er geht so weit, wie das Bein reicht.
+                    Laufen geht erst wieder nach dem Absetzen.</p>
+                </div>
+
+              </div>
+
+              <div class="card o-pose">
+                <div class="card-head wrap">
+                  <h2><svg class="ic"><use href="#i-body"/></svg>Haltung</h2>
+                  <div class="head-switches">
+                    <label class="switch" title="Servos mit Kraft (Torque). Ein → die Beine fahren in die Sitzhaltung">
+                      <input id="ctl-torque" type="checkbox">
+                      <span class="slider"></span>
+                      <span class="switch-label">Servos</span>
+                    </label>
+                    <label class="switch" title="Körperhaltung per inverser Kinematik">
+                      <input id="pose-mode" type="checkbox">
+                      <span class="slider"></span>
+                      <span class="switch-label">IK</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="profiles" id="profiles" aria-label="Profile"></div>
+                <p id="pose-warn" class="alert small" hidden></p>
+                <p class="muted small">Profil = Höhe, Fußabstand und Gang auf einen Tipp. Einzelwerte, Lageausgleich und
+                  Schritt unter <a href="#einstellungen">Einstellungen → Bewegung</a>; Verhalten, Emotes und Augen unter
+                  <a href="#verhalten">Verhalten</a>.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-camera" class="page" data-title="Kamera &amp; Lagesensor" data-short="Kamera">
+          <div class="grid-2">
+            <div class="stack">
+              <div class="card">
+                <div class="card-head">
+                  <h2><svg class="ic"><use href="#i-camera"/></svg>Vorschau</h2>
+                  <span id="cam-prev-info" class="muted small mono"></span>
+                </div>
+                <div class="cam-view cam-preview" id="cam-prev-view">
+                  <img id="cam-prev" alt="Kamerabild (Vorschau)">
+                  <div class="cam-placeholder">
+                    <svg class="ic"><use href="#i-camera-off"/></svg>
+                    <span id="cam-prev-text">Vorschau startet …</span>
+                  </div>
+                </div>
+                <p class="muted small">Läuft nur, solange diese Seite offen ist – Änderungen sind sofort zu sehen.</p>
+              </div>
+              <div class="card o-imu">
+                <div class="card-head">
+                  <h2><svg class="ic"><use href="#i-level"/></svg>Lage</h2>
+                  <span class="muted small">MPU6050</span>
+                </div>
+                <div class="attitude">
+                  <div class="horizon"><div id="horizon-line" class="horizon-line"></div><div class="horizon-mark"></div></div>
+                  <div class="att-values">
+                    <div class="att-val"><span class="muted small">Nick</span><b id="imu-pitch" class="mono">–</b></div>
+                    <div class="att-val"><span class="muted small">Roll</span><b id="imu-roll" class="mono">–</b></div>
+                  </div>
+                </div>
+                <p id="imu-raw" class="muted small mono imu-raw"></p>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-camera"/></svg>Kamera</h2>
+                <div id="cam-settings" class="cam-settings cam-settings-card">
                   <div class="form-grid">
                     <label for="cam-fs">Auflösung</label>
                     <select id="cam-fs"></select>
@@ -225,213 +395,38 @@
                   <p class="muted small">Ohne Stream schläft die Kamera nach 10&nbsp;s (spart Strom und Wärme).</p>
                 </div>
               </div>
-
-              <div class="card o-model" id="model-card">
-                <div class="card-head wrap">
-                  <h2><svg class="ic"><use href="#i-cube"/></svg>3D-Ansicht<span id="model-src" class="badge badge-muted" hidden></span></h2>
-                  <div class="seg model-views" id="model-view" role="radiogroup" aria-label="Blickwinkel">
-                    <button type="button" role="radio" data-value="3d" title="schräg von hinten">3D</button>
-                    <button type="button" role="radio" data-value="top" title="von oben">Oben</button>
-                    <button type="button" role="radio" data-value="side" title="von rechts">Seite</button>
-                    <button type="button" role="radio" data-value="front" title="von vorne">Vorne</button>
-                  </div>
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-level"/></svg>Lagesensor</h2>
+                <div class="form-grid">
+                  <label for="imu-xdir">X-Pfeil zeigt nach</label>
+                  <select id="imu-xdir">
+                    <option value="vorne">vorne</option>
+                    <option value="links">links</option>
+                    <option value="hinten">hinten</option>
+                    <option value="rechts">rechts</option>
+                  </select>
+                  <label for="imu-flip">Bauteilseite</label>
+                  <select id="imu-flip">
+                    <option value="0">oben</option>
+                    <option value="1">unten (Platine kopfüber)</option>
+                  </select>
                 </div>
-                <div class="model-wrap" id="model-wrap">
-                  <canvas id="model-canvas" role="img" aria-label="3D-Modell des Roboters mit den aktuellen Gelenkwinkeln"></canvas>
-                  <div class="model-legend small" aria-hidden="true">
-                    <span><i class="key key-stance"></i>Stand</span>
-                    <span><i class="key key-swing"></i>Schwung</span>
-                    <span><i class="key key-area"></i>Standfläche</span>
-                  </div>
-                </div>
-                <p id="model-info" class="muted small model-info"></p>
-                <p class="hint small">Ziehen dreht die Ansicht (mit der Maus auch hoch/runter), Strg + Mausrad zoomt,
-                  Doppelklick setzt zurück. Daten kommen nur, solange die Ansicht sichtbar ist.</p>
-              </div>
-
-              <div class="sub-grid">
-                <div class="card o-imu">
-                  <div class="card-head">
-                    <h2><svg class="ic"><use href="#i-level"/></svg>Lage</h2>
-                    <span class="muted small">MPU6050</span>
-                  </div>
-                  <div class="attitude">
-                    <div class="horizon"><div id="horizon-line" class="horizon-line"></div><div class="horizon-mark"></div></div>
-                    <div class="att-values">
-                      <div class="att-val"><span class="muted small">Nick</span><b id="imu-pitch" class="mono">–</b></div>
-                      <div class="att-val"><span class="muted small">Roll</span><b id="imu-roll" class="mono">–</b></div>
-                    </div>
-                  </div>
-                  <p id="imu-raw" class="muted small mono imu-raw"></p>
-                  <div class="row wrap">
-                    <button id="imu-level" class="btn btn-small" type="button" title="Roboter waagerecht hinstellen, 2 s ruhig halten">Als waagerecht übernehmen</button>
-                  </div>
-                  <p id="imu-cal" class="small imu-cal" hidden></p>
-                </div>
-
-                <div class="card o-servo">
-                  <div class="card-head">
-                    <h2><svg class="ic"><use href="#i-servo"/></svg>Servos</h2>
-                  </div>
-                  <label class="switch">
-                    <input id="ctl-torque" type="checkbox">
-                    <span class="slider"></span>
-                    <span class="switch-label">Torque</span>
-                  </label>
-                  <div class="row wrap">
-                    <button id="ctl-assembly" class="btn" type="button" title="Alle Gelenke in die Montagestellung (Standardhaltung)">Montagestellung</button>
-                  </div>
-                  <p class="muted small">Torque ein → die Beine fahren in die Sitzhaltung. Vor dem ersten
-                    Laufen die Servos unter <a href="#kalibrierung">Kalibrierung</a> einrichten.</p>
-                </div>
-              </div>
-            </div>
-
-            <div class="col col-side">
-              <div class="card o-walk" id="walk-card">
-                <div class="card-head">
-                  <h2><svg class="ic"><use href="#i-walk"/></svg>Bewegung<span id="pad-ind" class="badge badge-on pad-badge" hidden></span></h2>
-                  <span id="walk-state" class="badge badge-muted">–</span>
-                </div>
-                <div class="seg seg-mode" id="move-mode" role="tablist" aria-label="Was die Joysticks steuern">
-                  <button type="button" role="tab" data-value="walk" title="Laufen und Drehen">Laufen</button>
-                  <button type="button" role="tab" data-value="body" title="Körper verschieben und neigen (Schwerpunkt), Gesten">Körper</button>
-                  <button type="button" role="tab" data-value="arms" title="Vorderbeine heben und steuern">Vorderbeine</button>
-                </div>
-                <div class="btn-pair" id="posture-buttons">
-                  <button id="walk-stand" class="btn btn-primary" type="button">Aufstehen</button>
-                  <button id="walk-sit" class="btn" type="button">Hinsetzen</button>
-                </div>
-                <div class="btn-pair" id="arms-buttons" hidden>
-                  <button id="arms-toggle" class="btn btn-primary" type="button">Vorderbeine heben</button>
-                  <button id="arms-wave" class="btn" type="button">Winken</button>
-                </div>
-                <div class="joy-row">
-                  <div class="joy" id="joy-move" role="application" aria-label="Fahren">
-                    <div class="joy-cross"></div><div class="joy-knob"></div><span class="joy-label" id="joy-move-label">Fahren</span>
-                  </div>
-                  <div class="walk-legs" id="walk-legs" aria-label="angehobene Beine">
-                    <span data-leg="0"></span><span class="wl-body"></span><span data-leg="3"></span>
-                    <span data-leg="1"></span><span data-leg="4"></span>
-                    <span data-leg="2"></span><span data-leg="5"></span>
-                  </div>
-                  <div class="joy joy-h" id="joy-turn" role="application" aria-label="Drehen">
-                    <div class="joy-cross"></div><div class="joy-knob"></div><span class="joy-label" id="joy-turn-label">↶ Drehen ↷</span>
-                  </div>
-                </div>
-                <p id="walk-info" class="muted small mono walk-info"></p>
-                <p id="walk-limit" class="alert small" hidden></p>
-
-                <div id="walk-settings">
-                  <div class="field">
-                    <span class="field-label">Gangart</span>
-                    <div class="seg" id="gait-type" role="radiogroup" aria-label="Gangart">
-                      <button type="button" role="radio" data-value="tripod" title="drei Beine gleichzeitig – schnell">Dreifuß</button>
-                      <button type="button" role="radio" data-value="ripple" title="zwei Beine gleichzeitig – ruhiger">Ripple</button>
-                      <button type="button" role="radio" data-value="wave" title="ein Bein nach dem anderen – langsam, sehr stabil">Welle</button>
-                    </div>
-                  </div>
-                  <label class="slider-row">
-                    <span>Tempo</span>
-                    <input id="walk-scale" type="range" min="10" max="100" step="5" value="80">
-                    <span id="walk-scale-val" class="mono"></span>
-                  </label>
-                  <details class="fold">
-                    <summary>Schritt einstellen</summary>
-                    <label class="slider-row">
-                      <span>Schrittdauer</span>
-                      <input id="gait-swing" type="range" min="0.3" max="1.2" step="0.05">
-                      <span id="gait-swing-val" class="mono"></span>
-                    </label>
-                    <label class="slider-row">
-                      <span>Fußhub</span>
-                      <input id="gait-height" type="range" min="5" max="25" step="1">
-                      <span id="gait-height-val" class="mono"></span>
-                    </label>
-                    <p class="muted small">Kürzere Schritte = schneller, aber hektischer. Langsam gelaufen werden die
-                      Schritte automatisch ruhiger (bis zur doppelten Schrittdauer). Quer zum Körper begrenzt die
-                      Reichweite der Beine das Tempo zusätzlich (das Knie darf nicht zu weit einknicken).
-                      Die Gangart lässt sich auch im Lauf wechseln: Der Roboter passt das Tempo an und die Beine
-                      finden in wenigen Schritten fließend in den neuen Takt. Alles wird gespeichert.</p>
-                  </details>
-                  <p class="hint small"><kbd>W</kbd><kbd>S</kbd> vor/zurück · <kbd>A</kbd><kbd>D</kbd> seitlich ·
-                    <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>R</kbd><kbd>F</kbd> höher/tiefer · <kbd>Leertaste</kbd> Stopp</p>
-                </div>
-
-                <div id="body-settings" hidden>
-                  <p class="muted small">Links: Körper verschieben (Schwerpunkt), rechts: neigen. Loslassen = zurück in die
-                    eingestellte Haltung. Die Füße bleiben stehen.</p>
-                  <p id="body-info" class="warn-note small"></p>
-                  <span class="field-label">Gesten</span>
-                  <div class="gesture-grid" id="gestures">
-                    <button type="button" class="btn" data-gesture="circle">Kreisen</button>
-                    <button type="button" class="btn" data-gesture="nod">Ja</button>
-                    <button type="button" class="btn" data-gesture="shake">Nein</button>
-                    <button type="button" class="btn" data-gesture="pushup">Liegestütz</button>
-                    <button type="button" class="btn" data-gesture="dance">Tanzen</button>
-                    <button type="button" class="btn btn-ghost" data-gesture="stop">Stopp</button>
-                  </div>
-                  <p class="hint small"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> verschieben ·
-                    <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>R</kbd><kbd>F</kbd> höher/tiefer</p>
-                </div>
-
-                <div id="arms-settings" hidden>
-                  <p id="arms-info" class="warn-note small"></p>
-                  <label class="check-row"><input id="arms-mirror" type="checkbox"> Gespiegelt: links bewegt beide Beine, rechts ↕ streckt sie aus</label>
-                  <p class="muted small">Heben: Er verlagert das Gewicht nach hinten, setzt die Mittelbeine vor und hebt
-                    dann die Vorderbeine. Je ein Joystick pro Bein, der Fuß folgt der Richtung: ↑ hoch / ↓ runter,
-                    ← → schwenken (nach vorne bzw. zur Seite). Er geht so weit, wie das Bein reicht.
-                    Laufen geht erst wieder nach dem Absetzen.</p>
-                </div>
-
-                <div class="level-row">
-                  <label class="switch" title="Im Stand ab und zu kleine zufällige Bewegungen: umschauen, Gewicht verlagern, ein Bein kurz heben …">
-                    <input id="alive-on" type="checkbox">
-                    <span class="slider"></span>
-                    <span class="switch-label">Lebendig</span>
-                  </label>
-                  <span id="alive-info" class="muted small"></span>
-                </div>
-              </div>
-
-              <div class="card o-pose">
-                <div class="card-head">
-                  <h2><svg class="ic"><use href="#i-body"/></svg>Körperhaltung</h2>
-                  <label class="switch" title="Inverse Kinematik">
-                    <input id="pose-mode" type="checkbox">
-                    <span class="slider"></span>
-                    <span class="switch-label">IK</span>
-                  </label>
-                </div>
-                <p id="pose-placeholder" class="warn-text small" hidden>Beinmaße sind noch Platzhalter
-                  (<span class="mono">include/robot_geometry.h</span>) – erst nach dem Messen verwenden.</p>
-                <div class="profiles" id="profiles" aria-label="Profile"></div>
-                <div id="pose-sliders"></div>
-                <p id="pose-warn" class="alert small" hidden></p>
-                <div class="level-row">
-                  <label class="switch" title="Körper mit dem Lagesensor waagerecht halten (bzw. auf der eingestellten Neigung)">
-                    <input id="level-on" type="checkbox">
-                    <span class="slider"></span>
-                    <span class="switch-label">Lageausgleich</span>
-                  </label>
-                  <span id="level-info" class="muted small mono"></span>
-                </div>
-                <p id="level-fault" class="warn-text small" hidden>Lageausgleich abgeschaltet: Er hat die
-                  Schräglage verstärkt statt ausgeglichen. Einbaulage des Lagesensors unter
-                  <a href="#einstellungen">Einstellungen</a> prüfen.</p>
+                <p class="muted small">Pfeile auf der GY-521-Platine. Prüfen: Nase anheben → <b>Nick positiv</b>,
+                  rechte Seite absenken → <b>Roll positiv</b> (Werte in der Karte Lage).</p>
                 <div class="row wrap">
-                  <button id="pose-reset" class="btn" type="button">Zurücksetzen</button>
+                  <button id="imu-level2" class="btn" type="button" title="Roboter waagerecht hinstellen, 2 s ruhig halten">Nullpunkt setzen (waagerecht)</button>
+                  <button id="imu-gyro" class="btn" type="button" title="Roboter 2 s ruhig halten">Gyro neu messen</button>
+                  <button id="imu-level-reset" class="btn btn-ghost" type="button">Nullpunkt löschen</button>
                 </div>
-                <p class="muted small">Die Füße bleiben stehen, der Körper bewegt sich darüber – auch beim
-                  Laufen. Änderungen werden gespeichert und gelten auch nach einem Neustart.
-                  Der Joystick schaltet die IK automatisch ein; einzelne Servo-Befehle beenden sie.</p>
+                <p id="imu-cal2" class="small imu-cal" hidden></p>
+                <dl class="kv" id="imu-info"></dl>
               </div>
             </div>
           </div>
         </section>
 
         <!-- ======================= KALIBRIERUNG & JUSTIERUNG ======================= -->
-        <section id="page-fun" class="page" data-title="Spielereien">
+        <section id="page-fun" class="page" data-title="Verhalten">
           <div class="fun-now" id="fun-now" hidden>
             <svg class="ic"><use href="#i-play"/></svg>
             <span id="fun-now-text" class="fun-now-text"></span>
@@ -463,6 +458,69 @@
                   <button id="fun-dice" class="btn" type="button" data-game="dice">Würfeln</button>
                 </div>
                 <p id="fun-dice-out" class="game-out" aria-live="polite"></p>
+              </div>
+              <div class="card" id="life-card">
+                <h2><svg class="ic"><use href="#i-sparkle"/></svg>Lebendigkeit</h2>
+                <p class="small life-now"><span id="life-mood">–</span><span id="alive-info" class="muted"></span></p>
+                <div class="life-list">
+                  <label class="switch" title="Im Stand ab und zu kleine zufällige Bewegungen">
+                    <input id="alive-on" type="checkbox">
+                    <span class="slider"></span>
+                    <span class="switch-label">Lebendig <span class="muted small">– im Stand ab und zu kleine zufällige
+                      Bewegungen: umschauen, Gewicht verlagern, Kopf schief, ein Bein heben, tippen</span></span>
+                  </label>
+                  <label class="switch">
+                    <input id="life-breathe" type="checkbox" data-life="breathe">
+                    <span class="slider"></span>
+                    <span class="switch-label">Atmen <span class="muted small">– im Stand hebt und senkt sich der Körper
+                      ganz leicht, die Augen atmen mit</span></span>
+                  </label>
+                  <label class="switch">
+                    <input id="life-bored" type="checkbox" data-life="bored">
+                    <span class="slider"></span>
+                    <span class="switch-label">Langeweile <span class="muted small">– steht er lange untätig, gähnt und
+                      seufzt er und legt sich schließlich schlafen; Steuern weckt ihn</span></span>
+                  </label>
+                  <div class="form-grid life-sleep">
+                    <label for="life-sleep">Einschlafen nach</label>
+                    <select id="life-sleep">
+                      <option value="2">2 min</option>
+                      <option value="5">5 min</option>
+                      <option value="10">10 min</option>
+                      <option value="20">20 min</option>
+                      <option value="30">30 min</option>
+                    </select>
+                  </div>
+                  <label class="switch">
+                    <input id="life-lift" type="checkbox" data-life="lift">
+                    <span class="slider"></span>
+                    <span class="switch-label">Zappeln beim Hochheben <span class="muted small">– erkennt das Anheben am
+                      Lagesensor; zappelt immer nur mit drei Beinen, steht also auch bei einer Fehlerkennung</span></span>
+                  </label>
+                  <div class="form-grid life-sleep">
+                    <label for="life-sens">Empfindlichkeit</label>
+                    <select id="life-sens">
+                      <option value="1">gering (nur kräftiges Anheben)</option>
+                      <option value="2">mittel</option>
+                      <option value="3">hoch (schon leichtes Anheben)</option>
+                    </select>
+                  </div>
+                  <label class="switch">
+                    <input id="life-walk" type="checkbox" data-life="walk_fx">
+                    <span class="slider"></span>
+                    <span class="switch-label">Laufen mit Charakter <span class="muted small">– lehnt sich beim Anfahren
+                      zurück, schwingt beim Anhalten nach, schaut in die Kurve, Hüftschwung; schaut sich nach längerem
+                      Laufen manchmal um</span></span>
+                  </label>
+                  <label class="switch">
+                    <input id="life-gaze" type="checkbox" data-life="gaze">
+                    <span class="slider"></span>
+                    <span class="switch-label">Augen schauen mit <span class="muted small">– beim Drehen und Umschauen
+                      leuchtet das Auge auf der Seite heller</span></span>
+                  </label>
+                </div>
+                <p class="muted small">Alles nur im IK-Betrieb, alles wird gespeichert. Die Augenfarben je Zustand
+                  stellt die Seite <a href="#leds">LEDs</a> ein.</p>
               </div>
             </div>
             <div class="stack">
@@ -924,8 +982,68 @@
         </section>
 
         <section id="page-settings" class="page" data-title="Einstellungen">
+          <h2 class="group-title">Bewegung</h2>
           <div class="grid-2">
+            <div class="card" id="pose-card">
+              <h2><svg class="ic"><use href="#i-body"/></svg>Haltung</h2>
+              <p id="pose-placeholder" class="warn-text small" hidden>Beinmaße sind noch Platzhalter
+                (<span class="mono">include/robot_geometry.h</span>) – erst nach dem Messen verwenden.</p>
+              <div id="pose-sliders"></div>
+              <div class="level-row">
+                <label class="switch" title="Körper mit dem Lagesensor waagerecht halten (bzw. auf der eingestellten Neigung)">
+                  <input id="level-on" type="checkbox">
+                  <span class="slider"></span>
+                  <span class="switch-label">Lageausgleich</span>
+                </label>
+                <span id="level-info" class="muted small mono"></span>
+              </div>
+              <p id="level-fault" class="warn-text small" hidden>Lageausgleich abgeschaltet: Er hat die
+                Schräglage verstärkt statt ausgeglichen. Einbaulage des Lagesensors unter
+                <a href="#kamera">Kamera &amp; Lagesensor</a> prüfen.</p>
+              <div class="row wrap">
+                <button id="pose-reset" class="btn" type="button">Zurücksetzen</button>
+              </div>
+              <p class="muted small">Die Füße bleiben stehen, der Körper bewegt sich darüber – auch beim Laufen. Unter jedem
+                Regler zeigt ein Band, wie weit die Beine bei den übrigen Werten reichen. Änderungen werden gespeichert;
+                die Profile unter Steuerung setzen mehrere Werte auf einmal.</p>
+            </div>
             <div class="stack">
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-walk"/></svg>Laufen</h2>
+                <label class="slider-row">
+                  <span>Schrittdauer</span>
+                  <input id="gait-swing" type="range" min="0.3" max="1.2" step="0.05">
+                  <span id="gait-swing-val" class="mono"></span>
+                </label>
+                <label class="slider-row">
+                  <span>Fußhub</span>
+                  <input id="gait-height" type="range" min="5" max="25" step="1">
+                  <span id="gait-height-val" class="mono"></span>
+                </label>
+                <p class="muted small">Kürzere Schritte = schneller, aber hektischer. Langsam gelaufen werden die
+                  Schritte automatisch ruhiger (bis zur doppelten Schrittdauer). Quer zum Körper begrenzt die
+                  Reichweite der Beine das Tempo zusätzlich (das Knie darf nicht zu weit einknicken).
+                  Die Gangart lässt sich auch im Lauf wechseln: Der Roboter passt das Tempo an und die Beine
+                  finden in wenigen Schritten fließend in den neuen Takt. Alles wird gespeichert.</p>
+              </div>
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-servo"/></svg>Servos</h2>
+                <label class="slider-row stacked">
+                  <span>Stellgeschwindigkeit</span>
+                  <input id="ctl-slew" type="range" min="30" max="600" step="10">
+                  <span id="ctl-slew-val" class="mono"></span>
+                </label>
+                <p class="muted small">Höchstgeschwindigkeit bei Einzelbefehlen (Kalibrierung, Justierung,
+                  Montagestellung). Das Lauftempo bestimmen <b>Tempo</b> und Gangart (Steuerung) sowie die
+                  <b>Schrittdauer</b>; dabei gilt mindestens 600&nbsp;°/s, damit die Füße den Schrittbahnen folgen.</p>
+                <div class="row wrap">
+                  <button id="ctl-assembly" class="btn" type="button" title="Alle Gelenke in die Montagestellung (Standardhaltung)">Montagestellung</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <h2 class="group-title">Verbindung</h2>
+          <div class="grid-2">
             <div class="card">
               <h2><svg class="ic"><use href="#i-wifi"/></svg>WLAN</h2>
               <p class="small" id="wifi-current"></p>
@@ -950,7 +1068,6 @@
               </form>
               <p class="muted small" id="wifi-hint"></p>
             </div>
-
             <div class="card" id="rssi-card">
               <div class="card-head">
                 <h2><svg class="ic"><use href="#i-wifi"/></svg>Signal messen</h2>
@@ -974,118 +1091,10 @@
                 <button id="rssi-clear" class="btn btn-small" type="button">Liste leeren</button>
               </div>
             </div>
-
-              <div class="card">
-                <h2><svg class="ic"><use href="#i-chip"/></svg>Version</h2>
-                <dl class="kv" id="about-info"></dl>
-                <p class="alert small" id="about-stale" hidden>Diese Seite stammt von einer älteren Firmware.
-                  <a href="#" onclick="location.reload(); return false;">Neu laden</a></p>
-              </div>
-
-              <div class="card">
-                <h2><svg class="ic"><use href="#i-upload"/></svg>Firmware-Update</h2>
-                <div class="row wrap">
-                  <input id="ota-file" type="file" accept=".bin,application/octet-stream">
-                  <button id="ota-start" class="btn btn-primary" type="button" disabled>Hochladen</button>
-                </div>
-                <div class="ota-bar" id="ota-bar" hidden><i id="ota-progress"></i></div>
-                <p class="small" id="ota-status"></p>
-                <p class="muted small"><code>firmware.bin</code> aus <code>firmware/.pio/build/hexapod/</code> (nach dem Bauen)
-                  oder aus dem CI-Artefakt <i>hexapod-firmware</i> wählen – nicht <code>firmware.factory.bin</code>. Die Servos
-                  werden dabei stromlos; danach startet der ESP32 neu. Direkt aus PlatformIO geht es mit der Umgebung
-                  <code>hexapod_ota</code> (<code>pio run -e hexapod_ota -t upload</code>).</p>
-              </div>
-            </div>
-
+          </div>
+          <h2 class="group-title">System</h2>
+          <div class="grid-2">
             <div class="stack">
-              <div class="card" id="life-card">
-                <h2><svg class="ic"><use href="#i-sparkle"/></svg>Lebendig wirken</h2>
-                <p class="small" id="life-mood">–</p>
-                <div class="life-list">
-                  <label class="switch">
-                    <input id="life-breathe" type="checkbox" data-life="breathe">
-                    <span class="slider"></span>
-                    <span class="switch-label">Atmen <span class="muted small">– im Stand hebt und senkt sich der Körper
-                      ganz leicht, die Augen atmen mit</span></span>
-                  </label>
-                  <label class="switch">
-                    <input id="life-bored" type="checkbox" data-life="bored">
-                    <span class="slider"></span>
-                    <span class="switch-label">Langeweile <span class="muted small">– steht er lange untätig, gähnt und
-                      seufzt er und legt sich schließlich schlafen; Steuern weckt ihn</span></span>
-                  </label>
-                  <div class="form-grid life-sleep">
-                    <label for="life-sleep">Einschlafen nach</label>
-                    <select id="life-sleep">
-                      <option value="2">2 min</option>
-                      <option value="5">5 min</option>
-                      <option value="10">10 min</option>
-                      <option value="20">20 min</option>
-                      <option value="30">30 min</option>
-                    </select>
-                  </div>
-                  <label class="switch">
-                    <input id="life-lift" type="checkbox" data-life="lift">
-                    <span class="slider"></span>
-                    <span class="switch-label">Zappeln beim Hochheben <span class="muted small">– erkennt das Anheben am
-                      Lagesensor; zappelt immer nur mit drei Beinen, steht also auch bei einer Fehlerkennung</span></span>
-                  </label>
-                  <label class="switch">
-                    <input id="life-walk" type="checkbox" data-life="walk_fx">
-                    <span class="slider"></span>
-                    <span class="switch-label">Laufen mit Charakter <span class="muted small">– lehnt sich beim Anfahren
-                      zurück, schwingt beim Anhalten nach, schaut in die Kurve, Hüftschwung; schaut sich nach längerem
-                      Laufen manchmal um</span></span>
-                  </label>
-                  <label class="switch">
-                    <input id="life-gaze" type="checkbox" data-life="gaze">
-                    <span class="slider"></span>
-                    <span class="switch-label">Augen schauen mit <span class="muted small">– beim Drehen und Umschauen
-                      leuchtet das Auge auf der Seite heller</span></span>
-                  </label>
-                </div>
-                <p class="muted small">Alles nur im IK-Betrieb. Die zufälligen kleinen Bewegungen im Stand schaltet
-                  „Lebendig“ auf der Seite Steuerung.</p>
-              </div>
-              <div class="card">
-                <h2><svg class="ic"><use href="#i-servo"/></svg>Servos</h2>
-                <label class="slider-row stacked">
-                  <span>Stellgeschwindigkeit</span>
-                  <input id="ctl-slew" type="range" min="30" max="600" step="10">
-                  <span id="ctl-slew-val" class="mono"></span>
-                </label>
-                <p class="muted small">Höchstgeschwindigkeit bei Einzelbefehlen (Kalibrierung, Justierung,
-                  Montagestellung). Das Lauftempo bestimmen <b>Tempo</b>, <b>Schrittdauer</b> und Gangart
-                  (Karte Bewegung); dabei gilt mindestens 600&nbsp;°/s, damit die Füße den Schrittbahnen folgen.</p>
-              </div>
-
-              <div class="card">
-                <h2><svg class="ic"><use href="#i-level"/></svg>Lagesensor</h2>
-                <div class="form-grid">
-                  <label for="imu-xdir">X-Pfeil zeigt nach</label>
-                  <select id="imu-xdir">
-                    <option value="vorne">vorne</option>
-                    <option value="links">links</option>
-                    <option value="hinten">hinten</option>
-                    <option value="rechts">rechts</option>
-                  </select>
-                  <label for="imu-flip">Bauteilseite</label>
-                  <select id="imu-flip">
-                    <option value="0">oben</option>
-                    <option value="1">unten (Platine kopfüber)</option>
-                  </select>
-                </div>
-                <p class="muted small">Pfeile auf der GY-521-Platine. Prüfen: Nase anheben → <b>Nick positiv</b>,
-                  rechte Seite absenken → <b>Roll positiv</b> (Werte unter <a href="#steuerung">Steuerung</a> → Lage).</p>
-                <div class="row wrap">
-                  <button id="imu-level2" class="btn" type="button" title="Roboter waagerecht hinstellen, 2 s ruhig halten">Nullpunkt setzen (waagerecht)</button>
-                  <button id="imu-gyro" class="btn" type="button" title="Roboter 2 s ruhig halten">Gyro neu messen</button>
-                  <button id="imu-level-reset" class="btn btn-ghost" type="button">Nullpunkt löschen</button>
-                </div>
-                <p id="imu-cal2" class="small imu-cal" hidden></p>
-                <dl class="kv" id="imu-info"></dl>
-              </div>
-
               <div class="card">
                 <h2><svg class="ic"><use href="#i-battery"/></svg>Akku</h2>
                 <label class="switch">
@@ -1103,7 +1112,27 @@
                   Messwert oben mit einem Multimeter übereinstimmt – ohne Teiler liefert der Pin Zufallswerte.
                   Warnung &lt; 6,8 V, Servos aus &lt; 6,4 V, Tiefschlaf &lt; 6,0 V (Aufwecken nur per Reset).</p>
               </div>
-
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-chip"/></svg>Version</h2>
+                <dl class="kv" id="about-info"></dl>
+                <p class="alert small" id="about-stale" hidden>Diese Seite stammt von einer älteren Firmware.
+                  <a href="#" onclick="location.reload(); return false;">Neu laden</a></p>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-upload"/></svg>Firmware-Update</h2>
+                <div class="row wrap">
+                  <input id="ota-file" type="file" accept=".bin,application/octet-stream">
+                  <button id="ota-start" class="btn btn-primary" type="button" disabled>Hochladen</button>
+                </div>
+                <div class="ota-bar" id="ota-bar" hidden><i id="ota-progress"></i></div>
+                <p class="small" id="ota-status"></p>
+                <p class="muted small"><code>firmware.bin</code> aus <code>firmware/.pio/build/hexapod/</code> (nach dem Bauen)
+                  oder aus dem CI-Artefakt <i>hexapod-firmware</i> wählen – nicht <code>firmware.factory.bin</code>. Die Servos
+                  werden dabei stromlos; danach startet der ESP32 neu. Direkt aus PlatformIO geht es mit der Umgebung
+                  <code>hexapod_ota</code> (<code>pio run -e hexapod_ota -t upload</code>).</p>
+              </div>
               <div class="card">
                 <h2><svg class="ic"><use href="#i-sun"/></svg>Oberfläche</h2>
                 <div class="field">
@@ -1125,7 +1154,6 @@
                   <dt><kbd>↑</kbd><kbd>↓</kbd></dt><dd>vorheriger/nächster Servo (Kalibrieren)</dd>
                 </dl>
               </div>
-
             </div>
           </div>
         </section>

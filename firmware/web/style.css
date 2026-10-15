@@ -376,10 +376,8 @@ details.fold[open] summary { margin-bottom: 4px; }
   .sub-grid > .card { margin-bottom: var(--gap); }
   .o-cam { order: 1; }
   .o-walk { order: 2; }
-  .o-model { order: 3; }
-  .o-imu { order: 4; }
-  .o-pose { order: 5; }
-  .o-servo { order: 6; }
+  .o-pose { order: 3; }
+  .o-model { order: 4; }
 }
 
 /* ---------- 3D-Ansicht ---------- */
@@ -931,3 +929,13 @@ a.pill:hover { border-color: var(--accent); }
 .life-list .switch-label { line-height: 1.35; }
 .life-sleep { margin: -2px 0 2px 52px; }
 .life-list .switch-label .muted { font-weight: 400; }
+
+/* ---- Seitenaufteilung */
+.group-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  margin: 22px 2px 10px; }
+.group-title:first-child { margin-top: 2px; }
+.head-switches { display: flex; gap: 14px; flex-wrap: wrap; }
+.head-switches .switch { margin: 0; }
+.cam-settings.cam-settings-card { padding: 0; border-top: 0; }
+.cam-preview { border-radius: 10px; overflow: hidden; }
+.life-now #alive-info:not(:empty)::before { content: " · "; }

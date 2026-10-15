@@ -420,10 +420,13 @@ constexpr uint32_t LIFE_MAGIC = 0x48584C31;  // "HXL1"
 constexpr uint8_t LIFE_BREATHE = 1, LIFE_BORED = 2, LIFE_LIFT = 4, LIFE_WALK = 8, LIFE_GAZE = 16;
 struct LifeBlob {
   uint32_t magic;
-  uint16_t version;
+  uint16_t version;  // 1: ohne lift_sens
   uint8_t flags;
   uint8_t sleep_min;
+  uint8_t lift_sens;
+  uint8_t reserved[3];
 };
+constexpr size_t LIFE_BLOB_V1 = 8;
 
 void markDirty() {
   uint32_t now = millis();
@@ -463,15 +466,19 @@ void loadLife() {
   Preferences prefs;
   if (!prefs.begin(NVS_NAMESPACE, true)) return;
   LifeBlob b;
+  b.lift_sens = 2;
   size_t len = prefs.getBytes(NVS_KEY_LIFE, &b, sizeof(b));
   prefs.end();
-  if (len != sizeof(b) || b.magic != LIFE_MAGIC || b.version != 1) return;
+  const bool v1 = len == LIFE_BLOB_V1 && b.version == 1, v2 = len == sizeof(b) && b.version == 2;
+  if (b.magic != LIFE_MAGIC || !(v1 || v2)) return;
+  if (v1) b.lift_sens = 2;
   g_life.breathe = b.flags & LIFE_BREATHE;
   g_life.bored = b.flags & LIFE_BORED;
   g_life.lift = b.flags & LIFE_LIFT;
   g_life.walk_fx = b.flags & LIFE_WALK;
   g_life.gaze = b.flags & LIFE_GAZE;
   g_life.sleep_s = 60.0f * constrain(b.sleep_min, 1, 60);
+  g_life.lift_sens = constrain(b.lift_sens, 1, 3);
 }
 
 void saveLife() {
@@ -480,7 +487,8 @@ void saveLife() {
   portEXIT_CRITICAL(&g_mux);
   LifeBlob b = {};
   b.magic = LIFE_MAGIC;
-  b.version = 1;
+  b.version = 2;
+  b.lift_sens = c.lift_sens;
   b.flags = (c.breathe ? LIFE_BREATHE : 0) | (c.bored ? LIFE_BORED : 0) | (c.lift ? LIFE_LIFT : 0) |
             (c.walk_fx ? LIFE_WALK : 0) | (c.gaze ? LIFE_GAZE : 0);
   b.sleep_min = static_cast<uint8_t>(lroundf(c.sleep_s / 60.0f));
@@ -648,6 +656,14 @@ bool applyLifeJson(JsonVariantConst in, String& err) {
   if (in["lift"].is<bool>()) c.lift = in["lift"];
   if (in["walk_fx"].is<bool>()) c.walk_fx = in["walk_fx"];
   if (in["gaze"].is<bool>()) c.gaze = in["gaze"];
+  if (in["lift_sens"].is<int>()) {
+    const int v = in["lift_sens"];
+    if (v < 1 || v > 3) {
+      err = "lift_sens muss 1–3 sein";
+      return false;
+    }
+    c.lift_sens = static_cast<uint8_t>(v);
+  }
   if (in["sleep_min"].is<float>()) {
     const float m = in["sleep_min"];
     if (!(m >= 1.0f && m <= 60.0f)) {
@@ -1138,12 +1154,17 @@ void updateStep(float dt) {
   const alive::Output al = g_anim.update(dt, alive_on, alive_allowed);
 
   // Hochgehoben? -> zappeln (Dreiergruppen abwechselnd: steht auch bei Fehlerkennung sicher)
-  float acc[3], gyr[3];
-  imu.accelG(acc);
-  imu.gyroDps(gyr);
-  const bool lift_armed = lc.lift && imu.ok() && alive_allowed && g_anim.action() == alive::Action::None &&
-                          !g_flail.active();
-  if (g_lift.update(dt, lift_armed, acc, gyr)) g_flail.start();
+  life::LiftIn li;
+  li.dt = dt;
+  li.armed = lc.lift && imu.ok() && alive_allowed && !g_flail.active();
+  li.moving = g_anim.action() != alive::Action::None;  // eigene Bewegung: Drehung erst ab mehr
+  imu.accelG(li.acc);
+  imu.gyroDps(li.gyro);
+  // gemessene minus gewollte Neigung (Körperlage der letzten IK, inkl. Lageausgleich)
+  li.tilt_err[0] = imu.rollDeg() - g_ik_pose.roll_deg;
+  li.tilt_err[1] = imu.pitchDeg() - g_ik_pose.pitch_deg;
+  li.sens = lc.lift_sens;
+  if (g_lift.update(li)) g_flail.start();
   if (!standing || po.active || walk_cmd || body_fresh || g_arms.active() || g_gest.active() != gestures::Type::None) {
     g_flail.stop();
   }
@@ -1424,6 +1445,7 @@ void toJson(JsonObject obj) {
   lf["walk_fx"] = lcfg.walk_fx;
   lf["gaze"] = lcfg.gaze;
   lf["sleep_min"] = lroundf(lcfg.sleep_s / 60.0f);
+  lf["lift_sens"] = lcfg.lift_sens;
   lf["mood"] = life::moodName(mood);
   if (flailing) lf["flail"] = true;
   JsonObject al = obj["alive"].to<JsonObject>();

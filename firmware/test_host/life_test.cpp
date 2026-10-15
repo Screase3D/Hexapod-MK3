@@ -119,49 +119,92 @@ static void testBreath() {
 
 static float noise(float amp) { return amp * ((std::rand() % 2001) / 1000.0f - 1.0f); }
 
+// Ticks bis zur Erkennung (-1 = nie) für einen Verlauf: fn(k, in) setzt die Messwerte
+template <typename F>
+static int liftAfter(LiftDetector& d, int ticks, uint8_t sens, F fn) {
+  for (int k = 0; k < ticks; ++k) {
+    LiftIn in;
+    in.dt = DT;
+    in.armed = true;
+    in.sens = sens;
+    fn(k, in);
+    if (d.update(in)) return k;
+  }
+  return -1;
+}
+
+static void still(LiftIn& in, float a = 0.02f, float g = 3.0f) {
+  in.acc[0] = noise(a);
+  in.acc[1] = noise(a);
+  in.acc[2] = 1.0f + noise(a);
+  for (float& v : in.gyro) v = noise(g);
+  in.tilt_err[0] = noise(0.3f);
+  in.tilt_err[1] = noise(0.3f);
+}
+
 static void testLift() {
   std::srand(42);
-  LiftDetector d;
-  float acc[3], gyro[3];
-  // eine Minute ruhig stehen (Rauschen, Servozittern): nie
-  int false_hits = 0;
-  for (int k = 0; k < (int)(60 / DT); ++k) {
-    acc[0] = noise(0.04f);
-    acc[1] = noise(0.04f);
-    acc[2] = 1.0f + noise(0.06f);
-    for (float& g : gyro) g = noise(6.0f);
-    false_hits += d.update(DT, true, acc, gyro);
+  // eine Minute ruhig stehen (Rauschen, Servozittern): nie – auch nicht bei hoher Empfindlichkeit
+  for (uint8_t sens = 1; sens <= 3; ++sens) {
+    LiftDetector d;
+    CHECK(liftAfter(d, (int)(60 / DT), sens, [&](int, LiftIn& in) { still(in, sens == 3 ? 0.02f : 0.03f, 4.0f); }) < 0);
   }
-  CHECK(false_hits == 0);
+  // auf einer Schräge stehen (Neigung weicht dauerhaft 5° ab): nie
+  {
+    LiftDetector d;
+    CHECK(liftAfter(d, (int)(20 / DT), 2, [](int, LiftIn& in) { still(in); in.tilt_err[0] += 5.0f; }) < 0);
+  }
   // einzelner harter Stoß (ein Takt): nein
-  acc[2] = 2.0f;
-  bool hit = d.update(DT, true, acc, gyro);
-  acc[2] = 1.0f;
-  for (int k = 0; k < 20; ++k) hit |= d.update(DT, true, acc, gyro);
-  CHECK(!hit);
-  // hochheben: 0,35 g nach oben für 150 ms -> ja, schnell
-  int at = -1;
-  for (int k = 0; k < 20; ++k) {
-    acc[2] = k < 8 ? 1.35f : 1.0f;
-    if (d.update(DT, true, acc, gyro) && at < 0) at = k;
+  {
+    LiftDetector d;
+    CHECK(liftAfter(d, 60, 2, [](int k, LiftIn& in) { still(in); if (k == 40) in.acc[2] = 2.0f; }) < 0);
   }
-  CHECK(at >= 1 && at <= 5);
-  // in der Hand gedreht (Gyro): ja
-  LiftDetector d2;
-  acc[2] = 1.0f;
-  for (int k = 0; k < 60; ++k) d2.update(DT, true, acc, gyro);
-  gyro[0] = 150.0f;
-  hit = false;
-  for (int k = 0; k < 10; ++k) hit |= d2.update(DT, true, acc, gyro);
-  CHECK(hit);
-  // nicht scharf (läuft gerade): nie
-  LiftDetector d3;
-  acc[2] = 1.5f;
-  for (int k = 0; k < 100; ++k) CHECK(!d3.update(DT, false, acc, gyro));
-  // gerade erst scharf geworden: 1 s Schonfrist
-  hit = false;
-  for (int k = 0; k < (int)(0.9f / DT); ++k) hit |= d3.update(DT, true, acc, gyro);
-  CHECK(!hit);
+  // sanft anheben: +0,15 g für 200 ms -> nach 2–3 Takten
+  int at;
+  {
+    LiftDetector d;
+    at = liftAfter(d, 60, 2, [](int k, LiftIn& in) { still(in); if (k >= 30 && k < 40) in.acc[2] += 0.15f; });
+    CHECK(at >= 31 && at <= 33);
+    std::printf("Info: sanftes Anheben erkannt nach %d ms\n", (at - 30 + 1) * 20);
+  }
+  // langsam in der Hand gekippt (10° in 0,5 s, kaum Beschleunigung, 20 °/s): ja
+  {
+    LiftDetector d;
+    at = liftAfter(d, 100, 2, [](int k, LiftIn& in) {
+      still(in);
+      if (k >= 30) in.tilt_err[1] = std::fmin(10.0f, (k - 30) * DT * 20.0f);
+    });
+    CHECK(at > 30 && at <= 56);
+    std::printf("Info: langsames Kippen erkannt nach %d ms\n", (at - 30 + 1) * 20);
+  }
+  // in der Hand gedreht (Gyro 40 °/s): ja; während einer eigenen Bewegung ("Lebendig") nicht
+  {
+    LiftDetector d;
+    at = liftAfter(d, 60, 2, [](int k, LiftIn& in) { still(in); if (k >= 30) in.gyro[2] = 40.0f; });
+    CHECK(at >= 31 && at <= 34);
+    std::printf("Info: Drehen in der Hand erkannt nach %d ms\n", (at - 30 + 1) * 20);
+    LiftDetector d2;
+    CHECK(liftAfter(d2, 100, 2, [](int k, LiftIn& in) { still(in); in.moving = true; if (k >= 30) in.gyro[2] = 40.0f; }) < 0);
+  }
+  // geringe Empfindlichkeit: sanftes Anheben nicht, kräftiges schon
+  {
+    LiftDetector d;
+    CHECK(liftAfter(d, 60, 1, [](int k, LiftIn& in) { still(in); if (k >= 30 && k < 40) in.acc[2] += 0.15f; }) < 0);
+    LiftDetector d2;
+    CHECK(liftAfter(d2, 60, 1, [](int k, LiftIn& in) { still(in); if (k >= 30 && k < 40) in.acc[2] += 0.3f; }) > 0);
+  }
+  // nicht scharf (läuft gerade): nie; gerade erst scharf: 0,4 s Schonfrist
+  {
+    LiftDetector d;
+    LiftIn in;
+    in.dt = DT;
+    in.acc[2] = 1.5f;
+    for (int k = 0; k < 100; ++k) CHECK(!d.update(in));
+    in.armed = true;
+    bool hit = false;
+    for (int k = 0; k < (int)(0.38f / DT); ++k) hit |= d.update(in);
+    CHECK(!hit);
+  }
 }
 
 static void testFlail() {
@@ -258,13 +301,13 @@ static void testAliveActions() {
     CHECK(an.playing());
     float max_pitch = 0, max_z = 0;
     int k = 0;
-    for (; k < 600 && an.playing(); ++k) {
+    for (; k < 1000 && an.playing(); ++k) {
       alive::Output o = an.update(DT, false, true);
       max_pitch = std::fmax(max_pitch, std::fabs(o.body.pitch));
       max_z = std::fmax(max_z, std::fabs(o.body.z));
     }
-    CHECK(!an.playing() && k > 50 && k < 300);
-    CHECK(max_pitch > 1.5f && max_pitch < 12.0f && max_z > 1.5f && max_z < 12.0f);
+    CHECK(!an.playing() && k > 150 && k < 700);
+    CHECK(max_pitch >= 10.0f && max_pitch <= 18.0f && max_z >= 8.0f && max_z <= 19.0f);  // deutlich sichtbar
     alive::Output o;
     for (int i = 0; i < 40; ++i) o = an.update(DT, false, true);
     CHECK(std::fabs(o.body.z) < 1e-3f && std::fabs(o.body.pitch) < 1e-3f);

@@ -1,6 +1,7 @@
 #include "alive.h"
 
 #include <cmath>
+#include <initializer_list>
 
 #include "gait.h"
 
@@ -181,40 +182,55 @@ void Animator::plan(Action a) {
       add(0.3f, 0.0f);
       break;
     }
-    case Action::Yawn: {  // gähnen: Kopf hoch, Körper streckt sich, dann zusammensacken
-      Key& k = add(1.2f, rnd(0.8f, 1.3f));
-      k.body.pitch = rnd(7.0f, 10.0f);
-      k.body.z = rnd(3.0f, 5.0f);
-      k.body.x = -2.0f;
-      k.body.roll = side * rnd(0.0f, 2.0f);
-      Key& s = add(0.9f, 0.4f);
-      s.body.pitch = -3.0f;
-      s.body.z = -3.0f;
+    case Action::Yawn: {  // gähnen: Luft holen, Kopf weit hoch und strecken, dann zusammensacken
+      Key& in = add(0.9f, 0.3f);
+      in.body.pitch = 6.0f;
+      in.body.z = 4.0f;
+      Key& k = add(0.9f, rnd(1.2f, 1.7f));
+      k.body.pitch = rnd(12.0f, 14.0f);
+      k.body.z = rnd(9.0f, 11.0f);
+      k.body.x = -5.0f;
+      k.body.roll = side * rnd(3.0f, 5.0f);
+      Key& s = add(1.2f, 0.5f);
+      s.body.pitch = -8.0f;
+      s.body.z = -8.0f;
+      s.body.roll = -side * 2.0f;
       add(1.0f, 0.0f);
       break;
     }
-    case Action::Sigh: {  // seufzen: langsam ausatmen und zusammensinken
-      Key& k = add(0.8f, 0.2f);
-      k.body.z = 2.0f;
-      k.body.pitch = 2.0f;
-      Key& s = add(1.6f, rnd(0.4f, 0.9f));
-      s.body.z = -rnd(5.0f, 7.0f);
-      s.body.pitch = -3.0f;
-      add(1.4f, 0.0f);
+    case Action::Sigh: {  // seufzen: tief einatmen, dann ausatmen und zusammensinken
+      Key& k = add(0.9f, 0.3f);
+      k.body.z = 6.0f;
+      k.body.pitch = 5.0f;
+      Key& s = add(1.8f, rnd(0.6f, 1.1f));
+      s.body.z = -rnd(12.0f, 15.0f);
+      s.body.pitch = -10.0f;
+      s.body.roll = side * 3.0f;
+      add(1.6f, 0.0f);
       break;
     }
-    case Action::Stretch: {  // strecken nach dem Aufwachen: hoch, nach hinten, nach vorne
-      Key& up = add(1.0f, 0.7f);
-      up.body.z = rnd(8.0f, 11.0f);
-      up.body.pitch = 6.0f;
-      Key& back = add(0.9f, 0.6f);
-      back.body.x = -8.0f;
-      back.body.pitch = -5.0f;
-      back.body.z = 2.0f;
-      Key& fwd = add(0.9f, 0.4f);
-      fwd.body.x = 6.0f;
-      fwd.body.pitch = 3.0f;
-      add(0.8f, 0.0f);
+    case Action::Stretch: {  // strecken nach dem Aufwachen: hoch, Katzenbuckel, Vorderbeine einzeln vor
+      Key& up = add(1.0f, 0.8f);
+      up.body.z = rnd(16.0f, 19.0f);
+      up.body.pitch = 12.0f;
+      Key& back = add(1.8f, 0.8f);
+      back.body.x = -18.0f;
+      back.body.pitch = -12.0f;
+      back.body.z = 4.0f;
+      const int first = side < 0.0f ? 0 : 3;
+      for (int leg : {first, 3 - first}) {
+        const gestures::Offset w = away(leg, 8.0f);
+        add(0.8f, 0.0f).body = w;
+        Key& f = add(0.5f, 0.6f);
+        f.body = w;
+        f.leg = static_cast<int8_t>(leg);
+        f.foot = {26.0f, 0.0f, 28.0f};
+        add(0.5f, 0.1f).body = w;
+      }
+      Key& fwd = add(1.1f, 0.5f);
+      fwd.body.x = 14.0f;
+      fwd.body.pitch = 6.0f;
+      add(1.0f, 0.0f);
       break;
     }
     default:

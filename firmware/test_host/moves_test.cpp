@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <cstdio>
 #include <vector>
 
@@ -407,6 +408,48 @@ static void testGestures() {
 
 // "Lebendig": lange laufen lassen – weich, immer nur ein Bein in der Luft, stabil,
 // erreichbar; Abschalten bzw. Laufen blendet zügig aus
+// Gähnen, Seufzen, Strecken (Langeweile/Aufwachen): erreichbar, standsicher, ruhig
+static void testMoodActions() {
+  float lo[18], hi[18];
+  defaultLimits(lo, hi);
+  Vec3 n[6];
+  for (int i = 0; i < 6; ++i) n[i] = stanceFoot(LEG_MOUNTS[i], POSE_LIMITS.stance_default);
+  for (alive::Action act : {alive::Action::Yawn, alive::Action::Sigh, alive::Action::Stretch}) {
+    alive::Animator a(LEG_MOUNTS, 77);
+    a.setBreath(false);
+    a.play(act);
+    alive::Output prev;
+    int bad = 0, two_up = 0;
+    float min_margin = 1e9f, body_jump = 0, lift_max = 0;
+    for (int i = 0; i < 1000 && a.playing(); ++i) {
+      alive::Output o = a.update(DT, false, true);
+      body_jump = std::max(body_jump, jumpOf(o.body, prev.body));
+      prev = o;
+      BodyPose p{o.body.x, o.body.y, POSE_LIMITS.height_default + o.body.z, o.body.roll, o.body.pitch, o.body.yaw};
+      Vec3 f[6];
+      std::vector<Vec3> ground;
+      int up = 0;
+      for (int leg = 0; leg < 6; ++leg) {
+        f[leg] = {n[leg].x + o.foot[leg].x, n[leg].y + o.foot[leg].y, n[leg].z + o.foot[leg].z};
+        if (o.foot[leg].z > 0.5f) ++up;
+        else ground.push_back(f[leg]);
+        lift_max = std::max(lift_max, o.foot[leg].z);
+      }
+      if (up > 1) ++two_up;
+      if (!checkPose(LEG_GEOMETRY, LEG_MOUNTS, 6, p, f, lo, hi).ok()) ++bad;
+      min_margin = std::min(min_margin, stabilityMargin(ground, p.x, p.y));
+    }
+    std::printf("Info: %s: Stabilitätsreserve >= %.0f mm, Sprung je Zyklus %.2f, Bein bis %.0f mm\n",
+                alive::actionName(act), min_margin, body_jump, lift_max);
+    CHECK(!a.playing());
+    CHECK(bad == 0);
+    CHECK(two_up == 0);
+    CHECK(min_margin > 25.0f);
+    CHECK(body_jump < 1.5f);
+    if (act == alive::Action::Stretch) CHECK(lift_max > 25.0f);
+  }
+}
+
 static void testAlive() {
   float lo[18], hi[18];
   defaultLimits(lo, hi);
@@ -511,6 +554,7 @@ int main() {
   testPoses();
   testGestures();
   testAlive();
+  testMoodActions();
   std::printf("%d Prüfungen, %d Fehler\n", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

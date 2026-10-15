@@ -20,11 +20,15 @@ constexpr float BREATH_S = 4.2f;
 constexpr float BREATH_MM = 2.0f;
 
 // Hochheben
-constexpr float LIFT_ARM_S = 1.0f;      // erst so lange nach dem Stillstehen scharf
-constexpr float LIFT_ACC_G = 0.25f;     // Abweichung von 1 g
-constexpr float LIFT_GYRO_DPS = 70.0f;
-constexpr float LIFT_SCORE = 0.08f;     // ca. 3 Takte deutlich über der Schwelle
-constexpr float LIFT_DECAY_S = 0.25f;
+// (Schwellen bei mittlerer Empfindlichkeit; gering x1,6, hoch x0,6)
+constexpr float LIFT_ARM_S = 0.4f;      // erst so lange nach dem Stehenbleiben scharf
+constexpr float LIFT_ACC_G = 0.10f;     // Abweichung von 1 g
+constexpr float LIFT_GYRO_DPS = 22.0f;  // Drehrate im Stand ...
+constexpr float LIFT_GYRO_MOVING = 55.0f;  // ... bzw. während eigener Bewegungen
+constexpr float LIFT_TILT_DEG = 6.0f;   // Neigung weicht von der gewollten ab
+constexpr float LIFT_BASE_S = 2.0f;     // Grundlinie der Neigung folgt so langsam
+constexpr float LIFT_SCORE = 0.045f;    // 2–3 Takte über der Schwelle (ca. 40–60 ms)
+constexpr float LIFT_DECAY_S = 0.2f;
 
 // Zappeln
 constexpr float FLAIL_S = 2.2f;
@@ -149,23 +153,37 @@ float Breath::update(float dt, bool on) {
 
 // ---- Hochheben
 
-bool LiftDetector::update(float dt, bool armed, const float acc[3], const float gyro[3]) {
-  if (!armed) {
+bool LiftDetector::update(const LiftIn& in) {
+  const float dt = in.dt;
+  if (!in.armed) {
     reset();
     return false;
   }
+  if (armed_s_ <= 0.0f) {  // gerade scharf geworden: Grundlinie = jetzt
+    base_[0] = in.tilt_err[0];
+    base_[1] = in.tilt_err[1];
+  }
   armed_s_ += dt;
+  const float k = in.sens >= 3 ? 0.6f : (in.sens <= 1 ? 1.6f : 1.0f);
+  const float dev = std::hypot(in.tilt_err[0] - base_[0], in.tilt_err[1] - base_[1]);
+  const float bk = clampf(dt / LIFT_BASE_S, 0.0f, 1.0f);
+  base_[0] += (in.tilt_err[0] - base_[0]) * bk;
+  base_[1] += (in.tilt_err[1] - base_[1]) * bk;
   if (armed_s_ < LIFT_ARM_S) {
     score_ = 0.0f;
     return false;
   }
-  const float a = std::sqrt(acc[0] * acc[0] + acc[1] * acc[1] + acc[2] * acc[2]);
-  const float w = std::sqrt(gyro[0] * gyro[0] + gyro[1] * gyro[1] + gyro[2] * gyro[2]);
+  const float a = std::sqrt(in.acc[0] * in.acc[0] + in.acc[1] * in.acc[1] + in.acc[2] * in.acc[2]);
+  const float w = std::sqrt(in.gyro[0] * in.gyro[0] + in.gyro[1] * in.gyro[1] + in.gyro[2] * in.gyro[2]);
   const float d = std::fabs(a - 1.0f);
+  const float th_a = LIFT_ACC_G * k;
+  const float th_w = (in.moving ? LIFT_GYRO_MOVING : LIFT_GYRO_DPS) * k;
+  const float th_t = LIFT_TILT_DEG * k;
   score_ *= std::exp(-dt / LIFT_DECAY_S);
-  // ein einzelner Stoß (ein Takt) reicht nicht, auch wenn er stark ist
-  if (d > LIFT_ACC_G) score_ += dt * clampf(d / LIFT_ACC_G, 0.0f, 2.0f);
-  if (w > LIFT_GYRO_DPS) score_ += dt * 0.6f * clampf(w / LIFT_GYRO_DPS, 0.0f, 2.0f);
+  // je Takt höchstens das Doppelte: ein einzelner Stoß reicht nicht, auch wenn er stark ist
+  if (d > th_a) score_ += dt * clampf(d / th_a, 0.0f, 2.0f);
+  if (w > th_w) score_ += dt * 0.8f * clampf(w / th_w, 0.0f, 2.0f);
+  if (dev > th_t) score_ += dt * clampf(dev / th_t, 0.0f, 2.0f);
   if (score_ >= LIFT_SCORE) {
     reset();
     return true;

@@ -30,6 +30,7 @@ struct Config {
   bool walk_fx = true;  // Laufen mit Charakter
   bool gaze = true;     // Augen schauen in die Bewegungsrichtung
   float sleep_s = 300.0f;  // so lange untätig, bis er sich schlafen legt (gelangweilt ab 40 %)
+  uint8_t lift_sens = 2;   // Empfindlichkeit beim Hochheben: 1 gering, 2 mittel, 3 hoch
 };
 
 // ---- Stimmung
@@ -79,16 +80,28 @@ class Breath {
   float wave_ = 0.0f;
 };
 
-// ---- Hochheben erkennen (Lagesensor): plötzliche Beschleunigung bzw. Drehung, während
-// er still steht. acc in g (Körper-Achsen), gyro in °/s.
+// ---- Hochheben erkennen (Lagesensor), solange er steht und nicht läuft. Drei Hinweise:
+// Beschleunigung weicht von 1 g ab, er dreht sich, oder seine Neigung weicht von der
+// gewollten Körperlage ab (gegenüber einer langsam nachgeführten Grundlinie – Schräge,
+// Lageausgleich). Ein einzelner Stoß (ein Takt) reicht nie.
+struct LiftIn {
+  float dt = 0;
+  bool armed = false;
+  bool moving = false;      // eigene Körperbewegung ("Lebendig", Gähnen …): Drehung erst ab mehr
+  float acc[3] = {0, 0, 1}; // g, Körper-Achsen
+  float gyro[3] = {0, 0, 0}; // °/s
+  float tilt_err[2] = {0, 0}; // gemessene minus gewollte Neigung (Rollen, Nicken; °)
+  uint8_t sens = 2;         // 1 gering, 2 mittel, 3 hoch
+};
 class LiftDetector {
  public:
-  bool update(float dt, bool armed, const float acc[3], const float gyro[3]);
+  bool update(const LiftIn& in);
   void reset() { score_ = 0.0f; armed_s_ = 0.0f; }
 
  private:
   float score_ = 0.0f;
   float armed_s_ = 0.0f;  // so lange schon scharf (kurz warten nach Bewegung)
+  float base_[2] = {0, 0};  // Grundlinie der Neigungsabweichung
 };
 
 // ---- Zappeln: Dreiergruppen abwechselnd hoch, Füße strampeln
