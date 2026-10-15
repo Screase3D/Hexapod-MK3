@@ -28,7 +28,8 @@ state = {
     "camera": {"ok": True, "framesize": 10, "quality": 12, "vflip": False, "hmirror": False,
                "max_fps": 15, "rotation": 0, "xclk_mhz": 20, "xclk_active_mhz": 20, "bt_framesize": 6, "sharpness_ok": True,
                "image": {"brightness": 0, "contrast": 0, "saturation": 0, "sharpness": 0, "ae_level": 0, "gainceiling": 2,
-                         "wb_mode": 0, "aec2": False, "lenc": True, "bpc": True}, "clients": 0, "port": 81, "sensor": "OV5640 (Mock)", "awake": False, "idle_sleep_s": 10},
+                         "wb_mode": 0, "aec2": False, "lenc": True, "bpc": True}, "clients": 0, "port": 81, "sensor": "OV5640 (Mock)", "awake": False, "idle_sleep_s": 10,
+               "zoom": 1.0, "zoom_hw": os.environ.get("MOCK_CAM_ZOOM_HW", "1") == "1"},
     "start": time.time(),
     "mode": "manual",
     "pose": {"x": 0, "y": 0, "z": 52, "roll": 0, "pitch": 0, "yaw": 0, "stance": 100},
@@ -733,8 +734,21 @@ async def history_get(_):
     return web.json_response({"period_s": 10, "age_ms": 3000, "bat": bat, "rssi": rssi, "temp": temp, "heap": heap})
 
 
+# größter Zoom je Auflösung wie in der Firmware (OV5640: Sensor 2560×1920, höchstens 4×)
+CAM_SIZES = {6: (320, 240, 2560, 1920), 10: (640, 480, 2560, 1920), 13: (1280, 720, 2560, 1440)}
+
+
+def cam_zoom_max():
+    if not state["camera"]["zoom_hw"]:
+        return 4.0
+    w, h, mw, mh = CAM_SIZES.get(state["camera"]["framesize"], (640, 480, 2560, 1920))
+    return round(min(4.0, mw / w, mh / h), 2)
+
+
 async def camera_get(_):
     cam = dict(state["camera"])
+    cam["zoom_max"] = cam_zoom_max()
+    cam["zoom"] = min(cam["zoom"], cam["zoom_max"])
     cam["framesizes"] = [{"id": 6, "name": "QVGA 320×240"}, {"id": 10, "name": "VGA 640×480"},
                          {"id": 13, "name": "HD 1280×720"}]
     return web.json_response(cam)
@@ -746,6 +760,11 @@ async def camera_post(request):
     for k in list(body):
         if k in img:
             img[k] = body.pop(k)
+    if "zoom" in body:
+        try:
+            body["zoom"] = round(min(4.0, max(1.0, float(body["zoom"]))) * 20) / 20
+        except (TypeError, ValueError):
+            body.pop("zoom")
     state["camera"].update(body)
     return await camera_get(request)
 

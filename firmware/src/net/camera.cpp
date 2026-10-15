@@ -8,6 +8,7 @@
 #include <freertos/semphr.h>
 
 #include "config.h"
+#include "net/cam_zoom.h"
 #include "net/wifi_manager.h"
 
 namespace camera {
@@ -26,6 +27,9 @@ std::atomic<int> g_stream_clients{0};
 Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0, CAM_XCLK_HZ / 1000000, FRAMESIZE_CIF,
                        0, 0, 0, 0, 0, GAINCEILING_8X, 0, false, true, true};
 int g_applied_fs = -1;  // zuletzt am Sensor eingestellte Auflösung (-1 = nach dem Aufwecken neu)
+// Zoom (nur im RAM: ändert sich oft, soll den Flash nicht abnutzen; nach dem Neustart 1×)
+float g_zoom = 1.0f;
+float g_applied_zoom = 1.0f;
 bool g_bt_applied = false;  // Bluetooth-Auflösung gerade aktiv (unter g_mutex)
 int g_xclk_active_mhz = 0;  // beim letzten Aufwecken tatsächlich verwendeter Takt
 
@@ -124,15 +128,34 @@ bool btReduces() {
 }
 int activeFramesize() { return btReduces() ? g_settings.bt_framesize : g_settings.framesize; }
 
+// Zoom am Sensor: nur OV5640 (Bildausschnitt statt ganzem Sensor); sonst zoomt die Oberfläche
+bool zoomHw() { return g_ok && g_pid == OV5640_PID; }
+float zoomMax(int fs) {
+  if (!zoomHw()) return 4.0f;  // Oberfläche vergrößert das Bild
+  return camzoom::maxZoom(resolution[fs].width, resolution[fs].height, resolution[fs].aspect_ratio);
+}
+float zoomFor(int fs) {
+  const float m = zoomMax(fs);
+  return g_zoom < m ? g_zoom : m;
+}
+
 void applyToSensor() {
   sensor_t* s = esp_camera_sensor_get();
   if (!s) return;
   g_bt_applied = btReduces();
   // Auflösung nur bei Änderung setzen: der Sensor stellt dabei neu ein, das Bild hakt kurz
   const int fs = activeFramesize();
-  if (fs != g_applied_fs) {
-    s->set_framesize(s, (framesize_t)fs);
+  const float z = zoomHw() && s->set_res_raw ? zoomFor(fs) : 1.0f;
+  if (fs != g_applied_fs || z != g_applied_zoom) {
+    // 1× bzw. neue Auflösung: Werte des Treibers (auch PLL); Zoom: mittiger Ausschnitt
+    if (fs != g_applied_fs || z <= 1.0f) s->set_framesize(s, (framesize_t)fs);
+    camzoom::Window w;
+    const resolution_info_t& r = resolution[fs];
+    if (z > 1.0f && camzoom::window(r.width, r.height, r.aspect_ratio, z, w)) {
+      s->set_res_raw(s, w.sx, w.sy, w.ex, w.ey, w.ox, w.oy, w.tx, w.ty, r.width, r.height, w.scale, w.binning);
+    }
     g_applied_fs = fs;
+    g_applied_zoom = z;
   }
   s->set_quality(s, g_settings.quality);
   // Bild: nicht jeder Sensor kann alles (fehlende Funktion -> überspringen)
@@ -439,6 +462,21 @@ Settings settings() { return g_settings; }
 
 bool applyJson(JsonVariantConst obj, String& err) {
   Settings next = g_settings;
+  // Zoom allein (Mausrad, Knopf): sofort, ohne die Einstellungen zu speichern
+  float zoom = g_zoom;
+  if (!obj["zoom"].isNull()) {
+    zoom = obj["zoom"].as<float>();
+    if (!(zoom >= 1.0f)) zoom = 1.0f;
+    if (zoom > 4.0f) zoom = 4.0f;
+    zoom = roundf(zoom * 20.0f) / 20.0f;
+  }
+  if (obj.is<JsonObjectConst>() && obj.as<JsonObjectConst>().size() == 1 && !obj["zoom"].isNull()) {
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    g_zoom = fminf(zoom, zoomMax(activeFramesize()));
+    if (g_awake) applyToSensor();
+    xSemaphoreGive(g_mutex);
+    return true;
+  }
   if (obj["framesize"].is<int>()) {
     int fs = obj["framesize"];
     if (!validFramesize(fs)) {
@@ -496,6 +534,7 @@ bool applyJson(JsonVariantConst obj, String& err) {
   // gelten die Werte beim nächsten Aufwecken
   xSemaphoreTake(g_mutex, portMAX_DELAY);
   g_settings = next;
+  g_zoom = fminf(zoom, zoomMax(g_settings.framesize));  // größere Auflösung: Zoom bleibt dort begrenzt
   if (g_awake) applyToSensor();
   xSemaphoreGive(g_mutex);
   saveSettings();
@@ -526,6 +565,10 @@ void toJson(JsonObject obj) {
   img["bpc"] = g_settings.bpc;
   obj["sharpness_ok"] = g_ok && g_pid != OV2640_PID;  // Schärfe einstellbar
   obj["framesize_active"] = activeFramesize();
+  // Zoom: zoom_hw = Sensor schneidet aus (echte Details), sonst vergrößert die Oberfläche
+  obj["zoom"] = roundf(zoomFor(activeFramesize()) * 100.0f) / 100.0f;
+  obj["zoom_max"] = roundf(zoomMax(activeFramesize()) * 100.0f) / 100.0f;
+  obj["zoom_hw"] = zoomHw();
   obj["clients"] = g_stream_clients.load();
   obj["port"] = STREAM_PORT;
   JsonArray sizes = obj["framesizes"].to<JsonArray>();

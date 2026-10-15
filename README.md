@@ -17,8 +17,8 @@ phone), or with an Xbox controller over Bluetooth.
   IMU levelling; stand up / sit down; front-leg mode (lift, steer, wave); body joystick and gestures.
 - **Personality** – emotes with animated eyes, games, a choreography editor, idle "alive" motions, breathing,
   boredom and falling asleep, wriggling when picked up, expressive walking (inertia, look-ahead, hip sway).
-- **Camera** – MJPEG stream, photo and video recording in the browser, full-screen driver view with on-screen
-  joysticks, artificial horizon.
+- **Camera** – MJPEG stream, zoom up to 4× (cropped on the OV5640 sensor, so real detail), photo and video
+  recording in the browser, full-screen driver view with on-screen joysticks, artificial horizon.
 - **Input** – touch joysticks, keyboard (WASD), Xbox (Elite) controller via Bluetooth on the robot or via the
   browser's Gamepad API; every button remappable.
 - **Self-contained** – the UI is embedded in the firmware and needs no internet (works in access-point mode);
@@ -34,7 +34,7 @@ phone), or with an Xbox controller over Bluetooth.
 <b>Steuerung</b> (control)<br>
 <a href="docs/images/ui-control.png"><img src="docs/images/ui-control.png" alt="Control"></a>
 <ul>
-<li>Camera stream, snapshot, video, horizon, driver view</li>
+<li>Camera stream with zoom, snapshot, video, horizon, driver view</li>
 <li>Live 3D model (legs in the air, support polygon)</li>
 <li>Joysticks for walking, body or front legs; gait and speed</li>
 <li>Servo / IK switches and posture profiles</li>

@@ -4,6 +4,16 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.19.0
+
+- **Kamera-Zoom:** Knopf in der Kameraleiste (1× → 2× → 3× → 4× → 1×), Mausrad oder zwei Finger im Bild,
+  Doppelklick zurück auf 1×; Regler auf der Seite *Kamera*, Knopf auch in der Fahrer-Ansicht.
+  - *OV5640:* echter Zoom am Sensor – er liest nur einen mittigen Ausschnitt (bis 2560×1920 Pixel) und
+    skaliert ihn auf die Stream-Auflösung, das Bild bekommt also mehr Details. Grenze je Auflösung:
+    QVGA/VGA 4×, SVGA 3,2×, HD 2×, UXGA 1,6×. Gilt auch für Fotos. Der Zoom wird nicht gespeichert
+    (nach dem Neustart 1×), damit häufiges Zoomen den Flash nicht abnutzt.
+  - *Andere Sensoren:* digitaler Zoom in der Oberfläche (Bild wird vergrößert).
+
 ## 0.18.0
 
 - **IK-Zustand wird gespeichert:** War IK an, ist es nach einem Neustart wieder an (der Roboter beginnt ohne

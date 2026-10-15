@@ -2348,6 +2348,10 @@ function renderCamera() {
   $('cam-vflip').checked = c.vflip;
   $('cam-hmirror').checked = c.hmirror;
   $('cam-info').textContent = c.ok ? (c.sensor || '') : 'Keine Kamera erkannt';
+  // Zoom vom Roboter übernehmen (z. B. kleiner nach einem Auflösungswechsel), außer er wird gerade verstellt
+  if (c.zoom_hw && !ZOOM.pending && !ZOOM.busy && c.zoom !== undefined) ZOOM.z = ZOOM.raw = c.zoom;
+  else if (!c.zoom_hw) ZOOM.z = ZOOM.raw = Math.min(ZOOM.z, zoomMax());
+  renderZoom();
   renderCamImage(c);
   $('cam-toggle').disabled = !c.ok;
 }
@@ -2411,6 +2415,83 @@ function renderCamImage(c) {
   $('cam-aec2').checked = img.aec2;
   $('cam-lenc').checked = img.lenc;
   $('cam-bpc').checked = img.bpc;
+}
+
+// ---- Zoom: der OV5640 liest nur einen Ausschnitt des Sensors (echte Details, zoom_hw), sonst
+// vergrößert die Oberfläche das Bild. Sensor-Zoom wird nicht gespeichert (nach dem Neustart 1×).
+const ZOOM = { z: 1, raw: 1, timer: 0, busy: false, pending: false, pinch: null };
+const zoomMax = () => (S.camera && S.camera.zoom_max) || 4;
+const fmtZoom = (z) => `${(Math.round(z * 10) / 10).toLocaleString('de-DE')}×`;
+
+function renderZoom() {
+  const c = S.camera || {};
+  const txt = fmtZoom(ZOOM.z);
+  for (const id of ['cam-zoom', 'fpv-zoom']) {
+    $(id).textContent = txt;
+    $(id).classList.toggle('active', ZOOM.z > 1);
+    $(id).disabled = !c.ok;
+  }
+  // nur ohne Sensor-Zoom: Bild in der Oberfläche vergrößern
+  for (const id of ['cam-view', 'cam-prev-view']) $(id).style.setProperty('--zoom', c.zoom_hw ? 1 : ZOOM.z);
+  const r = $('cam-zoom-r');
+  r.max = zoomMax();
+  if (document.activeElement !== r) r.value = ZOOM.z;
+  $('cam-zoom-val').textContent = txt;
+  $('cam-zoom-note').textContent = c.zoom_hw
+    ? `Sensor-Zoom: Ausschnitt mit voller Sensor-Auflösung, bei dieser Auflösung bis ${fmtZoom(zoomMax())} (kleinere Auflösung = mehr Zoom). Wird nicht gespeichert.`
+    : 'Digitaler Zoom: das Bild wird nur vergrößert.';
+}
+
+function setZoom(z, raw) {
+  ZOOM.raw = clamp(raw === undefined ? z : raw, 1, zoomMax());
+  z = clamp(Math.round(ZOOM.raw * 20) / 20, 1, zoomMax());
+  if (z === ZOOM.z) return;
+  ZOOM.z = z;
+  renderZoom();
+  if (!S.camera || !S.camera.zoom_hw) return;  // digital: nur die Anzeige
+  ZOOM.pending = true;
+  if (!ZOOM.timer) ZOOM.timer = setTimeout(sendZoom, 120);  // Mausrad/Finger: höchstens ~8 Anfragen/s
+}
+
+async function sendZoom() {
+  ZOOM.timer = 0;
+  if (ZOOM.busy) { ZOOM.timer = setTimeout(sendZoom, 120); return; }
+  ZOOM.busy = true;
+  ZOOM.pending = false;
+  try {
+    S.camera = await api('/api/camera', { zoom: ZOOM.z });
+  } catch (e) {
+    toast(e.message, true);
+  }
+  ZOOM.busy = false;
+  if (!ZOOM.pending && S.camera) renderCamera();
+}
+
+// 1× → 2× → 3× → 4× (bzw. was die Auflösung erlaubt) → 1×
+function cycleZoom() {
+  const m = zoomMax();
+  const steps = [...[2, 3, 4].filter((v) => v < m - 0.01), m];
+  setZoom(steps.find((v) => v > ZOOM.z + 0.01) || 1);
+}
+
+function bindZoomGestures(view) {
+  view.addEventListener('wheel', (e) => {
+    if (!view.classList.contains('live') || !(S.camera && S.camera.ok)) return;
+    e.preventDefault();
+    const d = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+    setZoom(0, ZOOM.raw * Math.exp(-clamp(d, -200, 200) * 0.0025));
+  }, { passive: false });
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  view.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) ZOOM.pinch = { d: dist(e.touches), z: ZOOM.raw };
+  }, { passive: true });
+  view.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 2 || !ZOOM.pinch || !view.classList.contains('live')) return;
+    e.preventDefault();
+    setZoom(0, ZOOM.pinch.z * dist(e.touches) / Math.max(ZOOM.pinch.d, 1));
+  }, { passive: false });
+  view.addEventListener('touchend', (e) => { if (e.touches.length < 2) ZOOM.pinch = null; });
+  view.addEventListener('dblclick', () => { if (view.classList.contains('live')) setZoom(ZOOM.z > 1 ? 1 : 2); });
 }
 
 async function setCamera(patch) {
@@ -2573,6 +2654,11 @@ function bindCamera() {
   $('cam-fps').oninput = (e) => { $('cam-fps-val').textContent = `${e.target.value} fps`; };
   $('cam-fps').onchange = (e) => setCamera({ max_fps: +e.target.value });
   $('cam-rot').onchange = (e) => setCamera({ rotation: +e.target.value });
+  $('cam-zoom').onclick = cycleZoom;
+  $('fpv-zoom').onclick = cycleZoom;
+  $('cam-zoom-r').oninput = (e) => setZoom(+e.target.value);
+  bindZoomGestures($('cam-view'));
+  bindZoomGestures($('cam-prev-view'));
   $('cam-vflip').onchange = (e) => setCamera({ vflip: e.target.checked });
   $('cam-hmirror').onchange = (e) => setCamera({ hmirror: e.target.checked });
   document.addEventListener('visibilitychange', updateStream);

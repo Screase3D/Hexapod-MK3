@@ -61,6 +61,8 @@ jobs:
             ../src/kinematics/alive.cpp ../src/kinematics/gestures.cpp ../src/kinematics/gait.cpp \
             ../src/kinematics/kinematics.cpp -o life_test
           ./life_test
+          g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include camzoom_test.cpp ../src/net/cam_zoom.cpp -o camzoom_test
+          ./camzoom_test
           g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include led_test.cpp ../src/ui/led_fx.cpp -o led_test
           ./led_test
           g++ -std=c++17 -Wall -Wextra -Werror -I../src -I../include pad_test.cpp ../src/input/pad.cpp \

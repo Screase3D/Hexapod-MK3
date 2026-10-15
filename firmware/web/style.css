@@ -406,7 +406,9 @@ details.fold[open] summary { margin-bottom: 4px; }
   position: relative; aspect-ratio: 4 / 3; background: #05080b; overflow: hidden;
   display: flex; align-items: center; justify-content: center; container-type: size;
 }
-.cam-view img { width: 100%; height: 100%; object-fit: contain; display: none; }
+.cam-view img { width: 100%; height: 100%; object-fit: contain; display: none; transform: scale(var(--zoom, 1)); }
+/* Bild läuft: zwei Finger zoomen das Kamerabild statt der Seite */
+.cam-view.live { touch-action: pan-x pan-y; }
 .cam-view.live img { display: block; }
 .cam-view.live .cam-placeholder { display: none; }
 .cam-placeholder { display: flex; flex-direction: column; align-items: center; gap: 10px; color: #7d8b99; text-align: center; padding: 0 16px; }
@@ -415,7 +417,7 @@ details.fold[open] summary { margin-bottom: 4px; }
 .cam-view.rot90 { aspect-ratio: 3 / 4; width: min(100%, 60vh); margin: 0 auto; }
 .cam-view.rot90 img {
   position: absolute; top: 50%; left: 50%; width: 100cqh; height: 100cqw;
-  transform: translate(-50%, -50%) rotate(90deg);
+  transform: translate(-50%, -50%) rotate(90deg) scale(var(--zoom, 1));
 }
 .cam-view:fullscreen { aspect-ratio: auto; width: 100%; height: 100%; }
 .cam-badges { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; pointer-events: none; }
@@ -431,6 +433,9 @@ details.fold[open] summary { margin-bottom: 4px; }
 .cam-settings { padding: 4px 18px 14px; border-top: 1px solid var(--border); }
 .cam-image { margin-top: 10px; padding-top: 6px; border-top: 1px dashed var(--border); }
 .cam-settings .form-grid { grid-template-columns: 9.5rem minmax(0, 1fr); }
+.cam-zoom-btn { min-width: 44px; padding: 0 8px; font-weight: 700; }
+.cam-zoom-btn.active { color: var(--accent); border-color: var(--accent); }
+.fpv-zoom { min-width: 48px; font-weight: 700; padding: 6px 10px; }
 .cam-rec.recording { width: auto; padding: 0 9px; gap: 5px; color: #fff; background: var(--danger); border-color: var(--danger); }
 #cam-rec-time { font-size: 0.8rem; font-weight: 700; }
 .cam-rec.recording .ic { animation: rec-blink 1s steps(2, start) infinite; }
