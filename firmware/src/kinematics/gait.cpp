@@ -50,10 +50,18 @@ constexpr float SWING_START[NUM_TYPES][NUM_LEGS] = {
     {2.0f / 3.0f, 1.0f / 3.0f, 0.0f, 1.0f / 6.0f, 5.0f / 6.0f, 0.5f},
     // Welle: hl, ml, vl, hr, mr, vr nacheinander
     {2.0f / 6.0f, 1.0f / 6.0f, 0.0f, 5.0f / 6.0f, 4.0f / 6.0f, 3.0f / 6.0f},
+    // Klettern: wie Ripple (immer vier Füße am Boden)
+    {2.0f / 3.0f, 1.0f / 3.0f, 0.0f, 1.0f / 6.0f, 5.0f / 6.0f, 0.5f},
 };
 
 // Anteil der Schwungphase am Zyklus
-constexpr float SWING_FRACTION[NUM_TYPES] = {0.5f, 1.0f / 3.0f, 1.0f / 6.0f};
+constexpr float SWING_FRACTION[NUM_TYPES] = {0.5f, 1.0f / 3.0f, 1.0f / 6.0f, 1.0f / 3.0f};
+// Schrittdauer je Gangart (mal swing_s): Klettern schwingt langsamer (weiter Weg nach oben)
+constexpr float SWING_SCALE[NUM_TYPES] = {1.0f, 1.0f, 1.0f, CLIMB_SWING_SCALE};
+// Kastenbahn: Heben bis CLIMB_UP, vorschwingen zwischen CLIMB_GO und 1 - CLIMB_GO (Anteil Schwung)
+constexpr float CLIMB_UP = 0.35f;
+constexpr float CLIMB_GO = 0.25f;
+constexpr float CLIMB_FOLLOW = 150.0f;  // mm/s: so schnell folgt der vorgeschwungene Fuß dem Aufsetzpunkt
 constexpr float PHASE_EPS = 1e-5f;  // Rundung an den Fenstergrenzen
 
 float frac(float v) { return v - std::floor(v); }
@@ -77,6 +85,7 @@ const char* typeName(Type t) {
   switch (t) {
     case Type::Ripple: return "ripple";
     case Type::Wave:   return "wave";
+    case Type::Climb:  return "climb";
     default:           return "tripod";
   }
 }
@@ -94,7 +103,9 @@ bool typeFromName(const char* name, Type& out) {
 
 float dutyFactor(Type t) { return 1.0f - SWING_FRACTION[static_cast<int>(t)]; }
 
-float cycleTime(Type t, float swing_s) { return swing_s / SWING_FRACTION[static_cast<int>(t)]; }
+float cycleTime(Type t, float swing_s) {
+  return swing_s * SWING_SCALE[static_cast<int>(t)] / SWING_FRACTION[static_cast<int>(t)];
+}
 
 float smoothStep5(float u) {
   u = clamp01(u);
@@ -107,39 +118,83 @@ float liftProfile(float u) {
   return 16.0f * a * a;
 }
 
+float climbLift(float u) {
+  u = clamp01(u);
+  return smoothStep5((u < 0.5f ? u : 1.0f - u) / CLIMB_UP);
+}
+
+float climbTravel(float u) { return smoothStep5((u - CLIMB_GO) / (1.0f - 2.0f * CLIMB_GO)); }
+
+float climbOut(float u, float r_path, float r_neutral) {
+  // mit dem Heben (das Knie knickt schon auf halber Höhe am weitesten ein)
+  return climbLift(u) * std::fmax(CLIMB_OUT, r_neutral + CLIMB_OUT_MIN - r_path);
+}
+
 namespace {
-// Kleinster Kniewinkel (Grad) eines Schritts genau radial von stance-e nach
-// stance+e mit den Schwungprofilen; < 0: Punkt unterwegs nicht erreichbar
-float minKneeRadialStep(const kin::LegGeometry& g, float stance, float e, float height, float lift) {
+// Schritt genau radial von stance-e nach stance+e mit den Schwungprofilen: hält er
+// Knie (>= knee_min) und Femur (<= femur_max) ein? (Grad)
+bool radialStepOk(const kin::LegGeometry& g, float stance, float e, float height, float lift, bool climb,
+                  float knee_min, float femur_max) {
   constexpr int N = 32;
   const float F = g.femur, T = g.tibia;
-  float best = 1e9f;
   for (int i = 0; i <= N; ++i) {
     const float u = static_cast<float>(i) / N;
-    const float rf = stance - e + 2.0f * e * smoothStep5(u) - g.coxa;  // ab Femur-Achse
-    const float z = height - lift * liftProfile(u);
+    float rf, z;  // ab Femur-Achse
+    if (climb) {
+      const float rp = stance - e + 2.0f * e * climbTravel(u);
+      rf = rp + climbOut(u, rp, stance) - g.coxa;
+      z = height - lift * climbLift(u);
+    } else {
+      rf = stance - e + 2.0f * e * smoothStep5(u) - g.coxa;
+      z = height - lift * liftProfile(u);
+    }
     const float d2 = rf * rf + z * z;
     const float c = (F * F + T * T - d2) / (2.0f * F * T);
-    if (c >= 1.0f) return -1.0f;  // Knie ganz zusammengeklappt
+    if (c >= 1.0f) return false;  // Knie ganz zusammengeklappt
     if (c <= -1.0f) continue;     // gestreckt: begrenzt maxFootRadius
-    const float knee = std::acos(c) * 57.2957795f;
-    if (knee < best) best = knee;
+    if (std::acos(c) * 57.2957795f < knee_min) return false;
+    if (femur_max < 180.0f) {
+      // Femur über der Waagerechten: Richtung zum Fuß + Winkel zwischen Femur und Fuß-Linie
+      const float d = std::sqrt(d2);
+      const float a = (F * F + d2 - T * T) / (2.0f * F * d);
+      const float femur = (std::atan2(-z, rf) + std::acos(a < -1.0f ? -1.0f : (a > 1.0f ? 1.0f : a))) * 57.2957795f;
+      if (femur > femur_max) return false;
+    }
   }
-  return best;
+  return true;
 }
 }  // namespace
 
 float minFootRadius(const kin::LegGeometry& g, float stance, float height, float step_height,
-                    float knee_min_deg) {
-  if (minKneeRadialStep(g, stance, 0.0f, height, step_height) < knee_min_deg) return stance;
+                    float knee_min_deg, bool climb, float femur_max_deg) {
+  auto ok = [&](float e) {
+    return radialStepOk(g, stance, e, height, step_height, climb, knee_min_deg, femur_max_deg);
+  };
+  if (!ok(0.0f)) return stance;
   float lo = 0.0f, hi = stance - g.coxa;  // Auslenkung nach innen
-  if (minKneeRadialStep(g, stance, hi, height, step_height) >= knee_min_deg) return stance - hi;
+  if (ok(hi)) return stance - hi;
   for (int it = 0; it < 18; ++it) {
     const float mid = 0.5f * (lo + hi);
-    if (minKneeRadialStep(g, stance, mid, height, step_height) >= knee_min_deg) lo = mid;
+    if (ok(mid)) lo = mid;
     else hi = mid;
   }
   return stance - lo;
+}
+
+float climbHeight(const kin::LegGeometry& g, float stance, float height, float inward, float knee_min_deg,
+                  float femur_max_deg, float lo_mm, float hi_mm) {
+  auto ok = [&](float lift) {
+    return radialStepOk(g, stance, inward, height, lift, true, knee_min_deg, femur_max_deg);
+  };
+  if (hi_mm < lo_mm || !ok(lo_mm)) return lo_mm;
+  if (ok(hi_mm)) return hi_mm;
+  float lo = lo_mm, hi = hi_mm;
+  for (int it = 0; it < 12; ++it) {
+    const float mid = 0.5f * (lo + hi);
+    if (ok(mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
 }
 
 float maxFootRadius(const kin::LegGeometry& g, float height) {
@@ -169,7 +224,7 @@ void Gait::reset(const kin::Vec3 neutral[NUM_LEGS]) {
 }
 
 float Gait::footMax(Type t) const {
-  return params_.max_stride / (dutyFactor(t) * cycleTime(t, params_.swing_s));
+  return stride(t) / (dutyFactor(t) * cycleTime(t, params_.swing_s));
 }
 
 bool Gait::liftAllowed(int leg) const {
@@ -182,6 +237,7 @@ void Gait::setParams(const Params& p) {
   if (params_.step_height < 0.0f) params_.step_height = 0.0f;
   if (params_.max_stride < 1.0f) params_.max_stride = 1.0f;
   if (params_.ramp_s < 0.05f) params_.ramp_s = 0.05f;
+  if (params_.climb_height < params_.step_height) params_.climb_height = params_.step_height;
   if (idle_) active_type_ = params_.type;
 }
 
@@ -227,6 +283,10 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   // Standphase), wird im ersten Zyklus langsamer beschleunigt:
   // Rampe >= 2 * spätester Schwungbeginn - Standphase (+20 % Reserve).
   const int t = static_cast<int>(active_type_);
+  // Wechsel von/zu Klettern: erst anhalten (Beine in die Neutralstellung), dann in der neuen
+  // Gangart wieder anlaufen – die Schritte sind zu verschieden für ein fließendes Umtakten
+  static const float ZERO[3] = {0, 0, 0};
+  const float* cmd = stopSwitch() ? ZERO : cmd_;
   const float stance_nom = dutyFactor(active_type_) * cycleTime(active_type_, params_.swing_s);
   const float stance_s = stance_nom * cadence_;  // mit der aktuellen Schrittfrequenz
   float ramp_up = std::fmax(params_.ramp_s, stance_s);
@@ -237,8 +297,8 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
                                      cycleTime(active_type_, params_.swing_s * cadence_));
   }
   for (int k = 0; k < 3; ++k) {
-    bool accel = cmd_[k] * cmd_ramped_[k] >= 0.0f && std::fabs(cmd_[k]) > std::fabs(cmd_ramped_[k]);
-    cmd_ramped_[k] = approach(cmd_ramped_[k], cmd_[k], dt / (accel ? ramp_up : params_.ramp_s));
+    bool accel = cmd[k] * cmd_ramped_[k] >= 0.0f && std::fabs(cmd[k]) > std::fabs(cmd_ramped_[k]);
+    cmd_ramped_[k] = approach(cmd_ramped_[k], cmd[k], dt / (accel ? ramp_up : params_.ramp_s));
   }
 
   float r_max = 1.0f;
@@ -272,13 +332,13 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   // der beiden Gangarten (Reserve für längere Standphasen); vor dem Umtakten in eine
   // langsamere Gangart muss das Tempo auch dort in die Reichweite passen. Die Grenze
   // gleitet dorthin statt zu springen.
-  const float fm_active = params_.max_stride / stance_nom;
-  const bool pending = !idle_ && params_.type != active_type_;
+  const float fm_active = stride(active_type_) / stance_nom;
+  const bool pending = !idle_ && params_.type != active_type_ && !stopSwitch();  // (Klettern: hält nur an)
   float fm_target = fm_active;
   if (pending) {
     fm_target = std::fmin(fm_active, footMax(params_.type));
     float vg[3];
-    toVelocity(cmd_, fm_target, vg);
+    toVelocity(cmd, fm_target, vg);
     const float st_new = dutyFactor(params_.type) * cycleTime(params_.type, params_.swing_s);
     fm_target *= TRANS_SPEED * reachScale(vg[0], vg[1], vg[2], (0.5f * st_new + dt) * ACCEL_MARGIN, neutral);
   } else if (!idle_ && switching_) {
@@ -290,11 +350,11 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
 
   float v_cur[3], v_goal[3];
   toVelocity(cmd_ramped_, foot_max, v_cur);
-  toVelocity(cmd_, foot_max, v_goal);
+  toVelocity(cmd, foot_max, v_goal);
 
   // Schrittfrequenz: ruhiger, je langsamer (beim Anhalten unverändert lassen)
-  const bool commanded = std::fabs(cmd_[0]) > MOVING_EPS || std::fabs(cmd_[1]) > MOVING_EPS ||
-                         std::fabs(cmd_[2]) > MOVING_EPS;
+  const bool commanded = std::fabs(cmd[0]) > MOVING_EPS || std::fabs(cmd[1]) > MOVING_EPS ||
+                         std::fabs(cmd[2]) > MOVING_EPS;
   if (commanded) {
     // (vor dem Umtakten bezogen auf die bisherige Gangart -> ruhige Schritte beim Abbremsen)
     const float ratio = fastestFoot(v_cur) / (switching_ ? foot_max : fm_active);
@@ -306,7 +366,7 @@ void Gait::computeVelocity(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   // (folgt die Frequenz einer Tempoänderung noch, wird kurz gebremst). Sinkt die Grenze
   // plötzlich (längere Schrittdauer, höherer Fußhub), gleitet sie in ramp_s herunter statt
   // das Tempo in einem Regelschritt zu kappen – die Reserve ACCEL_MARGIN deckt das.
-  const float foot_max_now = params_.max_stride / stance_s;
+  const float foot_max_now = stride(active_type_) / stance_s;
   if (idle_ || limit_now_ <= 0.0f || foot_max_now >= limit_now_) limit_now_ = foot_max_now;
   else limit_now_ = std::fmax(foot_max_now, limit_now_ - fm_active * dt / params_.ramp_s);
   const float fastest_now = fastestFoot(v_cur);
@@ -494,7 +554,8 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
   }
 
   // Gangwechsel im Lauf: umtakten, sobald Tempo und Reichweite zur neuen Gangart passen
-  if (params_.type != active_type_) {
+  // (Klettern: erst im Stillstand, siehe computeVelocity)
+  if (params_.type != active_type_ && !stopSwitch()) {
     const float cad = switchCadence(dt, neutral);
     if (cad > 0.0f) switchType(cad, neutral);
   }
@@ -577,7 +638,8 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
       land = p >= sigma - PHASE_EPS;  // Fenster minimal kürzen (Rundung)
     }
     if (land) {
-      l.pos = targetOf(i);
+      // Kastenbahn: dort aufsetzen, wo der Fuß ist (folgt dem Aufsetzpunkt nur gleitend)
+      l.pos = l.box ? kin::Vec3{l.path.x, l.path.y, 0.0f} : targetOf(i);
       l.swing = false;
       if (l.dur > 0.0f) {
         // Schwung aus der alten Gangart: Phase passend zum Aufsetzpunkt
@@ -640,6 +702,9 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
       l.dur = 0.0f;
       l.u = l.ph / sigma;
       l.h = 0.0f;
+      l.box = active_type_ == Type::Climb;
+      l.lift = l.box ? params_.climb_height : params_.step_height;
+      l.path = l.pos;
     }
   }
   // Wartet ein Standbein auf einen Nachbarn in der Luft, darf sein Fuß den Rand der
@@ -668,14 +733,32 @@ void Gait::update(float dt, const kin::Vec3 neutral[NUM_LEGS]) {
     Leg& l = legs_[i];
     if (!l.swing) continue;
     const kin::Vec3 target = targetOf(i);
-    const float h = smoothStep5(l.u);
+    const float h = l.box ? climbTravel(l.u) : smoothStep5(l.u);
+    kin::Vec3& path = l.box ? l.path : l.pos;
     if (l.h < 1.0f) {
       const float k = (h - l.h) / (1.0f - l.h);
-      l.pos.x += (target.x - l.pos.x) * k;
-      l.pos.y += (target.y - l.pos.y) * k;
+      path.x += (target.x - path.x) * k;
+      path.y += (target.y - path.y) * k;
+    } else {
+      // Kastenbahn, schon vorgeschwungen: Ändert sich das Tempo, wandert der Aufsetzpunkt
+      // (halbe Standphase ist beim Klettern lang) – gleitend folgen, nicht springen
+      const float dx = target.x - path.x, dy = target.y - path.y;
+      const float d = std::hypot(dx, dy), step = CLIMB_FOLLOW * dt;
+      const float k = d > step ? step / d : 1.0f;
+      path.x += dx * k;
+      path.y += dy * k;
     }
     l.h = h;
-    l.pos.z = params_.step_height * liftProfile(l.u);
+    if (l.box) {
+      // Kastenbahn, oben nach außen (Bogen nur auf die Ausgabe, nicht auf den Weg)
+      const float rx = path.x - coxa_[i].x, ry = path.y - coxa_[i].y;
+      const float r = std::hypot(rx, ry);
+      const float rn = std::hypot(neutral[i].x - coxa_[i].x, neutral[i].y - coxa_[i].y);
+      const float k = r > 1e-3f ? climbOut(l.u, r, rn) / r : 0.0f;
+      l.pos = {path.x + rx * k, path.y + ry * k, l.lift * climbLift(l.u)};
+    } else {
+      l.pos.z = l.lift * liftProfile(l.u);
+    }
     if (guard_d2_ > 0.0f) {
       // nicht näher an die Coxa-Achse, als das Knie in dieser Höhe zulässt
       const float dz = guard_h_ - l.pos.z;

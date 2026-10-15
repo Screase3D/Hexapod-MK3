@@ -1174,7 +1174,12 @@ function renderWalk(m) {
       if (g.cadence) info.push(`Schritt ${(g.swing_s * g.cadence).toFixed(2).replace('.', ',')} s`);
     }
     info.push(`max. ${g.max_speed} mm/s · ${g.max_turn} °/s`);
-    if (g.switching) info.push(g.active !== g.type ? 'Gangart wechselt – passt das Tempo an' : 'Gangart wechselt – Beine finden in den Takt');
+    if (g.climb_height && (g.type === 'climb' || g.active === 'climb')) info.push(`Fußhub ${g.climb_height} mm`);
+    if (g.switching) {
+      const climb = g.active !== g.type && (g.type === 'climb' || g.active === 'climb');
+      info.push(climb ? 'Gangart wechselt – hält kurz an'
+        : g.active !== g.type ? 'Gangart wechselt – passt das Tempo an' : 'Gangart wechselt – Beine finden in den Takt');
+    }
   }
   $('walk-info').textContent = info.join(' · ');
 }
@@ -2802,6 +2807,7 @@ const PROFILES = [
   { id: 'terrain', name: 'Gelände', hint: 'hoch, Fuß 25 mm anheben', z: 70, stance: 100, type: 'tripod', swing_s: 0.5, step_height: 25 },
   { id: 'sport', name: 'Sport', hint: 'schnelle Schritte, bis 216 mm/s', z: 55, stance: 95, type: 'tripod', swing_s: 0.3, step_height: 15 },
   { id: 'sneak', name: 'Schleichen', hint: 'Welle, langsam und leise', z: 45, stance: 105, type: 'wave', swing_s: 0.5, step_height: 10 },
+  { id: 'climb', name: 'Klettern', hint: 'über Kanten: Körper höher, Füße bis 50 mm hoch', z: 62, stance: 105, type: 'climb', swing_s: 0.4, step_height: 15 },
 ];
 const PROFILE_MAX_OWN = 4;
 

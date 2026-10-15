@@ -167,6 +167,7 @@ Neigen gehen dabei auf null. Alle sind erreichbar und zum Laufen geeignet (Tempo
 | Gelände | 70 mm | 100 mm | Dreifuß | 0,5 s | 25 mm | 100 mm/s |
 | Sport | 55 mm | 95 mm | Dreifuß | 0,3 s | 15 mm | 216 mm/s |
 | Schleichen | 45 mm | 105 mm | Welle | 0,5 s | 10 mm | 28 mm/s |
+| Klettern | 62 mm | 105 mm | Klettern | 0,4 s | bis 50 mm (automatisch) | ca. 28 mm/s |
 
 *+ Merken* speichert die aktuelle Haltung und Gangart als eigenes Profil (bis zu vier, im Browser).
 Das markierte Profil entspricht der aktuellen Einstellung.
@@ -258,8 +259,26 @@ phasengesteuert:
 | Dreifuß (`tripod`) | 3 (vl, hl, mr ↔ ml, vr, hr) | 0,8 s | 175 mm/s | 95 mm/s |
 | Ripple (`ripple`) | 2 (je Seite eins) | 1,2 s | 88 mm/s | 50 mm/s |
 | Welle (`wave`) | 1 | 2,4 s | 35 mm/s | 21 mm/s |
+| Klettern (`climb`) | 2 (wie Ripple) | 2,7 s | 28 mm/s | 21 mm/s |
 
-(Höchstwerte bei 100 % Tempo, Standardhaltung, 15 mm Fußhub.) Das Tempo begrenzen zwei Dinge:
+(Höchstwerte bei 100 % Tempo, Standardhaltung, 15 mm Fußhub.)
+
+**Klettern** ist für kleine Hindernisse wie Teppichkanten oder Schwellen: Muster wie Ripple (immer vier
+Füße am Boden), aber jeder Schritt ist eine **Kastenbahn** – der Fuß hebt im ersten Drittel des Schwungs
+fast senkrecht ab, schwingt erst oben vor und setzt im letzten Drittel senkrecht auf. So stößt er nicht
+gegen die Kante, sondern steigt darüber. Dabei geht er oben nach außen (15 mm, mindestens 10 mm über
+seinen Neutralpunkt hinaus), sonst knickte das Knie bei so viel Hub nah am Körper zu weit ein.
+Der **Fußhub** stellt sich selbst ein: so hoch wie möglich (bis 50 mm, `gait::climbHeight`), solange Knie
+(`KNEE_MIN_DEG`) und Femur (Grenze aus der Kalibrierung, 3° Abstand) auch dann passen, wenn ein
+Ecken-Bein beim Vorwärtslaufen 20 mm zum Körper hin steht; in der Standardhaltung sind das 50 mm,
+mit ganz tiefem Körper weniger (bei 35 mm nur noch der normale Fußhub; die Oberfläche zeigt den Wert
+unter den Joysticks),
+der Regler *Fußhub* gilt für die anderen Gangarten. Der Schwung dauert 2,25-mal so lang (0,9 s bei
+0,4 s Schrittdauer, Gelenke dabei unter ca. 410 °/s) und ein Schritt ist höchstens 50 mm lang – er ist
+also langsam. Für höhere Kanten den Körper anheben (Profil *Klettern*: 62 mm, das Chassis hat dann ca.
+38 mm Bodenfreiheit). Wechselt man im Lauf zu oder von Klettern, hält der Roboter kurz an (die Beine
+gehen in die Neutralstellung) und läuft in der neuen Gangart wieder los – die Schritte sind zu
+verschieden für ein fließendes Umtakten. Das Tempo begrenzen zwei Dinge:
 
 1. **Fußweg je Standphase** (70 mm, `GAIT_LIMITS.stride_max`) geteilt durch die Dauer der
    Standphase. Kürzere Schrittdauer = schneller. Ripple und Welle sind dabei grundsätzlich

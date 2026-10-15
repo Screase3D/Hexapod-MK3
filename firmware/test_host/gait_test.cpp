@@ -35,8 +35,11 @@ static int g_checks = 0;
   } while (0)
 
 constexpr float DT = 0.02f;  // 50 Hz wie der Regel-Task
-const gait::Type TYPES[] = {gait::Type::Tripod, gait::Type::Ripple, gait::Type::Wave};
-const int MAX_SWING[] = {3, 2, 1};
+const gait::Type TYPES[] = {gait::Type::Tripod, gait::Type::Ripple, gait::Type::Wave, gait::Type::Climb};
+constexpr int NT = 4;
+const int MAX_SWING[] = {3, 2, 1, 2};
+// Femur höchstens (Standardgrenze der Kalibrierung, 3° Abstand wie in motion.cpp)
+constexpr float FEMUR_MAX = ASSEMBLY_POSE.femur + 70.0f - 3.0f;
 const int NEIGHBORS[6][2] = {{1, 3}, {0, 2}, {1, 5}, {0, 4}, {3, 5}, {2, 4}};  // vl ml hl hr mr vr im Kreis
 
 struct Cmd {
@@ -61,24 +64,31 @@ static gait::Params firmwareParams(gait::Type t) {
   p.swing_s = GAIT_LIMITS.swing_default;
   p.step_height = GAIT_LIMITS.height_default;
   p.max_stride = gaitStrideMax(p.step_height);
+  // Klettern wie in motion.cpp (CLIMB_INWARD 20 mm, Hub bis 50 mm)
+  p.climb_height = gait::climbHeight(LEG_GEOMETRY, POSE_LIMITS.stance_default, POSE_LIMITS.height_default, 20.0f,
+                                     KNEE_MIN_DEG, FEMUR_MAX, p.step_height, 50.0f);
   return p;
 }
 
 // Reichweite wie in motion.cpp (Körper in der Standardhaltung)
-static void setReach(gait::Gait& g, float step_height) {
+static void setReach(gait::Gait& g) {
   const float h = POSE_LIMITS.height_default;
+  const gait::Params& p = g.params();
   BodyPose pose{0, 0, h, 0, 0, 0};
   Vec3 coxa[6];
   for (int i = 0; i < 6; ++i) coxa[i] = coxaWorld(pose, LEG_MOUNTS[i]);
-  g.setReach(coxa, gait::minFootRadius(LEG_GEOMETRY, POSE_LIMITS.stance_default, h, step_height, KNEE_MIN_DEG),
-             gait::maxFootRadius(LEG_GEOMETRY, h));
+  const float stance = POSE_LIMITS.stance_default;
+  const float r_min = p.type == gait::Type::Climb || g.activeType() == gait::Type::Climb
+                          ? gait::minFootRadius(LEG_GEOMETRY, stance, h, p.climb_height, KNEE_MIN_DEG, true, FEMUR_MAX)
+                          : gait::minFootRadius(LEG_GEOMETRY, stance, h, p.step_height, KNEE_MIN_DEG);
+  g.setReach(coxa, r_min, gait::maxFootRadius(LEG_GEOMETRY, h));
   g.setSwingGuard(LEG_GEOMETRY, h, KNEE_MIN_DEG);
 }
 
 static gait::Gait makeGait(gait::Type t, const Vec3 neutral[6], const gait::Params* params = nullptr) {
   gait::Gait g;
   g.setParams(params ? *params : firmwareParams(t));
-  setReach(g, g.params().step_height);
+  setReach(g);
   g.reset(neutral);
   return g;
 }
@@ -99,6 +109,13 @@ static void testProfiles() {
   gait::Type t;
   CHECK(gait::typeFromName("ripple", t) && t == gait::Type::Ripple);
   CHECK(!gait::typeFromName("hüpfen", t));
+  CHECK(gait::typeFromName("climb", t) && t == gait::Type::Climb);
+  // Kastenbahn: fast ganz oben, bevor er vorschwingt; oben bleiben; senkrecht aufsetzen
+  CHECK_NEAR(gait::climbLift(0), 0, 1e-6);
+  CHECK_NEAR(gait::climbLift(1), 0, 1e-6);
+  CHECK_NEAR(gait::climbLift(0.5f), 1, 1e-6);
+  CHECK(gait::climbLift(0.25f) > 0.8f && gait::climbTravel(0.25f) < 1e-6f);
+  CHECK(gait::climbLift(0.75f) > 0.8f && gait::climbTravel(0.75f) > 1.0f - 1e-6f);
 }
 
 // Ohne Befehl: Stillstand, kein Bein hebt ab, Füße folgen dem Fußabstand
@@ -141,7 +158,7 @@ static void testWalking(bool extreme) {
   float knee_min = 1e9f, speed_fwd = 0;
   float jmin[3] = {1e9f, 1e9f, 1e9f}, jmax[3] = {-1e9f, -1e9f, -1e9f};
 
-  for (int ti = 0; ti < 3; ++ti) {
+  for (int ti = 0; ti < NT; ++ti) {
     for (const Cmd& c : CMDS) {
       // extrem: höchster Fußhub und kürzeste Schrittdauer der Oberfläche
       gait::Params p = firmwareParams(TYPES[ti]);
@@ -364,8 +381,8 @@ static void testWalkingSwitch() {
   neutralFeet(n, POSE_LIMITS.stance_default);
   const Cmd SW_CMDS[] = {{1, 0, 0, "vor"}, {0.8f, 0, 0.6f, "Kurve"}, {0, 1, 0, "seitwärts"}};
   float worst_switch = 0, worst_conv = 0, worst_acc = 0, worst_jump = 0, knee_min = 1e9f;
-  for (int from = 0; from < 3; ++from) {
-    for (int to = 0; to < 3; ++to) {
+  for (int from = 0; from < NT; ++from) {
+    for (int to = 0; to < NT; ++to) {
       if (from == to) continue;
       for (const Cmd& c : SW_CMDS) {
         gait::Gait g = makeGait(TYPES[from], n);
@@ -378,6 +395,7 @@ static void testWalkingSwitch() {
         float t_switch = -1, t_conv = -1;
         int over = 0;
         for (int k = 0; k < 600; ++k) {  // 12 s
+          setReach(g);  // wie motion.cpp: Klettern braucht mehr Abstand zum Körper
           g.update(DT, n);
           w.step(g);
           const float t = (k + 1) * DT;
@@ -386,15 +404,25 @@ static void testWalkingSwitch() {
           // nach dem Einfinden: nie mehr Beine in der Luft, als die neue Gangart vorsieht
           if (t_conv > 0 && w.swinging > MAX_SWING[to]) ++over;
         }
+        const int f0 = g_failed;
         w.check(0.5f);
         CHECK(over == 0);
-        CHECK(t_switch > 0 && t_switch < 1.5f);
-        CHECK(t_conv > 0 && t_conv < 8.0f);
+        // Klettern: erst anhalten (Beine in die Neutralstellung), dann neu anlaufen
+        const bool climb = TYPES[from] == gait::Type::Climb || TYPES[to] == gait::Type::Climb;
+        CHECK(t_switch > 0 && t_switch < (climb ? 4.0f : 1.5f));
+        // Klettern: Zyklus 2,7 s statt 1,2 s (Ripple) -> dauert länger
+        CHECK(t_conv > 0 && t_conv < std::fmax(8.0f, 3.5f * gait::cycleTime(TYPES[to], p.swing_s)));
         CHECK(g.activeType() == TYPES[to] && !g.transitioning() && g.phaseError() == 0.0f);
         if (c.vx == 1 && c.turn == 0) CHECK_NEAR(g.speedX(), g.maxSpeed(), 0.5);  // wieder volles Tempo
+        if (g_failed != f0)
+          std::printf("  bei %s -> %s, %s: umgetaktet %.1f s, eingeschwungen %.1f s, Sprung %.1f mm, Beschl. %.0f\n",
+                      gait::typeName(TYPES[from]), gait::typeName(TYPES[to]), c.name, t_switch, t_conv, w.worst_jump,
+                      w.worst_acc);
         worst_switch = std::fmax(worst_switch, t_switch);
         worst_conv = std::fmax(worst_conv, t_conv);
-        worst_acc = std::fmax(worst_acc, w.worst_acc);
+        // (Klettern läuft nach dem Anhalten neu an: wie ein Start aus dem Stand, Dreifuß ca. 450 mm/s²)
+        if (climb) CHECK(w.worst_acc < 460.0f);
+        else worst_acc = std::fmax(worst_acc, w.worst_acc);
         worst_jump = std::fmax(worst_jump, w.worst_jump);
         knee_min = std::fmin(knee_min, w.knee_min);
       }
@@ -418,7 +446,7 @@ static void testSwitchStress() {
   };
   float knee_min = 1e9f, worst_jump = 0;
   for (int run = 0; run < 6; ++run) {
-    gait::Gait g = makeGait(TYPES[run % 3], n);
+    gait::Gait g = makeGait(TYPES[run % NT], n);
     GaitWatch w(g);
     float t_next = 0;
     for (int k = 0; k < 3000; ++k) {  // 60 s
@@ -428,7 +456,7 @@ static void testSwitchStress() {
         const float r = next();
         if (r < 0.45f) {
           gait::Params p = g.params();
-          p.type = TYPES[static_cast<int>(next() * 2.999f)];
+          p.type = TYPES[static_cast<int>(next() * (NT - 0.001f))];
           g.setParams(p);
         } else if (r < 0.6f) {
           g.setCommand(0, 0, 0);
@@ -439,6 +467,7 @@ static void testSwitchStress() {
           g.setCommand(2 * next() - 1, 2 * next() - 1, 2 * next() - 1);
         }
       }
+      setReach(g);
       g.update(DT, n);
       w.step(g);
     }
@@ -469,7 +498,7 @@ static void testRedirect() {
   float knee_min = 1e9f;
   int ik_fail = 0, adjacent = 0;
   for (int sc = 0; sc < 3000; ++sc) {
-    gait::Gait g = makeGait(TYPES[sc % 3], n);
+    gait::Gait g = makeGait(TYPES[sc % NT], n);
     GaitWatch w(g);
     float a[3], b[3];
     for (int k = 0; k < 3; ++k) {
@@ -534,7 +563,7 @@ static void testSmoothLimits() {
       p.step_height = GAIT_LIMITS.height_max;
       p.max_stride = gaitStrideMax(p.step_height);
       g.setParams(p);
-      setReach(g, p.step_height);
+      setReach(g);
     }
     g.setCommand(c.b[0], c.b[1], c.b[2]);
     for (int k = 0; k < 200; ++k) {
@@ -605,6 +634,75 @@ static void testCadence() {
               sw_slow, GAIT_LIMITS.swing_default * cad_slow);
 }
 
+// Klettern: hoher Fußhub, Kastenbahn, Gelenke in den Grenzen
+static void testClimb() {
+  Vec3 n[6];
+  neutralFeet(n, POSE_LIMITS.stance_default);
+  const gait::Params p = firmwareParams(gait::Type::Climb);
+  // Standardhaltung: mindestens 40 mm (Dreifuß/Ripple höchstens 25 mm)
+  CHECK(p.climb_height >= 40.0f);
+  // höherer Körper: mehr Hub
+  const float high = gait::climbHeight(LEG_GEOMETRY, POSE_LIMITS.stance_default, 70.0f, 20.0f, KNEE_MIN_DEG,
+                                       FEMUR_MAX, 15.0f, 50.0f);
+  // ganz tiefer Körper: nur der normale Hub (mehr geht dort nicht), er kann aber weiter laufen
+  // (Schritte zum Körper hin begrenzt die Reichweite, wie bei den anderen Gangarten)
+  const float low = gait::climbHeight(LEG_GEOMETRY, POSE_LIMITS.stance_default, POSE_LIMITS.height_min, 20.0f,
+                                      KNEE_MIN_DEG, FEMUR_MAX, 15.0f, 50.0f);
+  CHECK(low >= 15.0f && low < p.climb_height);
+  CHECK(gait::minFootRadius(LEG_GEOMETRY, POSE_LIMITS.stance_default, POSE_LIMITS.height_min, low, KNEE_MIN_DEG, true,
+                            FEMUR_MAX) < POSE_LIMITS.stance_default - 5.0f);
+  CHECK(high >= p.climb_height);
+  gait::Gait g = makeGait(gait::Type::Climb, n, &p);
+  g.setCommand(1, 0, 0);
+  BodyPose pose{0, 0, POSE_LIMITS.height_default, 0, 0, 0};
+  float zmax = 0, worst_low_travel = 0, rate_max = 0;
+  Vec3 last_stance[6], lift_at[6];
+  bool was_swing[6] = {};
+  float low_x[6][64];  // x der tiefen Bahnpunkte eines Schwungs
+  int n_low[6] = {};
+  float prev_ang[6][3];
+  bool have_prev = false;
+  for (int k = 0; k < 600; ++k) {
+    g.update(DT, n);
+    for (int i = 0; i < 6; ++i) {
+      const Vec3& f = g.foot(i);
+      if (f.z > zmax) zmax = f.z;
+      // tief (unter halber Höhe): kaum vor bzw. zurück gegenüber Abheben/Aufsetzen – der Fuß
+      // schwingt erst oben vor und bleibt so nicht an einer Kante hängen
+      if (g.swinging(i) && !was_swing[i]) {
+        lift_at[i] = last_stance[i];
+        n_low[i] = 0;
+      }
+      if (g.swinging(i) && f.z < 0.5f * p.climb_height && n_low[i] < 64) low_x[i][n_low[i]++] = f.x;
+      if (!g.swinging(i) && was_swing[i] && k > 200) {
+        for (int j = 0; j < n_low[i]; ++j) {
+          worst_low_travel = std::fmax(
+              worst_low_travel, std::fmin(std::fabs(low_x[i][j] - lift_at[i].x), std::fabs(low_x[i][j] - f.x)));
+        }
+      }
+      if (!g.swinging(i)) last_stance[i] = f;
+      was_swing[i] = g.swinging(i);
+      JointAngles a;
+      CHECK(legIk(LEG_GEOMETRY, LEG_MOUNTS[i], bodyToLeg(LEG_MOUNTS[i], worldToBody(pose, f)), a));
+      CHECK(a.femur <= FEMUR_MAX + 0.5f && 90.0f + a.tibia >= KNEE_MIN_DEG - 0.5f);
+      const float v[3] = {a.coxa, a.femur, a.tibia};
+      for (int j = 0; j < 3; ++j) {
+        if (have_prev && g.swinging(i)) rate_max = std::fmax(rate_max, std::fabs(v[j] - prev_ang[i][j]) / DT);
+        prev_ang[i][j] = v[j];
+      }
+    }
+    have_prev = true;
+  }
+  CHECK(zmax > p.climb_height - 0.5f);
+  CHECK(worst_low_travel < 8.0f);
+  CHECK(g.maxSpeed() > 0.0f && g.maxSpeed() < 0.5f * makeGait(gait::Type::Ripple, n).nominalSpeed() + 50.0f);
+  CHECK(rate_max < 0.75f * GAIT_SERVO_SLEW_DEG_PER_S);
+  std::printf("Info: Klettern Hub %.0f mm (Körper 70 mm: %.0f mm, 35 mm: %.0f mm), %.0f mm/s, Schwung %.1f s, Gelenk max. %.0f °/s, "
+              "tief max. %.1f mm vor\n",
+              p.climb_height, high, low, g.maxSpeed(), gait::cycleTime(gait::Type::Climb, p.swing_s) / 3.0f, rate_max,
+              worst_low_travel);
+}
+
 int main() {
   testProfiles();
   testIdle();
@@ -618,6 +716,7 @@ int main() {
   testSmoothLimits();
   testStartExcursion();
   testCadence();
+  testClimb();
   std::printf("%d Prüfungen, %d Fehler\n", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

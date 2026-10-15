@@ -12,6 +12,7 @@ phone), or with an Xbox controller over Bluetooth.
 ## Features
 
 - **Walking** – inverse kinematics for all 18 joints, tripod / ripple / wave gait (switchable while walking),
+  a climb gait with high box-shaped steps for carpet edges and thresholds,
   smooth foot paths, direction-dependent speed limits from the legs' real reach.
 - **Posture** – height, stance, shift, roll, pitch, yaw; each slider shows its currently reachable range;
   IMU levelling; stand up / sit down; front-leg mode (lift, steer, wave); body joystick and gestures.

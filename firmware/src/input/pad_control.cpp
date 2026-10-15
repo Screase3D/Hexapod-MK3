@@ -75,6 +75,7 @@ void message(const String& m) {
 const char* gaitText(const char* name) {
   if (strcmp(name, "tripod") == 0) return "Dreifuß";
   if (strcmp(name, "ripple") == 0) return "Ripple";
+  if (strcmp(name, "climb") == 0) return "Klettern";
   return "Welle";
 }
 

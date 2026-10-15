@@ -35,6 +35,11 @@
 // innen müsste das Knie zum Anheben sonst zu weit einknicken. Die Grenze wirkt
 // richtungsabhängig – Schritte quer zum Bein (Mittelbeine beim Vorwärtslaufen)
 // dürfen lang sein, Schritte zum Körper hin nur so lang wie nötig.
+//
+// Klettern: Muster wie Ripple, aber der Fuß hebt erst fast senkrecht sehr hoch ab (und
+// etwas nach außen, das hält das Knie offen), schwingt oben vor und setzt senkrecht auf –
+// eine Kastenbahn, mit der er über Kanten (Teppich, Schwellen) steigt, statt hängen zu
+// bleiben. Langsamer (doppelte Schrittdauer, kürzere Schritte).
 
 #include <stdint.h>
 
@@ -48,9 +53,10 @@ enum class Type : uint8_t {
   Tripod,  // je 3 Beine gleichzeitig (schnell)
   Ripple,  // je 2 Beine (ein Bein pro Seite), ruhiger
   Wave,    // immer nur 1 Bein (langsam, sehr stabil)
+  Climb,   // Klettern: wie Ripple, Füße sehr hoch (Kastenbahn), langsam
 };
-constexpr int NUM_TYPES = 3;
-const char* typeName(Type t);  // "tripod", "ripple", "wave"
+constexpr int NUM_TYPES = 4;
+const char* typeName(Type t);  // "tripod", "ripple", "wave", "climb"
 bool typeFromName(const char* name, Type& out);
 
 struct Params {
@@ -59,7 +65,18 @@ struct Params {
   float step_height = 20.0f;  // Fußhub in mm
   float max_stride = 40.0f;   // größter Fußweg während einer Standphase in mm
   float ramp_s = 0.5f;        // Zeit von 0 auf volle Geschwindigkeit (beim Anlaufen ggf. länger)
+  float climb_height = 40.0f; // Fußhub beim Klettern in mm (Firmware: so hoch, wie die Beine kommen)
 };
+
+// Klettern: größter Fußweg je Standphase, Schrittdauer (mal swing_s). Oben steht der Fuß
+// CLIMB_OUT weiter außen, mindestens aber CLIMB_OUT_MIN außerhalb seines Neutralpunkts
+// (hebt er nah am Körper ab, knickte das Knie sonst zu weit ein).
+constexpr float CLIMB_STRIDE = 50.0f;
+constexpr float CLIMB_SWING_SCALE = 2.25f;
+constexpr float CLIMB_OUT = 15.0f;
+constexpr float CLIMB_OUT_MIN = 10.0f;
+// Auswärtsbogen (mm) bei Abstand r_path der Bahn und r_neutral des Neutralpunkts zur Coxa-Achse
+float climbOut(float u, float r_path, float r_neutral);
 
 // Anteil der Standphase am Zyklus (Rest = Schwungphase)
 float dutyFactor(Type t);
@@ -124,9 +141,20 @@ class Gait {
     float dur = 0.0f;    // > 0: Schwung nach Zeit mit dieser Dauer (begann vor dem Umtakten)
     float half = 0.0f;   // dabei: Vorlauf des Aufsetzpunkts (halbe Standphase der alten Gangart, s)
     bool wait = false;   // Schwung fällig, aber noch nicht erlaubt (Nachbar in der Luft)
+    bool box = false;    // Schwung als Kastenbahn (Klettern)
+    float lift = 0.0f;   // Fußhub dieses Schwungs
+    kin::Vec3 path{0, 0, 0};  // Kastenbahn: Weg ohne den Bogen nach außen
   };
 
   float footMax(Type t) const;  // Fußgeschwindigkeit bei max_stride je Standphase
+  // Wechsel von/zu Klettern im Lauf: erst anhalten, dann neu anlaufen
+  bool stopSwitch() const {
+    return !idle_ && params_.type != active_type_ && (params_.type == Type::Climb || active_type_ == Type::Climb);
+  }
+  // größter Fußweg je Standphase (Klettern: höchstens CLIMB_STRIDE)
+  float stride(Type t) const {
+    return t == Type::Climb && params_.max_stride > CLIMB_STRIDE ? CLIMB_STRIDE : params_.max_stride;
+  }
   bool liftAllowed(int leg) const;
   // Schrittfrequenz für die neue Gangart, wenn umgetaktet werden kann (sonst 0)
   float switchCadence(float dt, const kin::Vec3 neutral[NUM_LEGS]) const;
@@ -171,14 +199,24 @@ class Gait {
 // Hilfsprofile (auch für Tests)
 float smoothStep5(float u);  // 0..1, Steigung und Krümmung an den Enden 0
 float liftProfile(float u);  // 0..1..0, Steigung an den Enden 0
+// Klettern: Heben im ersten gut Drittel, oben bleiben, Senken im letzten Drittel (0..1..0);
+// vorschwingen in der Mitte (0..1), wenn der Fuß schon fast ganz oben ist
+float climbLift(float u);
+float climbTravel(float u);
 
 // Kleinster Abstand Fuß <-> Coxa-Achse (waagerecht), bei dem ein Schritt mit
 // Fußhub step_height bei Körperhöhe height den Kniewinkel (zwischen Femur-Linie
 // und Linie Knie -> Fußspitze) nicht unter knee_min_deg drückt. Gerechnet für
 // einen Schritt genau zum Körper hin bzw. weg (ungünstigster Fall) um den
 // Neutralpunkt im Abstand stance. Ergebnis >= stance - (größte Auslenkung).
+// Klettern (climb): mit dessen Schwungbahn; femur_max_deg = obere Grenze des Femurs
+// (hebt der Fuß nah am Körper sehr hoch ab, steht der Femur steil).
 float minFootRadius(const kin::LegGeometry& g, float stance, float height, float step_height,
-                    float knee_min_deg);
+                    float knee_min_deg, bool climb = false, float femur_max_deg = 180.0f);
+// Fußhub beim Klettern: so hoch wie möglich (lo_mm..hi_mm), solange ein Schritt um inward mm
+// zum Körper hin (Ecken-Beine beim Vorwärtslaufen) Knie und Femur in den Grenzen hält.
+float climbHeight(const kin::LegGeometry& g, float stance, float height, float inward, float knee_min_deg,
+                  float femur_max_deg, float lo_mm, float hi_mm);
 // Größter Abstand Fuß <-> Coxa-Achse (waagerecht) am Boden, mit 3 % Reserve
 // vor dem gestreckten Bein.
 float maxFootRadius(const kin::LegGeometry& g, float height);

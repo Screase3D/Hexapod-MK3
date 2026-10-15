@@ -142,12 +142,20 @@ def wifi_json():
             "saved_ssid": state["wifi_ssid"], "ap": ap, "sta": sta}
 
 
-SWING_FRACTION = {"tripod": 0.5, "ripple": 1 / 3, "wave": 1 / 6}
+SWING_FRACTION = {"tripod": 0.5, "ripple": 1 / 3, "wave": 1 / 6, "climb": 1 / 3}
+SWING_SCALE = {"climb": 2.25}  # Klettern: längere Schritte (Schrittdauer mal 2,25)
 SWING_START = {  # wie gait.cpp: Beginn der Schwungphase je Bein
     "tripod": [0, 0.5, 0, 0.5, 0, 0.5],
     "ripple": [2 / 3, 1 / 3, 0, 1 / 6, 5 / 6, 0.5],
     "wave": [2 / 6, 1 / 6, 0, 5 / 6, 4 / 6, 3 / 6],
+    "climb": [2 / 3, 1 / 3, 0, 1 / 6, 5 / 6, 0.5],
 }
+CLIMB_HEIGHT = 50
+
+
+def smooth5(u):
+    u = min(1.0, max(0.0, u))
+    return u * u * u * (10 + u * (-15 + 6 * u))
 
 
 def posture():
@@ -198,7 +206,8 @@ def gait_status():
              and posture() == "standing" and arms() == "down")
     cmd = state["walk"] if fresh else [0, 0, 0]
     sigma = SWING_FRACTION[g["type"]]
-    nominal = 50 / ((1 - sigma) * g["swing_s"] / sigma)
+    scale = SWING_SCALE.get(g["type"], 1.0)
+    nominal = 50 / ((1 - sigma) * g["swing_s"] * scale / sigma)
     # wie gait.cpp: hoch gestellt reicht das Bein nicht weit -> Tempo sinkt
     z = state["pose"]["z"]
     reach = 1.0 if z <= 85 else max(0.0, 1 - (z - 85) / 15)
@@ -207,7 +216,9 @@ def gait_status():
     # langsam = längere Schritte statt kürzerer (Schrittfrequenz passt sich an)
     mag = max((abs(v) for v in cmd), default=0)
     cadence = min(2.0, max(1.0, 0.5 / mag)) if walking and mag > 0 else 1.0
-    cycle = g["swing_s"] * cadence / sigma
+    cycle = g["swing_s"] * scale * cadence / sigma
+    if g["type"] == "climb":
+        g["climb_height"] = CLIMB_HEIGHT
     g.update(active=g["type"], walking=walking, max_speed=round(max_speed), max_side=round(max_speed * 0.76),
              max_turn=round(max_speed / 181 * 57.3), nominal=round(nominal), cadence=round(cadence, 2),
              vx=0, vy=0, wz=0, swing=0)
@@ -367,7 +378,7 @@ def live_msg():
     g = gait_status()
     swing = g["swing"]
     sigma = SWING_FRACTION[g["type"]]
-    cycle = g["swing_s"] * g["cadence"] / sigma
+    cycle = g["swing_s"] * SWING_SCALE.get(g["type"], 1.0) * g["cadence"] / sigma
     phase = (t / cycle) % 1
     stance_s = (1 - sigma) * cycle
     j = []
@@ -382,9 +393,14 @@ def live_msg():
             p = (phase - SWING_START[g["type"]][leg]) % 1
             if p < sigma:  # Schwung: von hinten nach vorne, mit Hub
                 u = p / sigma
-                h = u * u * u * (10 + u * (-15 + 6 * u))
+                if g["type"] == "climb":  # Kastenbahn wie gait.cpp: hoch, vor, runter
+                    h = smooth5((u - 0.25) / 0.5)
+                    z = CLIMB_HEIGHT * smooth5((u if u < 0.5 else 1 - u) / 0.35)
+                else:
+                    h = smooth5(u)
+                    z = g["step_height"] * 16 * (u * (1 - u)) ** 2
                 k = (h - 0.5) * stance_s
-                foot = [n[0] + wx * k, n[1] + wy * k, g["step_height"] * 16 * (u * (1 - u)) ** 2]
+                foot = [n[0] + wx * k, n[1] + wy * k, z]
             else:  # Stand: von vorne nach hinten
                 k = 0.5 * stance_s - (p - sigma) * cycle
                 foot = [n[0] + wx * k, n[1] + wy * k, 0.0]

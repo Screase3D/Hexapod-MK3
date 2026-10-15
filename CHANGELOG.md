@@ -4,6 +4,16 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.20.0
+
+- **Neue Gangart „Klettern“** (`climb`) für kleine Hindernisse wie Teppichkanten und Schwellen: Muster wie
+  Ripple (immer vier Füße am Boden), aber die Füße heben fast senkrecht sehr hoch ab, schwingen oben vor und
+  setzen senkrecht auf (Kastenbahn) – sie stoßen nicht gegen die Kante. Der Fußhub stellt sich selbst so hoch
+  ein, wie Knie und Femur es zulassen (in der Standardhaltung 50 mm statt 15 mm); oben geht der Fuß etwas
+  nach außen, damit das Knie nicht zu weit einknickt. Langsam (ca. 28 mm/s), dafür sicher.
+  - Auswahl unter *Gangart*, neues Profil *Klettern* (Körper 62 mm hoch), Controller-Gangartwechsel.
+  - Wechsel im Lauf von/zu Klettern: kurzer Halt, dann geht es in der neuen Gangart weiter.
+
 ## 0.19.0
 
 - **Kamera-Zoom:** Knopf in der Kameraleiste (1× → 2× → 3× → 4× → 1×), Mausrad oder zwei Finger im Bild,

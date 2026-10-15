@@ -80,7 +80,7 @@ Jeder Befehl wird mit `{"type":"ack","cmd":…,"ok":bool,"msg"?:…}` beantworte
 | `alive` | `on` (bool) | „Lebendig“: im Stand ab und zu kleine zufällige Bewegungen, siehe [kinematik.md](kinematik.md#lebendig); wird gespeichert |
 | `life` | `breathe`, `bored`, `lift`, `walk_fx`, `gaze` (bool), `sleep_min` (1–60), `lift_sens` (1 gering, 2 mittel, 3 hoch) – Teilmenge | „Lebendig wirken“: Atmen, Langeweile/Einschlafen nach `sleep_min`, Zappeln beim Hochheben, Laufen mit Charakter, Augen schauen mit, siehe [kinematik.md](kinematik.md#lebendig-wirken); wird gespeichert |
 | `wave` | – | rechtes Vorderbein winkt (nur wenn oben) |
-| `gait` | `type` (`tripod`/`ripple`/`wave`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wechselt auch im Lauf fließend (`motion.gait.switching` = Übergang läuft) |
+| `gait` | `type` (`tripod`/`ripple`/`wave`/`climb`), `swing_s`, `step_height` (Teilmenge) | Gangparameter, siehe [kinematik.md](kinematik.md#laufen); `type` wechselt auch im Lauf fließend (`motion.gait.switching` = Übergang läuft; von/zu `climb` mit kurzem Halt). Bei `climb` meldet `motion.gait.climb_height` den Fußhub (mm) |
 | `leveling` | `on` (bool) | Lageausgleich an/aus, siehe [kinematik.md](kinematik.md#lageausgleich) |
 | `imu_cal` | `level` (bool) | Lagesensor kalibrieren (2 s ruhig halten): Gyro-Nullpunkt, mit `level` zusätzlich aktuelle Lage = waagerecht. Fortschritt/Ergebnis in der Telemetrie |
 | `imu_level_reset` | – | Nullpunkt (waagerecht) löschen |

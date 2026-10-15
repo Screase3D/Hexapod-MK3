@@ -68,6 +68,7 @@ struct GaitStatus {
   float vx, vy, wz_deg, max_speed, max_side, max_turn_deg, nominal, cadence;
   gait::Type type;
   bool switching;  // Gangwechsel im Lauf läuft noch
+  float climb_height;  // Fußhub beim Klettern (mm)
 } g_status = {};
 float g_body_cmd[5] = {0, 0, 0, 0, 0};  // Körper-Joystick: x, y, roll, pitch, yaw (normiert)
 uint32_t g_body_ms = 0;
@@ -379,20 +380,37 @@ void poseRanges(const PoseState& t, float out[7][2]) {
   for (int i = 0; i < 7; ++i) out[i][0] = cache[i][0], out[i][1] = cache[i][1];
 }
 
+// Klettern: Fußhub so hoch, wie Knie und Femur (Grenze aus der Kalibrierung) es zulassen,
+// auch wenn ein Ecken-Bein beim Vorwärtslaufen bis CLIMB_INWARD mm zum Körper hin steht
+// (höchstens CLIMB_MAX_MM, mindestens der normale Fußhub)
+constexpr float CLIMB_MAX_MM = 50.0f;
+constexpr float CLIMB_INWARD = 20.0f;
+
 // Reichweite für die Gangart: Coxa-Achsen im Lauf-System (Körper verschoben bzw.
 // gedreht) und erlaubter Fußabstand, damit das Knie beim Anheben nicht zu weit
 // einknickt. minFootRadius rechnet etwas länger -> nur bei Änderungen.
-void updateReach(const PoseState& cur, float step_height) {
-  static float last_z = -1.0f, last_stance = -1.0f, last_lift = -1.0f;
-  static float r_min = 0.0f, r_max = 0.0f;
+// Setzt gp.climb_height (Klettern).
+void updateReach(const PoseState& cur, gait::Params& gp) {
+  static float last_z = -1.0f, last_stance = -1.0f, last_lift = -1.0f, last_fmax = 0.0f;
+  static bool last_climb = false;
+  static float r_min = 0.0f, r_max = 0.0f, climb_h = CLIMB_MAX_MM;
+  const bool climb = gp.type == gait::Type::Climb || g_gait.activeType() == gait::Type::Climb;
+  float fmax = 180.0f;  // Femur höchstens (mit Abstand zur Grenze)
+  for (int leg = 0; leg < NUM_LEGS; ++leg) fmax = fminf(fmax, g_hi[leg * 3 + 1] - ARM_MARGIN_DEG);
   if (fabsf(cur.pose.z - last_z) > 0.25f || fabsf(cur.stance - last_stance) > 0.25f ||
-      step_height != last_lift) {
+      gp.step_height != last_lift || climb != last_climb || fmax != last_fmax) {
     last_z = cur.pose.z;
     last_stance = cur.stance;
-    last_lift = step_height;
-    r_min = gait::minFootRadius(LEG_GEOMETRY, cur.stance, cur.pose.z, step_height, KNEE_MIN_DEG);
+    last_lift = gp.step_height;
+    last_climb = climb;
+    last_fmax = fmax;
+    climb_h = gait::climbHeight(LEG_GEOMETRY, cur.stance, cur.pose.z, CLIMB_INWARD, KNEE_MIN_DEG, fmax,
+                                gp.step_height, CLIMB_MAX_MM);
+    r_min = climb ? gait::minFootRadius(LEG_GEOMETRY, cur.stance, cur.pose.z, climb_h, KNEE_MIN_DEG, true, fmax)
+                  : gait::minFootRadius(LEG_GEOMETRY, cur.stance, cur.pose.z, gp.step_height, KNEE_MIN_DEG);
     r_max = gait::maxFootRadius(LEG_GEOMETRY, cur.pose.z);
   }
+  gp.climb_height = climb_h;
   kin::Vec3 coxa[NUM_LEGS];
   for (int leg = 0; leg < NUM_LEGS; ++leg) coxa[leg] = kin::coxaWorld(cur.pose, LEG_MOUNTS[leg]);
   g_gait.setReach(coxa, r_min, r_max);
@@ -776,7 +794,7 @@ bool applyGaitJson(JsonVariantConst o, String& err) {
   if (o["type"].is<const char*>()) {
     gait::Type t;
     if (!gait::typeFromName(o["type"].as<const char*>(), t)) {
-      err = "unbekannte Gangart (tripod, ripple, wave)";
+      err = "unbekannte Gangart (tripod, ripple, wave, climb)";
       return false;
     }
     next.type = t;
@@ -1270,7 +1288,7 @@ void updateStep(float dt) {
   neutralFeet(g_current.stance, neutral);
   neutral[1].x += ao.mid_dx;
   neutral[4].x += ao.mid_dx;
-  updateReach(g_current, gp.step_height);
+  updateReach(g_current, gp);
   g_gait.setParams(gp);
   // "Lebendig" blendet noch aus (hebt evtl. gerade einen Fuß): so lange keine Schritte
   // beginnen – weder Laufen noch Umsetzen der Füße (Vorderbeine heben, Hinsetzen) –, sonst
@@ -1349,6 +1367,7 @@ void updateStep(float dt) {
   st.cadence = g_gait.cadence();
   st.type = g_gait.activeType();
   st.switching = g_gait.transitioning();
+  st.climb_height = gp.climb_height;
 
   portENTER_CRITICAL(&g_mux);
   g_unreachable = unreachable;
@@ -1485,6 +1504,7 @@ void toJson(JsonObject obj) {
   g["step_height"] = gp.step_height;
   if (m != Mode::Pose) return;
   g["active"] = gait::typeName(st.type);
+  if (gp.type == gait::Type::Climb || st.type == gait::Type::Climb) g["climb_height"] = roundf(st.climb_height);
   if (st.switching) g["switching"] = true;
   g["walking"] = st.walking;
   g["swing"] = st.swing;
