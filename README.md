@@ -1,238 +1,181 @@
-# Hexapod-MK3
+# Hexapod MK3
 
-Dritte Version des 3D-gedruckten Hexapods – diesmal mit ESP32-S3-CAM.
-18× MG90S an 2× PCA9685, MPU6050, Kamera, Steuerung per Browser über WLAN.
+A 3D-printed six-legged robot with 18 servos, driven by an **ESP32-S3-CAM**. Inverse kinematics, three gaits,
+a camera stream and a lot of personality – controlled from a web interface the robot serves itself (PC and
+phone), or with an Xbox controller over Bluetooth.
 
-**Ziel:** natürliche, fließende Bewegungen mit inverser Kinematik, gesteuert über eine
-Weboberfläche, die der ESP32 selbst ausliefert (PC und Smartphone), inklusive Kamerastream –
-später erweitert um KI-Funktionen mit der Kamera.
+<p align="center">
+  <img src="docs/images/ui-control.png" alt="Control page" width="74%">
+  <img src="docs/images/ui-phone.png" alt="Control page on a phone" width="22%">
+</p>
 
-## Stand
+## Features
 
-| Phase | Inhalt | Status |
+- **Walking** – inverse kinematics for all 18 joints, tripod / ripple / wave gait (switchable while walking),
+  smooth foot paths, direction-dependent speed limits from the legs' real reach.
+- **Posture** – height, stance, shift, roll, pitch, yaw; each slider shows its currently reachable range;
+  IMU levelling; stand up / sit down; front-leg mode (lift, steer, wave); body joystick and gestures.
+- **Personality** – emotes with animated eyes, games, a choreography editor, idle "alive" motions, breathing,
+  boredom and falling asleep, wriggling when picked up, expressive walking (inertia, look-ahead, hip sway).
+- **Camera** – MJPEG stream, photo and video recording in the browser, full-screen driver view with on-screen
+  joysticks, artificial horizon.
+- **Input** – touch joysticks, keyboard (WASD), Xbox (Elite) controller via Bluetooth on the robot or via the
+  browser's Gamepad API; every button remappable.
+- **Self-contained** – the UI is embedded in the firmware and needs no internet (works in access-point mode);
+  installable as a home-screen app. The UI language is German.
+- **Safe & maintainable** – E-stop (STOP / Esc), connection watchdog, battery protection, OTA updates,
+  event log, live system metrics and history.
+
+## Web interface
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<b>Steuerung</b> (control)<br>
+<a href="docs/images/ui-control.png"><img src="docs/images/ui-control.png" alt="Control"></a>
+<ul>
+<li>Camera stream, snapshot, video, horizon, driver view</li>
+<li>Live 3D model (legs in the air, support polygon)</li>
+<li>Joysticks for walking, body or front legs; gait and speed</li>
+<li>Servo / IK switches and posture profiles</li>
+</ul>
+</td>
+<td width="50%" valign="top">
+<b>Verhalten</b> (behaviour)<br>
+<a href="docs/images/ui-behavior.png"><img src="docs/images/ui-behavior.png" alt="Behaviour"></a>
+<ul>
+<li>19 emotes (angry, attack, in love, party …) and games</li>
+<li>Eye colours and effects, choreography editor with templates</li>
+<li>Liveliness: idle motions, breathing, boredom/sleep, wriggling, gaze</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td valign="top">
+<b>Kamera &amp; Lagesensor</b> (camera &amp; IMU)<br>
+<a href="docs/images/ui-camera.png"><img src="docs/images/ui-camera.png" alt="Camera and IMU"></a>
+<ul>
+<li>Live preview and all camera settings (resolution, quality, presets, exposure …)</li>
+<li>Attitude display, IMU mounting, zero point and gyro calibration</li>
+</ul>
+</td>
+<td valign="top">
+<b>Kalibrierung &amp; Justierung</b> (calibration)<br>
+<a href="docs/images/ui-calibration.png"><img src="docs/images/ui-calibration.png" alt="Calibration"></a>
+<ul>
+<li>Guided per-servo calibration (centre, reference angle, limits)</li>
+<li>Fine adjustment of all 18 joints, export / import</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td valign="top">
+<b>Systemübersicht</b> (system)<br>
+<a href="docs/images/ui-system.png"><img src="docs/images/ui-system.png" alt="System"></a>
+<ul>
+<li>Battery, Wi-Fi, control loop, camera, memory at a glance</li>
+<li>30-minute history, components, I²C scan, event log, reboot</li>
+</ul>
+</td>
+<td valign="top">
+<b>LEDs</b><br>
+<a href="docs/images/ui-leds.png"><img src="docs/images/ui-leds.png" alt="LEDs"></a>
+<ul>
+<li>Eye colour and effect per state (idle, standing, walking, gesture …)</li>
+<li>Brightness, single colour or off, board LED</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td valign="top">
+<b>Controller</b><br>
+<a href="docs/images/ui-controller.png"><img src="docs/images/ui-controller.png" alt="Controller"></a>
+<ul>
+<li>Button map per mode, tap to remap, live input</li>
+<li>Bluetooth pairing on the robot or browser gamepad; dead zone, curve</li>
+</ul>
+</td>
+<td valign="top">
+<b>Einstellungen</b> (settings)<br>
+<a href="docs/images/ui-settings.png"><img src="docs/images/ui-settings.png" alt="Settings"></a>
+<ul>
+<li>Movement: posture sliders, levelling, step timing, servo speed</li>
+<li>Wi-Fi setup and signal meter, battery, firmware update, theme</li>
+</ul>
+</td>
+</tr>
+</table>
+
+## Hardware
+
+| Part | Type | Notes |
 |---|---|---|
-| 1 | Grundgerüst: WLAN, Webserver, Kamerastream (mit Drehung), Servotreiber, **Servo-Kalibrierung**, manuelle Servosteuerung, I²C-Scan, Akku-/Sicherheitsfunktionen, CI-Build | ✅ läuft auf der Hardware |
-| 2 | Kinematik: inverse Kinematik je Bein, Körperhaltung (Höhe, Fußabstand, Verschieben, Rollen/Nicken/Gieren) | ✅ läuft am Roboter, Beinmaße aus dem CAD ([Zeichnung](docs/beingeometrie.png), [docs/kinematik.md](docs/kinematik.md)), inklusive Aufstehen/Hinsetzen; Haltung wird gespeichert, unerreichbare Haltungen werden begrenzt und gemeldet |
-| 3 | Gangarten (Dreifuß, Ripple, Welle) mit weichen Fußbahnen, Touch-Joysticks und Tastatur in der UI, Verbindungs-Watchdog | ✅ läuft am Roboter; jetzt mit richtungsabhängiger Reichweitengrenze, bis 175 mm/s (Profil *Sport* 216 mm/s) und mitwachsender Schrittdauer beim langsamen Laufen ([docs/kinematik.md](docs/kinematik.md#laufen)) – noch nicht am Roboter getestet |
-| 3b | Körper-Joystick (Schwerpunkt verlagern, neigen), Gesten (Kreisen, Ja, Nein, Liegestütz, Tanzen), **Vorderbeine** heben und steuern, Winken | ✅ läuft am Roboter; Vorderbeine jetzt mit großem, IK-geprüftem Arbeitsraum (schwenken, 15–160 mm hoch, ausstrecken) – noch nicht am Roboter getestet |
-| 3c | **Lebendig**: im Stand ab und zu kleine zufällige Bewegungen (umschauen, Gewicht verlagern, Bein heben, tippen, Füße neu setzen, atmen) | 🟡 implementiert und auf dem PC getestet – noch nicht am Roboter |
-| 3d | **Version** in den Einstellungen, **LED-Einstellungen** (Farbe/Effekt der Augen je Zustand), **Xbox-Controller** direkt per Bluetooth oder über den Browser ([docs/controller.md](docs/controller.md)) | 🟡 implementiert und auf dem PC getestet – Bluetooth-Controller noch nicht mit echter Hardware getestet |
-| 4 | Lagesensor-Kalibrierung (Einbaulage, Nullpunkt, Gyro) und **Lageausgleich** (Körper waagerecht halten); Geländeanpassung | 🟡 Lageausgleich implementiert und auf dem PC getestet – noch nicht am Roboter; Geländeanpassung geplant |
-| 3e | **Fahrer-Ansicht** (Kamera im Vollbild mit Joysticks), **Profile** (Haltung + Gang), **Firmware-Update über WLAN**, **Ereignisprotokoll** (u. a. Neustartgrund), Antwortzeit, App auf dem Home-Bildschirm | 🟡 implementiert und im Browser/auf dem PC getestet – noch nicht am Roboter |
-| 5 | Kamera/KI: Objekterkennung (auf dem ESP32-S3 oder am PC über den Stream), Folgen | Ideen |
+| Controller | ESP32-S3-CAM (N16R8) | 16 MB flash, 8 MB PSRAM, CH340 on the "TTL" USB port |
+| Camera | OV5640 (OV2640 also detected) | sleeps without a stream (the OV5640 runs hot) |
+| Servo drivers | 2× PCA9685 | `0x40` right legs 4–6, `0x41` (A0 bridged) left legs 1–3 |
+| Servos | 18× MG90S | coxa / femur / tibia per leg |
+| IMU | MPU6050 (GY-521) | `0x68` |
+| Eyes | 2× WS2812B | GPIO 14 |
+| Battery | 2S 18650 (6.0–8.4 V), 7.5 A fuse | no BMS – the firmware can protect the cells |
+| Power | 2× UBEC 5 V (one per PCA9685), mini buck 5 V | logic and servos on separate supplies |
 
-## Repository
+Main pins: I²C SDA 47 / SCL 21 (PCA9685, MPU6050), battery sense GPIO 1 (100 k / 47 k divider), eyes GPIO 14.
+All pins live in [`firmware/include/config.h`](firmware/include/config.h). Wiring:
+[`docs/hexapod_schaltplan_v4.png`](docs/hexapod_schaltplan_v4.png), details and servo mapping:
+[`docs/hardware.md`](docs/hardware.md), leg geometry: [`docs/beingeometrie.png`](docs/beingeometrie.png).
 
-```
-docs/
-  hexapod_schaltplan_v4.png          Verdrahtungsplan (PCA #1 = rechte Beine, #2 = linke)
-  ESP32_S3_Camera_Instructions.pdf   Board-Doku (Pinout S. 4)
-  hardware.md                        Pinbelegung, Servo-Zuordnung, Hinweise zur Schaltung
-  kalibrierung.md                    Gelenk-Konvention und Kalibrierablauf
-  kinematik.md                       Beinmaße, Koordinatensysteme, Körperhaltung
-  beingeometrie.svg/.png             Maßzeichnung Bein + Körper (erzeugt von beingeometrie.py)
-  montagelehre.pdf                   Lehre 1:1 zum Aufstecken der Servohörner (montagelehre.py)
-  api.md                             REST-, WebSocket- und Stream-Schnittstellen
-  controller.md                      Xbox-Controller koppeln und belegen
-CHANGELOG.md                         Änderungen je Version
-firmware/                            PlatformIO-Projekt
-  VERSION                            Firmware-Version (wird mit dem Git-Stand eingebettet)
-  platformio.ini
-  include/config.h                   alle Pins, Adressen, Grenzwerte
-  include/robot_geometry.h           Beinmaße und Montagepunkte (für die IK)
-  src/main.cpp                       Start, Regel-Task, Sicherheitslogik
-  src/servo/                         PCA9685-Treiber, Servo-Mapping, Kalibrierung, ServoController
-  src/kinematics/                    inverse/Vorwärts-Kinematik, Gangarten (reine Mathematik)
-  src/motion/                        Körperhaltung + Gang → IK → Servos (IK-Modus)
-  src/sensors/                       Akku, MPU6050, I²C-Scan
-  src/net/                           WLAN, HTTP/WebSocket, Kamera, Befehle
-  src/ui/                            Augen-LEDs: Zustände, Farben, Effekte, Einstellungen
-  src/input/                         Xbox-Controller: Bluetooth (NimBLE), Belegung, Ausführung
-  web/                               Weboberfläche (HTML/CSS/JS, wird in die Firmware eingebettet)
-  tools/mock_server.py               Oberfläche am PC ohne Roboter testen
-  test_host/                         Tests, die auf dem PC laufen (Kinematik, Gang, Bewegungen, LEDs, Controller)
-.github/workflows/firmware.yml       CI: Tests + Firmware-Build bei jedem Push
+## Installation
+
+**1. Toolchain** – install [Git](https://git-scm.com/), [VS Code](https://code.visualstudio.com/) and the
+**PlatformIO IDE** extension (or PlatformIO Core). On Windows enable long paths once (PowerShell as admin, then
+reboot):
+
+```powershell
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+git config --global core.longpaths true
 ```
 
-## Kompilieren und Flashen
+**2. Build and flash**
 
-### Einmalig einrichten
-
-1. **[Git](https://git-scm.com/download/win)** installieren – die ESP32-Plattform braucht es
-   auch dann, wenn der Code als ZIP geladen wird (sonst: „Git not found in PATH“). Im
-   Installer die Standardoption „Git from the command line and also from 3rd-party software“
-   beibehalten. Alternativ in PowerShell: `winget install --id Git.Git -e`.
-2. **Lange Dateipfade erlauben** (nur Windows). Die ESP32-Bibliotheken enthalten Dateien mit
-   sehr tiefen Pfaden; ohne diese Einstellung bricht der erste Build beim Entpacken mit
-   `FileNotFoundError … esp32-arduino-libs …` ab. PowerShell **als Administrator** öffnen und
-   ausführen, danach Windows neu starten:
-   ```
-   New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
-   git config --global core.longpaths true
-   ```
-3. **[VS Code](https://code.visualstudio.com/)** installieren, darin die Erweiterung
-   **PlatformIO IDE** (Erweiterungen-Ansicht, nach „PlatformIO“ suchen). Danach VS Code
-   komplett schließen und neu starten, damit Git im PATH gefunden wird.
-4. **Code holen** – am besten in einen kurzen Pfad ohne Leerzeichen, z. B. `C:\dev\` (Windows
-   hat Probleme mit sehr langen Pfaden):
-   ```
-   git clone https://github.com/Screase3D/Hexapod-MK3.git
-   ```
-   Ohne Git: auf GitHub *Code* → *Download ZIP* und entpacken.
-5. In VS Code **Datei → Ordner öffnen → `Hexapod-MK3/firmware`** wählen (der Ordner mit der
-   `platformio.ini`, nicht das Repo-Hauptverzeichnis).
-6. WLAN-Zugangsdaten müssen **nicht** in den Code: Das Heimnetz wird nach dem Flashen über die
-   Oberfläche eingerichtet (siehe [Erster Start](#erster-start)). Nur wer sie trotzdem fest
-   einkompilieren will, kopiert `include/secrets.example.h` nach `include/secrets.h`.
-
-### Kompilieren
-
-- In der blauen Statusleiste unten auf **✓ (Build)** klicken – oder im Terminal `pio run`.
-- Beim **ersten** Build lädt PlatformIO die Plattform
-  [pioarduino](https://github.com/pioarduino/platform-espressif32) (Arduino-Core 3.3 auf
-  ESP-IDF 5.5) samt Compiler. Das dauert je nach Internet 5–20 Minuten und belegt rund
-  **4 GB** Platz. Danach dauert ein Build unter einer Minute.
-- Bricht der erste Build beim Entpacken ab, vor dem nächsten Versuch den Ordner
-  `%USERPROFILE%\.platformio\.cache\tmp` leeren und – falls vorhanden – den halb entpackten
-  Ordner `%USERPROFILE%\.platformio\packages\framework-arduinoespressif32-libs` löschen.
-- Erfolgreich, wenn am Ende `[SUCCESS]` steht.
-
-### Flashen
-
-1. **Hauptschalter SW1 aus** (der ESP darf nicht gleichzeitig über USB und den Buck-Wandler
-   versorgt werden, siehe Schaltplan).
-2. Board über die USB-C-Buchse **„TTL“** anschließen (nicht „OTG“). Erscheint unter Windows
-   kein COM-Port im Geräte-Manager, den CH340/CH343-Treiber installieren
-   (siehe Board-Doku, Seite „instructions“).
-3. In der Statusleiste auf **→ (Upload)** klicken – oder `pio run -t upload`. PlatformIO
-   findet den Port normalerweise selbst; sonst in `platformio.ini` z. B.
-   `upload_port = COM7` ergänzen.
-4. Falls „Failed to connect to ESP32-S3“ erscheint: **BOOT** gedrückt halten, kurz **RST**
-   drücken, BOOT loslassen und den Upload wiederholen.
-5. **Serieller Monitor:** Stecker-Symbol in der Statusleiste (oder `pio device monitor`),
-   115200 Baud. Nach einem Druck auf **RST** erscheint z. B.:
-   ```
-   [Servo] PCA9685 #1 (0x40): OK, #2 (0x41): OK
-   [IMU]   MPU6050 (0x68): OK
-   [Akku]  0.42 V (Überwachung aus, Tiefschlaf an)
-   [Kamera] OK (schläft bis zum ersten Stream)
-   [WiFi] Access Point "Hexapod-MK3" aktiv, IP 192.168.4.1
-   [Web]   http://192.168.4.1/  bzw.  http://hexapod.local/
-   ```
-   Ohne Servo-Versorgung (SW1 aus) werden die PCA9685 trotzdem erkannt – deren Logik hängt
-   an den 3,3 V des ESP.
-
-Gespeicherte Einstellungen (Kalibrierung, WLAN, Kamera, Akku-Schalter) bleiben bei einem
-erneuten Upload erhalten.
-
-### Über WLAN aktualisieren (ohne Kabel)
-
-Läuft schon eine Firmware ab 0.7.0, geht jedes weitere Update über WLAN – die Servos werden dabei
-stromlos, danach startet der ESP32 neu:
-
-- **Aus PlatformIO:** unten in der Statusleiste die Umgebung **`hexapod_ota`** wählen (statt
-  `hexapod`) und **→ (Upload)** – oder `pio run -e hexapod_ota -t upload`. Der PC muss im selben WLAN
-  sein; findet er `hexapod.local` nicht, in `platformio.ini` bei `hexapod_ota` die IP als
-  `upload_port` eintragen. Optional mit Passwort: `OTA_PASSWORD` in `include/secrets.h`.
-- **Aus der Oberfläche:** *Einstellungen → Firmware-Update*, `firmware.bin` aus
-  `firmware/.pio/build/hexapod/` (oder aus dem CI-Artefakt) wählen, **Hochladen**. Die Seite lädt
-  nach dem Neustart von selbst neu.
-
-Geht dabei etwas schief (Strom weg, WLAN-Abbruch), bleibt die alte Firmware aktiv. Startet eine neue
-Firmware gar nicht, hilft das Flashen per USB.
-
-### Alternative: fertige Firmware im Browser flashen
-
-Jeder Push baut die Firmware automatisch auf GitHub (Workflow *Firmware*). Ohne lokale
-Toolchain:
-
-1. Auf GitHub **Actions → Firmware →** den neuesten grünen Lauf öffnen und unter *Artifacts*
-   **hexapod-firmware** herunterladen (GitHub-Login nötig), ZIP entpacken.
-2. In **Chrome oder Edge** <https://espressif.github.io/esptool-js/> öffnen, Board an „TTL“
-   anschließen (SW1 aus) und **Connect** wählen, dann den COM-Port auswählen.
-3. Unter *Flash Address* `0x0` eintragen, die Datei **`firmware.factory.bin`** auswählen und
-   **Program** klicken. *Erase Flash* nicht nötig – sonst gehen gespeicherte Einstellungen
-   (Kalibrierung, WLAN) verloren.
-4. Danach **RST** drücken. Die serielle Ausgabe zeigt z. B. das Terminal derselben Seite
-   (115200 Baud).
-
-### Erster Start
-
-1. **WLAN einrichten** (einmalig, ohne Dateien zu bearbeiten):
-   1. Handy oder PC mit dem WLAN **„Hexapod-MK3“** verbinden (Passwort `hexapod123`).
-      Die Oberfläche öffnet sich meist von selbst (Captive Portal), sonst `http://192.168.4.1`
-      im Browser aufrufen.
-   2. Auf **„WLAN einrichten“** tippen (Banner oben) bzw. Menü *Einstellungen* → *WLAN*.
-   3. **„Netze suchen“**, das Heimnetz antippen, Passwort eingeben, **„Verbinden“**.
-      Nur 2,4-GHz-Netze werden unterstützt.
-   4. Nach wenigen Sekunden zeigt die Karte die **neue Adresse** im Heimnetz an
-      (z. B. `http://192.168.178.57`). Das Gerät wieder mit dem Heimnetz verbinden und diese
-      Adresse öffnen – am besten als Lesezeichen. Der Access Point schaltet sich danach ab.
-
-   Die Zugangsdaten bleiben gespeichert. Beim Start versucht der Hexapod das Heimnetz bis zu 20 s
-   lang (mehrere Anläufe – direkt nach einem Neustart lehnt der Router die erste Anmeldung oft
-   ab) und nimmt bei mehreren Zugangspunkten mit gleichem Namen den stärksten. Klappt es nicht,
-   startet der Access Point und der Hexapod versucht es nach 10, 20, 40 s und dann jede Minute
-   erneut (mit Geräten am Access Point alle 3 min). Grund, Anläufe und Dauer stehen im
-   Ereignisprotokoll und unter *Einstellungen → WLAN*.
-   Alternativ zur IP funktioniert oft auch `http://hexapod.local`.
-2. Zum Bewegen der Servos braucht es den Akku: USB abziehen, SW1 ein, dann über WLAN
-   weiterarbeiten.
-3. Servos kalibrieren: Anleitung in [docs/kalibrierung.md](docs/kalibrierung.md), Lehre zum
-   Aufstecken der Hörner: [docs/montagelehre.pdf](docs/montagelehre.pdf).
-
-Nach dem Start sind alle Servos **stromlos**, bis in der Oberfläche *Torque* eingeschaltet wird.
-Not-Aus jederzeit über **STOP** (oder Taste **Esc**).
-
-Die **Akkuüberwachung** (Warnung, Servo-Abschaltung, Tiefschlaf) ist ab Werk **aus**. Erst
-nach dem Bestücken des Spannungsteilers an GPIO 1 unter *Einstellungen* → *Akku* einschalten, siehe
-[Hinweise zur Schaltung](docs/hardware.md#hinweise-zur-schaltung).
-
-## Architektur
-
-```
-            Core 0                                   Core 1
- ┌─────────────────────────────┐      ┌───────────────────────────────────┐
- │ WLAN, mDNS                  │      │ Regel-Task, 50 Hz                 │
- │ HTTP :80  UI, REST, /ws ────┼─────►│  MPU6050 lesen                    │
- │           (setzt Sollwerte) │      │  Akku (10 Hz) → Schutz (optional) │
- │ HTTP :81  MJPEG-Stream      │      │  Pose-Modus: Haltung → IK         │
- │ Kamera-Treiber              │      │  Rampen → PCA9685 (einziger I²C-  │
- └─────────────────────────────┘      │  Nutzer, nur bei Änderungen)      │
-                                      └───────────────────────────────────┘
- loop(): Telemetrie (4 Hz) an alle WebSocket-Clients, Status-LEDs, Sicherheitslogik
+```bash
+git clone https://github.com/Screase3D/Hexapod-MK3.git
+cd Hexapod-MK3/firmware          # the folder with platformio.ini
+pio run -t upload                # or ✓ / → in the VS Code status bar
 ```
 
-- Kamera-Stream auf eigenem Server (Port 81), damit ein laufender Stream die Steuerung nicht
-  blockiert. Ohne Stream schläft die Kamera (der OV5640 wird im Dauerbetrieb sehr heiß).
-- Die Oberfläche hat keine externen Abhängigkeiten und funktioniert daher auch im
-  Access-Point-Modus ohne Internet.
-- Alle Einstellungen (Kalibrierung, WLAN, Kamera) liegen im NVS und überleben Firmware-Updates.
+- Main switch **SW1 off**, connect the **"TTL"** USB-C port. If the upload can't connect: hold **BOOT**,
+  tap **RST**, release BOOT and retry.
+- The first build downloads the ESP32 platform (~4 GB, 5–20 min); later builds take under a minute.
+- No toolchain? Every push builds the firmware on GitHub: download the *hexapod-firmware* artifact from
+  **Actions → Firmware** and flash `firmware.factory.bin` at `0x0` with
+  [esptool-js](https://espressif.github.io/esptool-js/) (Chrome/Edge).
 
-## Oberfläche
+**3. First start**
 
-Menü links (am PC einklappbar, am Handy über ☰), Not-Aus **STOP** (oder Taste **Esc**) immer
-oben rechts. Jede Seite hat eine eigene Adresse, z. B. `http://hexapod.local/#kalibrierung`.
+1. Join the Wi-Fi **`Hexapod-MK3`** (password `hexapod123`); the UI opens as a captive portal or at
+   `http://192.168.4.1`.
+2. *Einstellungen → WLAN*: pick your home network (2.4 GHz) and connect. The robot then shows its new address;
+   `http://hexapod.local` usually works too.
+3. Unplug USB, switch SW1 on, calibrate the servos ([`docs/kalibrierung.md`](docs/kalibrierung.md), horn jig
+   [`docs/montagelehre.pdf`](docs/montagelehre.pdf)).
 
-| Seite | Inhalt |
-|---|---|
-| **Steuerung** | Nur was man zum Fahren braucht: Kamerastream (Vollbild, Lage als künstlicher Horizont im Bild, Foto, **Videoaufnahme** im Browser; ⚙ führt zu den Kameraeinstellungen), **Fahrer-Ansicht** (Kamera im Vollbild mit Joysticks, Modus, Aufstehen, STOP – am Handy quer), **3D-Ansicht** (Live-Modell aus den Gelenkwinkeln mit 20 Hz: Beine in der Luft, Schatten, Standfläche und Schwerpunkt, Ansichten 3D/Oben/Seite/Vorne, drehbar), Karte *Bewegung* mit drei Modi für die Joysticks: *Laufen* (Gangart, Tempo; W/A/S/D/Q/E, R/F: Höhe), *Körper* (verschieben/neigen, Gesten) und *Vorderbeine* (heben, steuern, winken), Aufstehen/Hinsetzen, Zustand (steht, läuft, schläft …); Karte *Haltung* mit Servos (Torque), IK und **Profilen** (Normal, Stabil, Gelände, Sport, Schleichen, eigene), Hinweise bei unerreichbarer Haltung |
-| **Verhalten** | **Emotes** mit passenden Augen auf einen Tipp (Hallo, Verbeugen, Freuen, Umschauen, Neugierig, Sauer, Angriff, Ängstlich, Überrascht, Traurig, Müde, Verliebt, Party, Strecken und die Gesten), „Überrasch mich“, **Spiele** (Orakel, Würfeln), **Augen** frei wählen (Farbe, Effekt, Dauer) und **Choreografien**: Abfolgen aus Emotes, Gesten, Körperbewegungen, Höhe, Laufen, Vorderbeinen und Pausen, mit Editor, Endlosschleife, Vorlagen (Disco, Begrüßung, Wache schieben), Tempo und Export/Import; der Roboter steht vorher selbst auf, Leertaste/Stopp hält an; **Lebendigkeit**: *Lebendig* (zufällige kleine Bewegungen), Atmen, Langeweile und Einschlafen, Zappeln beim Hochheben (mit Empfindlichkeit), Laufen mit Charakter, Augen schauen mit – einzeln schaltbar, mit Anzeige der Stimmung |
-| **Kamera & Lagesensor** | Live-Vorschau, alle Kameraeinstellungen (Auflösung, auch mit Bluetooth, Qualität, Bildrate, Drehung, Takt, Spiegeln, **Bild-Vorgaben** Automatisch/Bewegung/Innen/Draußen/Nacht, Helligkeit, Belichtung, Verstärkung, Kontrast, Sättigung, Schärfe, Weißabgleich), **Lage** (Nick/Roll, Rohwerte), Lagesensor einrichten (Einbaulage, Nullpunkt, Gyro) |
-| **Kalibrierung & Justierung** | *Kalibrieren*: Servo für Servo (Rohmodus, Montagestellung, Referenz, Grenzen, Test); *Justieren*: alle 18 Gelenke auf einen Blick; Speichern, Export/Import |
-| **Systemübersicht** | Kennzahlen (Akku, WLAN mit Antwortzeit, Regelung, Kamera, Speicher, Laufzeit), **Verlauf** der letzten 30 min (Akkuspannung, WLAN-Signal, Chip-Temperatur, Speicher; mit Tabelle), Komponenten, I²C-Scan, Neustart, **Ereignisse** seit dem Start (Neustartgrund, WLAN, Not-Aus, Akku, Controller, Updates; Punkt im Menü bei neuen Warnungen) |
-| **LEDs** | Augen: Farbe und Effekt je Zustand (Servos aus, steht, läuft, Vorderbeine, Geste, …), eine Farbe für alles oder aus, Helligkeit, Board-LED; Vorschau |
-| **Controller** | Großer Controller mit allen Tasten und ihrer Funktion (antippen zum Umbelegen, Live-Anzeige, Sticks/Trigger je Modus); Xbox-Controller per Bluetooth am Roboter (koppeln, vergessen) oder am Handy/PC über den Browser; Tempo/Totzone/Kennlinie, Sticks tauschen |
-| **Einstellungen** | Gegliedert in **Bewegung** (Haltung: Höhe, Fußabstand, Verschieben, Neigen, Gieren mit erreichbarem Bereich, Lageausgleich; Laufen: Schrittdauer, Fußhub; Servos: Stellgeschwindigkeit, Montagestellung), **Verbindung** (WLAN, **Signal messen** – Empfang 10 s mitteln und vergleichen, z. B. mit/ohne Antenne) und **System** (Akkuüberwachung, Version, **Firmware-Update**, Farbschema, Tastenkürzel) |
+Servos stay unpowered until the *Servos* switch is turned on; **STOP** or **Esc** is the E-stop. Battery
+monitoring is off by default – enable it under *Einstellungen → Akku* once the voltage divider is fitted.
 
-## Oberfläche ohne Roboter entwickeln
+**4. Updates over Wi-Fi** – `pio run -e hexapod_ota -t upload`, or upload `firmware.bin` under
+*Einstellungen → Firmware-Update*. Settings (calibration, Wi-Fi, posture …) survive updates.
 
-```
+## Development
+
+```bash
 cd firmware
-pip install aiohttp
-python tools/mock_server.py      # http://localhost:8080
+pip install aiohttp && python tools/mock_server.py   # UI without the robot: http://localhost:8080
 ```
 
-Der Mock simuliert API, WebSocket und Telemetrie; Änderungen in `web/` sind nach einem
-Neuladen der Seite sichtbar. Beim nächsten Build bettet `scripts/embed_web.py` sie
-automatisch in die Firmware ein.
+Host tests for kinematics, gaits, posture, behaviour, LEDs and controller live in
+[`firmware/test_host/`](firmware/test_host); CI runs them and builds the firmware on every push
+([`.github/workflows/firmware.yml`](.github/workflows/firmware.yml)).
+
+Further documentation (German): [kinematics & gaits](docs/kinematik.md) ·
+[calibration](docs/kalibrierung.md) · [hardware](docs/hardware.md) · [controller](docs/controller.md) ·
+[API](docs/api.md) · [changelog](CHANGELOG.md)
