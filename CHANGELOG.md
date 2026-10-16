@@ -4,6 +4,18 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.21.0
+
+- **Kamera: Rand abschneiden** (*Kamera → Rand abschneiden*, 0–40 %, Seite unten/oben im angezeigten Bild,
+  gespeichert): für Kameras, die etwas vom Roboter mitfilmen – z. B. die Oberseite der Platine, wenn die Kamera
+  wegen eines kurzen Flachbandkabels weiter hinten sitzt. Der OV5640 liest den Streifen gar nicht erst aus
+  (auch in Fotos und Videos); das Bild behält sein Format, links und rechts fällt je die Hälfte so viel weg.
+  Drehung (auch 90°/270°) und Spiegeln werden berücksichtigt; Zoom gilt dann im verbleibenden Bild. Andere
+  Sensoren: die Oberfläche blendet den Streifen aus.
+- **Kamera-Symbol in der Kopfzeile**, solange ein Kamerastream läuft (auch von einem anderen Gerät; mit Anzahl
+  der Zuschauer); ein Klick öffnet die Seite *Kamera*.
+- Handy: leere Akku-Pille (Akku-Überwachung aus) in der Kopfzeile ausgeblendet.
+
 ## 0.20.0
 
 - **Neue Gangart „Klettern“** (`climb`) für kleine Hindernisse wie Teppichkanten und Schwellen: Muster wie

@@ -2250,7 +2250,18 @@ function updatePreview() {
   }
 }
 
+// Kopfzeile: Kamera-Symbol, solange ein Stream läuft (auch von einem anderen Gerät)
+function renderCamPill(c) {
+  const pill = $('pill-cam');
+  const n = c && c.clients ? c.clients : 0;
+  pill.hidden = !n;
+  if (!n) return;
+  setPill('pill-cam', n > 1 ? `Kamera · ${n}` : 'Kamera', 'pill-on', '\u00a0');
+  pill.title = `Kamerastream läuft${n > 1 ? ` (${n} Zuschauer)` : ''}${c.fps !== undefined ? ` · ${c.fps.toFixed(1)} fps` : ''}`;
+}
+
 function renderCamStats(t) {
+  renderCamPill(t.cam);
   if (S.tab === 'camera') {
     const c = t.cam || {};
     $('cam-prev-info').textContent = c.fps !== undefined && c.clients
@@ -2326,6 +2337,19 @@ function renderHud(imu) {
   $('hud-roll').textContent = fmtDeg(imu.roll) + '°';
 }
 
+// Rand abschneiden (Kamera sieht z. B. die Platine vor sich)
+function renderCrop(c) {
+  const r = $('cam-crop');
+  if (document.activeElement !== r) r.value = c.crop || 0;
+  $('cam-crop-val').textContent = `${r.value} %`;
+  $('cam-crop-edge').value = c.crop_edge || 'bottom';
+  const lim = c.crop_active !== undefined && c.crop_active < (c.crop || 0)
+    ? ` Bei dieser Auflösung höchstens ${c.crop_active} %.` : '';
+  $('cam-crop-note').textContent = c.zoom_hw
+    ? `Der Sensor liest diesen Streifen gar nicht erst aus; das Bild behält sein Format, links und rechts fällt je die Hälfte so viel weg.${lim}`
+    : 'Die Oberfläche blendet den Streifen aus (Bild wird entsprechend vergrößert).';
+}
+
 function renderCamera() {
   const c = S.camera;
   if (!c) return;
@@ -2357,6 +2381,7 @@ function renderCamera() {
   if (c.zoom_hw && !ZOOM.pending && !ZOOM.busy && c.zoom !== undefined) ZOOM.z = ZOOM.raw = c.zoom;
   else if (!c.zoom_hw) ZOOM.z = ZOOM.raw = Math.min(ZOOM.z, zoomMax());
   renderZoom();
+  renderCrop(c);
   renderCamImage(c);
   $('cam-toggle').disabled = !c.ok;
 }
@@ -2436,8 +2461,21 @@ function renderZoom() {
     $(id).classList.toggle('active', ZOOM.z > 1);
     $(id).disabled = !c.ok;
   }
-  // nur ohne Sensor-Zoom: Bild in der Oberfläche vergrößern
-  for (const id of ['cam-view', 'cam-prev-view']) $(id).style.setProperty('--zoom', c.zoom_hw ? 1 : ZOOM.z);
+  // ohne Sensor-Zoom: Bild in der Oberfläche vergrößern und den Rand abschneiden (gleiche Wirkung:
+  // sichtbar bleibt der Teil ohne den Streifen, im gleichen Seitenverhältnis, dazu der Zoom)
+  const crop = c.zoom_hw ? 0 : (c.crop || 0) / 100;
+  const scale = c.zoom_hw ? 1 : ZOOM.z / (1 - crop);
+  // Mitte des sichtbaren Teils im Bild (0..1); 90°/270°: unten im Bild = rechts im Stream
+  const near = (1 - crop) / 2, far = 1 - near;
+  const side = c.crop_edge === 'top' ? near : far;
+  const rot90 = c.rotation === 90 || c.rotation === 270;
+  const cx = rot90 ? 1 - side : 0.5, cy = rot90 ? 0.5 : 1 - side;
+  for (const id of ['cam-view', 'cam-prev-view']) {
+    const st = $(id).style;
+    st.setProperty('--zoom', scale);
+    st.setProperty('--cam-tx', `${(scale * (0.5 - cx) * 100).toFixed(2)}%`);
+    st.setProperty('--cam-ty', `${(scale * (0.5 - cy) * 100).toFixed(2)}%`);
+  }
   const r = $('cam-zoom-r');
   r.max = zoomMax();
   if (document.activeElement !== r) r.value = ZOOM.z;
@@ -2662,6 +2700,9 @@ function bindCamera() {
   $('cam-zoom').onclick = cycleZoom;
   $('fpv-zoom').onclick = cycleZoom;
   $('cam-zoom-r').oninput = (e) => setZoom(+e.target.value);
+  $('cam-crop').oninput = (e) => { $('cam-crop-val').textContent = `${e.target.value} %`; };
+  $('cam-crop').onchange = (e) => setCamera({ crop: +e.target.value });
+  $('cam-crop-edge').onchange = (e) => setCamera({ crop_edge: e.target.value });
   bindZoomGestures($('cam-view'));
   bindZoomGestures($('cam-prev-view'));
   $('cam-vflip').onchange = (e) => setCamera({ vflip: e.target.checked });

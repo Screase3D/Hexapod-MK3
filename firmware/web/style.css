@@ -226,6 +226,11 @@ main { width: 100%; max-width: 1320px; margin: 0 auto; padding: 20px 20px 48px; 
   .ptext[data-short]::after { content: attr(data-short); font-size: 0.82rem; }
   #pill-bat .ic { display: none; }
   .pill-idle { padding: 0 9px; }
+  /* Akku aus/USB: ohne Symbol und Text bliebe nur eine leere Pille */
+  #pill-bat.pill-idle { display: none; }
+  /* Kamera: nur das Symbol */
+  #pill-cam { padding: 0 9px; gap: 0; }
+  #pill-cam .ptext { display: none; }
   .btn-estop { padding: 0 13px; }
 }
 
@@ -406,7 +411,8 @@ details.fold[open] summary { margin-bottom: 4px; }
   position: relative; aspect-ratio: 4 / 3; background: #05080b; overflow: hidden;
   display: flex; align-items: center; justify-content: center; container-type: size;
 }
-.cam-view img { width: 100%; height: 100%; object-fit: contain; display: none; transform: scale(var(--zoom, 1)); }
+.cam-view img { width: 100%; height: 100%; object-fit: contain; display: none;
+  transform: translate(var(--cam-tx, 0%), var(--cam-ty, 0%)) scale(var(--zoom, 1)); }
 /* Bild läuft: zwei Finger zoomen das Kamerabild statt der Seite */
 .cam-view.live { touch-action: pan-x pan-y; }
 .cam-view.live img { display: block; }
@@ -417,7 +423,7 @@ details.fold[open] summary { margin-bottom: 4px; }
 .cam-view.rot90 { aspect-ratio: 3 / 4; width: min(100%, 60vh); margin: 0 auto; }
 .cam-view.rot90 img {
   position: absolute; top: 50%; left: 50%; width: 100cqh; height: 100cqw;
-  transform: translate(-50%, -50%) rotate(90deg) scale(var(--zoom, 1));
+  transform: translate(-50%, -50%) rotate(90deg) translate(var(--cam-tx, 0%), var(--cam-ty, 0%)) scale(var(--zoom, 1));
 }
 .cam-view:fullscreen { aspect-ratio: auto; width: 100%; height: 100%; }
 .cam-badges { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; pointer-events: none; }

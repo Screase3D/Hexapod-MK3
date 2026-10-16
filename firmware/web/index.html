@@ -109,6 +109,7 @@
         <div class="pills">
           <span id="pill-conn" class="pill pill-bad" title="Verbindung"><span class="pdot"></span><span class="ptext">Getrennt</span></span>
           <a id="pill-pad" class="pill" href="#controller" title="Controller" hidden><svg class="ic"><use href="#i-gamepad"/></svg><span class="ptext">Controller</span></a>
+          <a id="pill-cam" class="pill" href="#kamera" title="Kamerastream läuft" hidden><svg class="ic"><use href="#i-camera"/></svg><span class="ptext">Kamera</span></a>
           <span id="pill-bat" class="pill" title="Akku"><svg class="ic"><use href="#i-battery"/></svg><span class="ptext">Akku –</span></span>
           <span id="pill-torque" class="pill" title="Servos"><svg class="ic"><use href="#i-servo"/></svg><span class="ptext">Servos aus</span></span>
         </div>
@@ -343,6 +344,14 @@
                     <label for="cam-zoom-r">Zoom <span id="cam-zoom-val" class="muted"></span></label>
                     <input id="cam-zoom-r" type="range" min="1" max="4" step="0.05" value="1">
                     <p id="cam-zoom-note" class="muted small span-2"></p>
+                    <label for="cam-crop" title="Blendet aus, was die Kamera vom Roboter selbst sieht (z. B. die Platine vor der Linse)">Rand abschneiden <span id="cam-crop-val" class="muted"></span></label>
+                    <input id="cam-crop" type="range" min="0" max="40" step="1" value="0">
+                    <label for="cam-crop-edge">Seite</label>
+                    <select id="cam-crop-edge">
+                      <option value="bottom">unten</option>
+                      <option value="top">oben</option>
+                    </select>
+                    <p id="cam-crop-note" class="muted small span-2"></p>
                     <label for="cam-q">JPEG-Qualität <span id="cam-q-val" class="muted"></span></label>
                     <input id="cam-q" type="range" min="4" max="40" step="1">
                     <label for="cam-fps">Max. Bildrate <span id="cam-fps-val" class="muted"></span></label>

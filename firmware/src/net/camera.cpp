@@ -25,11 +25,13 @@ bool g_ok = false;  // beim Start erkannt
 httpd_handle_t g_httpd = nullptr;
 std::atomic<int> g_stream_clients{0};
 Settings g_settings = {FRAMESIZE_VGA, 12, false, false, 15, 0, CAM_XCLK_HZ / 1000000, FRAMESIZE_CIF,
-                       0, 0, 0, 0, 0, GAINCEILING_8X, 0, false, true, true};
+                       0, 0, 0, 0, 0, GAINCEILING_8X, 0, false, true, true, 0, 0};
 int g_applied_fs = -1;  // zuletzt am Sensor eingestellte Auflösung (-1 = nach dem Aufwecken neu)
 // Zoom (nur im RAM: ändert sich oft, soll den Flash nicht abnutzen; nach dem Neustart 1×)
 float g_zoom = 1.0f;
 float g_applied_zoom = 1.0f;
+float g_applied_crop = 0.0f;  // am Sensor abgeschnitten (Anteil) ...
+int g_applied_edge = -1;      // ... an dieser Seite des Arrays
 bool g_bt_applied = false;  // Bluetooth-Auflösung gerade aktiv (unter g_mutex)
 int g_xclk_active_mhz = 0;  // beim letzten Aufwecken tatsächlich verwendeter Takt
 
@@ -95,6 +97,8 @@ void loadSettings() {
   g_settings.aec2 = p.getBool("aec2", g_settings.aec2);
   g_settings.lenc = p.getBool("lenc", g_settings.lenc);
   g_settings.bpc = p.getBool("bpc", g_settings.bpc);
+  g_settings.crop = constrain(p.getInt("crop", 0), 0, 40);
+  g_settings.crop_edge = p.getInt("cropedge", 0) == 1 ? 1 : 0;
   p.end();
 }
 
@@ -118,6 +122,8 @@ void saveSettings() {
   p.putInt("wb", g_settings.wb_mode);
   p.putBool("aec2", g_settings.aec2);
   p.putBool("lenc", g_settings.lenc);
+  p.putInt("crop", g_settings.crop);
+  p.putInt("cropedge", g_settings.crop_edge);
   p.putBool("bpc", g_settings.bpc);
   p.end();
 }
@@ -128,11 +134,30 @@ bool btReduces() {
 }
 int activeFramesize() { return btReduces() ? g_settings.bt_framesize : g_settings.framesize; }
 
-// Zoom am Sensor: nur OV5640 (Bildausschnitt statt ganzem Sensor); sonst zoomt die Oberfläche
+// Zoom und Abschneiden am Sensor: nur OV5640 (Bildausschnitt statt ganzem Sensor); sonst
+// macht es die Oberfläche
 bool zoomHw() { return g_ok && g_pid == OV5640_PID; }
+// abgeschnittener Anteil bei Auflösung fs (das Fenster darf nicht kleiner als das Bild werden)
+float cropFor(int fs) {
+  const float c = g_settings.crop / 100.0f;
+  if (!zoomHw()) return c;
+  const float m = camzoom::maxCrop(resolution[fs].width, resolution[fs].height, resolution[fs].aspect_ratio);
+  return c < m ? c : m;
+}
 float zoomMax(int fs) {
   if (!zoomHw()) return 4.0f;  // Oberfläche vergrößert das Bild
-  return camzoom::maxZoom(resolution[fs].width, resolution[fs].height, resolution[fs].aspect_ratio);
+  return camzoom::maxZoom(resolution[fs].width, resolution[fs].height, resolution[fs].aspect_ratio, cropFor(fs));
+}
+// Abzuschneidende Seite im Sensor-Array: unten bzw. oben im angezeigten Bild, über Drehung und
+// Spiegeln zurückgerechnet. Ungespiegelt liest der Sensor ab X/Y_ADDR_ST (links/oben) aus.
+// 90°/270°: die Oberfläche dreht das Bild im Uhrzeigersinn – unten ist dann der rechte Rand.
+camzoom::Edge cropEdge() {
+  const bool flip180 = g_settings.rotation == 180 || g_settings.rotation == 270;
+  const bool far = g_settings.crop_edge == 0;  // unten bzw. rechts im Stream
+  if (g_settings.rotation == 90 || g_settings.rotation == 270) {
+    return far != (g_settings.hmirror != flip180) ? camzoom::Edge::XHigh : camzoom::Edge::XLow;
+  }
+  return far != (g_settings.vflip != flip180) ? camzoom::Edge::YHigh : camzoom::Edge::YLow;
 }
 float zoomFor(int fs) {
   const float m = zoomMax(fs);
@@ -145,17 +170,23 @@ void applyToSensor() {
   g_bt_applied = btReduces();
   // Auflösung nur bei Änderung setzen: der Sensor stellt dabei neu ein, das Bild hakt kurz
   const int fs = activeFramesize();
-  const float z = zoomHw() && s->set_res_raw ? zoomFor(fs) : 1.0f;
-  if (fs != g_applied_fs || z != g_applied_zoom) {
-    // 1× bzw. neue Auflösung: Werte des Treibers (auch PLL); Zoom: mittiger Ausschnitt
-    if (fs != g_applied_fs || z <= 1.0f) s->set_framesize(s, (framesize_t)fs);
+  const bool hw = zoomHw() && s->set_res_raw;
+  const float z = hw ? zoomFor(fs) : 1.0f;
+  const float crop = hw ? cropFor(fs) : 0.0f;
+  const int edge = static_cast<int>(cropEdge());
+  if (fs != g_applied_fs || z != g_applied_zoom || crop != g_applied_crop || (crop > 0.0f && edge != g_applied_edge)) {
+    // 1× ohne Abschneiden bzw. neue Auflösung: Werte des Treibers (auch PLL); sonst Ausschnitt
+    const bool raw = z > 1.0f || crop > 0.0f;
+    if (fs != g_applied_fs || !raw) s->set_framesize(s, (framesize_t)fs);
     camzoom::Window w;
     const resolution_info_t& r = resolution[fs];
-    if (z > 1.0f && camzoom::window(r.width, r.height, r.aspect_ratio, z, w)) {
+    if (raw && camzoom::window(r.width, r.height, r.aspect_ratio, z, w, crop, static_cast<camzoom::Edge>(edge))) {
       s->set_res_raw(s, w.sx, w.sy, w.ex, w.ey, w.ox, w.oy, w.tx, w.ty, r.width, r.height, w.scale, w.binning);
     }
     g_applied_fs = fs;
     g_applied_zoom = z;
+    g_applied_crop = crop;
+    g_applied_edge = edge;
   }
   s->set_quality(s, g_settings.quality);
   // Bild: nicht jeder Sensor kann alles (fehlende Funktion -> überspringen)
@@ -522,6 +553,15 @@ bool applyJson(JsonVariantConst obj, String& err) {
   if (obj["aec2"].is<bool>()) next.aec2 = obj["aec2"];
   if (obj["lenc"].is<bool>()) next.lenc = obj["lenc"];
   if (obj["bpc"].is<bool>()) next.bpc = obj["bpc"];
+  if (obj["crop"].is<int>()) next.crop = constrain(obj["crop"].as<int>(), 0, 40);
+  if (obj["crop_edge"].is<const char*>()) {
+    const char* e = obj["crop_edge"];
+    if (strcmp(e, "bottom") != 0 && strcmp(e, "top") != 0) {
+      err = "crop_edge muss bottom oder top sein";
+      return false;
+    }
+    next.crop_edge = strcmp(e, "top") == 0 ? 1 : 0;
+  }
   if (obj["bt_framesize"].is<int>()) {
     int fs = obj["bt_framesize"];
     if (fs != 0 && !validFramesize(fs)) {
@@ -569,6 +609,9 @@ void toJson(JsonObject obj) {
   obj["zoom"] = roundf(zoomFor(activeFramesize()) * 100.0f) / 100.0f;
   obj["zoom_max"] = roundf(zoomMax(activeFramesize()) * 100.0f) / 100.0f;
   obj["zoom_hw"] = zoomHw();
+  obj["crop"] = g_settings.crop;
+  obj["crop_edge"] = g_settings.crop_edge == 1 ? "top" : "bottom";
+  if (zoomHw()) obj["crop_active"] = roundf(cropFor(activeFramesize()) * 100.0f);  // bei dieser Auflösung
   obj["clients"] = g_stream_clients.load();
   obj["port"] = STREAM_PORT;
   JsonArray sizes = obj["framesizes"].to<JsonArray>();
