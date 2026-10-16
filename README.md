@@ -23,7 +23,8 @@ phone), or with an Xbox controller over Bluetooth.
 - **Input** – touch joysticks, keyboard (WASD), Xbox (Elite) controller via Bluetooth on the robot or via the
   browser's Gamepad API; every button remappable.
 - **Self-contained** – the UI is embedded in the firmware and needs no internet (works in access-point mode);
-  installable as a home-screen app. The UI language is German.
+  installable as a home-screen app. UI in German or English (*Einstellungen → Oberfläche → Sprache / Language*;
+  English covers all controls and labels, longer help texts are still German).
 - **Safe & maintainable** – E-stop (STOP / Esc), connection watchdog, battery protection, OTA updates,
   event log, live system metrics and history.
 

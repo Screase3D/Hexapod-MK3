@@ -2274,6 +2274,18 @@ function bindTheme() {
   });
 }
 
+// Sprache (i18n.js übersetzt beim Laden): Wechsel speichern und neu laden
+function bindLang() {
+  setSeg('lang-seg', window.UI_LANG_PREF || 'de');
+  bindSeg('lang-seg', (v) => {
+    try {
+      if (v === 'de') localStorage.removeItem('lang');  // Standard
+      else localStorage.setItem('lang', v);
+    } catch (e) { /* egal */ }
+    location.reload();
+  });
+}
+
 // -------------------------------------------------------------- Kamera ------
 
 const camBase = () => `${location.protocol}//${location.hostname}:81`;
@@ -5258,6 +5270,7 @@ function bindModel() {
 function init() {
   bindNav();
   bindTheme();
+  bindLang();
   buildLegs();
   buildManual();
   bindPose();

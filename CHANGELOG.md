@@ -4,6 +4,17 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.24.0
+
+- **Oberfläche auf Englisch** (Stufe 1): *Einstellungen → Oberfläche → Sprache / Language* – Deutsch (Standard),
+  English oder Automatisch (Browsersprache); der Wechsel lädt die Seite neu. Übersetzt sind Menü, Seitentitel,
+  Kopfzeile, Knöpfe, Beschriftungen, Regler, Gangarten, Profile, Emotes, LED-Zustände und -Effekte,
+  Controller-Belegung sowie kurze Meldungen und Rückfragen (gut 630 Texte). Längere Hilfetexte und die
+  Meldungen der Firmware sind noch deutsch (Stufe 2/3).
+  - Umsetzung: `web/i18n.js` mit Wörterbuch Deutsch → Englisch; übersetzt beim Laden das ganze Dokument und
+    danach alles, was die Oberfläche einfügt oder ändert. Der übrige Code bleibt deutsch; neue Texte ohne
+    Eintrag erscheinen einfach auf Deutsch.
+
 ## 0.23.0
 
 - **Haltungsregler wieder auf der Steuerung** (Karte *Haltung*: Höhe, Fußabstand, Verschieben, Neigen,
