@@ -4,6 +4,7 @@
 #include <ESPmDNS.h>
 #include <Preferences.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <algorithm>
 #include <atomic>
 #include <vector>
@@ -432,6 +433,11 @@ bool isAccessPoint() { return g_ap; }
 
 bool bluetoothActive() { return g_bt_active; }
 
+bool powerSave() {
+  wifi_ps_type_t ps = WIFI_PS_NONE;
+  return esp_wifi_get_ps(&ps) == ESP_OK && ps != WIFI_PS_NONE;
+}
+
 void setBluetoothActive(bool on) {
   g_bt_active = on;
   WiFi.setSleep(sleepMode());
@@ -472,6 +478,7 @@ void toJson(JsonObject obj) {
   obj["ip"] = ip();
   obj["host"] = String(WIFI_HOSTNAME) + ".local";
   obj["saved_ssid"] = savedSsid();
+  obj["ps"] = powerSave();  // Energiesparmodus (Modem-Sleep, nur mit Bluetooth)
 
   JsonObject a = obj["ap"].to<JsonObject>();
   a["active"] = ap;

@@ -140,7 +140,7 @@ def wifi_json():
         sta.update(reason=state["wifi_reason"], retry_in=8)
     return {"mode": ("ap+sta" if connected else "ap") if state["wifi_ap"] else "sta",
             "ip": "192.168.178.57" if connected else "192.168.4.1", "host": "hexapod.local",
-            "saved_ssid": state["wifi_ssid"], "ap": ap, "sta": sta}
+            "saved_ssid": state["wifi_ssid"], "ps": PAD["enabled"], "ap": ap, "sta": sta}
 
 
 SWING_FRACTION = {"tripod": 0.5, "ripple": 1 / 3, "wave": 1 / 6, "climb": 1 / 3}
@@ -306,6 +306,8 @@ def wifi_tel():
     out = {"mode": w["mode"]}
     if "rssi" in w["sta"]:
         out["rssi"] = w["sta"]["rssi"]
+    if w["ps"]:
+        out["ps"] = True
     return out
 
 
@@ -759,14 +761,21 @@ def cam_zoom_max():
     if not state["camera"]["zoom_hw"]:
         return 4.0
     w, h, mw, mh = CAM_SIZES.get(state["camera"]["framesize"], (640, 480, 2560, 1920))
-    keep = 1 - min(state["camera"]["crop"] / 100, 1 - max(w / mw, h / mh))
-    return round(max(1.0, min(4.0, keep * mw / w, keep * mh / h)), 2)
+    return round(min(4.0, mw / w, mh / h), 2)
 
 
 async def camera_get(_):
     cam = dict(state["camera"])
     cam["zoom_max"] = cam_zoom_max()
     cam["zoom"] = min(cam["zoom"], cam["zoom_max"])
+    # Bildgröße des Streams: am Sensor (OV5640) um den abgeschnittenen Streifen kleiner (auf 16 Pixel)
+    w, h, _, _ = CAM_SIZES.get(cam["framesize"], (640, 480, 2560, 1920))
+    c = cam["crop"] / 100 if cam["zoom_hw"] else 0
+    if c and cam["rotation"] in (90, 270):
+        w = int(w * (1 - c)) // 16 * 16
+    elif c:
+        h = int(h * (1 - c)) // 16 * 16
+    cam["out_w"], cam["out_h"] = w, h
     cam["framesizes"] = [{"id": 6, "name": "QVGA 320×240"}, {"id": 10, "name": "VGA 640×480"},
                          {"id": 13, "name": "HD 1280×720"}]
     return web.json_response(cam)
@@ -779,7 +788,7 @@ async def camera_post(request):
         if k in img:
             img[k] = body.pop(k)
     if "crop" in body:
-        body["crop"] = max(0, min(40, int(body["crop"])))
+        body["crop"] = max(0, min(50, int(body["crop"])))
     if "crop_edge" in body and body["crop_edge"] not in ("bottom", "top"):
         return web.json_response({"ok": False, "msg": "crop_edge muss bottom oder top sein"}, status=400)
     if "zoom" in body:

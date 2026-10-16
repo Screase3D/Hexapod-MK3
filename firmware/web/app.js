@@ -2283,7 +2283,7 @@ function renderCamStats(t) {
     parts.push(`Bluetooth: ${f ? f.name.split(' ')[0] : 'kleiner'}`);
   }
   if (c.wake_ms) parts.push(`Start ${c.wake_ms} ms`);
-  if (t.wifi && t.wifi.rssi !== undefined) parts.push(`WLAN ${t.wifi.rssi} dBm`);
+  if (t.wifi && t.wifi.rssi !== undefined) parts.push(`WLAN ${t.wifi.rssi} dBm${t.wifi.ps ? ' (Energiesparen)' : ''}`);
   if (c.err) parts.push(`Kamera-Aussetzer ${c.err}`);
   el.textContent = parts.join(' · ');
 }
@@ -2337,17 +2337,32 @@ function renderHud(imu) {
   $('hud-roll').textContent = fmtDeg(imu.roll) + '°';
 }
 
-// Rand abschneiden (Kamera sieht z. B. die Platine vor sich)
+// Rand abschneiden (Kamera sieht z. B. die Platine vor sich): das Bild wird um den Streifen
+// flacher, nichts wird vergrößert. Die Bildfläche nimmt das Format des Streams an.
 function renderCrop(c) {
   const r = $('cam-crop');
   if (document.activeElement !== r) r.value = c.crop || 0;
   $('cam-crop-val').textContent = `${r.value} %`;
   $('cam-crop-edge').value = c.crop_edge || 'bottom';
-  const lim = c.crop_active !== undefined && c.crop_active < (c.crop || 0)
-    ? ` Bei dieser Auflösung höchstens ${c.crop_active} %.` : '';
-  $('cam-crop-note').textContent = c.zoom_hw
-    ? `Der Sensor liest diesen Streifen gar nicht erst aus; das Bild behält sein Format, links und rechts fällt je die Hälfte so viel weg.${lim}`
-    : 'Die Oberfläche blendet den Streifen aus (Bild wird entsprechend vergrößert).';
+  const crop = (c.crop || 0) / 100;
+  const rot90 = c.rotation === 90 || c.rotation === 270;
+  const ui = !c.zoom_hw && crop > 0;  // ohne OV5640: Oberfläche blendet den Streifen aus
+  let w = c.out_w || 640, h = c.out_h || 480;
+  if (ui) {
+    if (rot90) w = Math.round(w * (1 - crop));  // 90°/270°: unten im Bild = rechts im Stream
+    else h = Math.round(h * (1 - crop));
+  }
+  const top = c.crop_edge === 'top';
+  for (const id of ['cam-view', 'cam-prev-view']) {
+    const v = $(id);
+    v.style.setProperty('--cam-ar', rot90 ? `${h} / ${w}` : `${w} / ${h}`);
+    v.style.setProperty('--cam-op', rot90 ? (top ? 'right' : 'left') : (top ? 'bottom' : 'top'));
+    v.classList.toggle('crop-ui', ui);
+  }
+  $('cam-crop-note').textContent = (c.zoom_hw
+    ? 'Der Sensor liest diesen Streifen gar nicht erst aus (auch in Fotos und Videos).'
+    : 'Die Oberfläche blendet den Streifen aus.')
+    + ` Das Bild wird entsprechend flacher, nichts wird vergrößert${crop > 0 ? ` – jetzt ${rot90 ? h : w}×${rot90 ? w : h}` : ''}.`;
 }
 
 function renderCamera() {
@@ -2461,21 +2476,8 @@ function renderZoom() {
     $(id).classList.toggle('active', ZOOM.z > 1);
     $(id).disabled = !c.ok;
   }
-  // ohne Sensor-Zoom: Bild in der Oberfläche vergrößern und den Rand abschneiden (gleiche Wirkung:
-  // sichtbar bleibt der Teil ohne den Streifen, im gleichen Seitenverhältnis, dazu der Zoom)
-  const crop = c.zoom_hw ? 0 : (c.crop || 0) / 100;
-  const scale = c.zoom_hw ? 1 : ZOOM.z / (1 - crop);
-  // Mitte des sichtbaren Teils im Bild (0..1); 90°/270°: unten im Bild = rechts im Stream
-  const near = (1 - crop) / 2, far = 1 - near;
-  const side = c.crop_edge === 'top' ? near : far;
-  const rot90 = c.rotation === 90 || c.rotation === 270;
-  const cx = rot90 ? 1 - side : 0.5, cy = rot90 ? 0.5 : 1 - side;
-  for (const id of ['cam-view', 'cam-prev-view']) {
-    const st = $(id).style;
-    st.setProperty('--zoom', scale);
-    st.setProperty('--cam-tx', `${(scale * (0.5 - cx) * 100).toFixed(2)}%`);
-    st.setProperty('--cam-ty', `${(scale * (0.5 - cy) * 100).toFixed(2)}%`);
-  }
+  // nur ohne Sensor-Zoom: Bild in der Oberfläche vergrößern
+  for (const id of ['cam-view', 'cam-prev-view']) $(id).style.setProperty('--zoom', c.zoom_hw ? 1 : ZOOM.z);
   const r = $('cam-zoom-r');
   r.max = zoomMax();
   if (document.activeElement !== r) r.value = ZOOM.z;
@@ -3389,6 +3391,8 @@ async function loadStatus() {
         w.sta.state === 'connected' ? `${w.sta.ssid} (${w.sta.rssi} dBm)` : '',
         w.ap.active ? `Access Point „${w.ap.ssid}“ (${w.ap.clients} Geräte)` : '',
       ].filter(Boolean).join(' · ')],
+      ['WLAN-Energiesparen', w.ps === undefined ? '–'
+        : (w.ps ? 'an (Modem-Sleep, solange Bluetooth läuft)' : 'aus – volle Leistung')],
       ['Adresse', `${w.ip} · ${w.host}`],
       ['Regel-Task', S.tel && S.tel.ctl
         ? `${S.tel.ctl.hz} Hz (Soll 50), max. ${(S.tel.ctl.max_us / 1000).toFixed(1)} ms Rechenzeit` : '–'],
@@ -4317,6 +4321,10 @@ function renderWifi(w) {
     }
     if (w.ap.active) {
       cur += ' Access Point läuft noch' + (w.ap.off_in_s != null ? ` (aus in ${Math.max(0, w.ap.off_in_s)} s).` : '.');
+    }
+    if (w.ps !== undefined) {
+      cur += w.ps ? ' Energiesparmodus an, solange Bluetooth läuft (Controller am Roboter) – etwas mehr Verzögerung.'
+        : ' Energiesparmodus aus – volle Leistung.';
     }
   } else if (sta.state === 'connecting') {
     cur = `Verbinde mit „${sta.ssid}“ …${sta.try > 1 ? ` (Anlauf ${sta.try})` : ''}`;

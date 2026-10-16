@@ -66,33 +66,41 @@ int main() {
       CHECK(w.zoom >= 1.0f && w.zoom <= camzoom::maxZoom(ow[fs], oh[fs], R4X3) + 1e-3f);
     }
   }
-  // Rand abschneiden: VGA, 20 % unten (Y hoch) -> Fenster 2048×1536 oben bündig, mittig in x
+  // Rand abschneiden: Bild wird kleiner, der Rest bleibt im gleichen Maßstab (kein Zoom)
   using camzoom::Edge;
-  CHECK(camzoom::window(640, 480, R4X3, 1.0f, w, 0.2f, Edge::YHigh));
-  CHECK(w.ex - w.sx - 63 == 2048 && w.ey - w.sy - 31 == 1536 && w.sy == 0 && w.sx == 256);
-  CHECK(w.binning && std::fabs(w.crop - 0.2f) < 1e-6f && w.zoom == 1.0f);
+  CHECK(camzoom::window(640, 480, R4X3, 1.0f, w, 0.2f, Edge::YHigh));  // VGA, 20 % unten (Y hoch)
+  CHECK(w.ow == 640 && w.oh == 384);
+  CHECK(w.ex - w.sx - 63 == 2560 && w.ey - w.sy - 31 == 1536 && w.sx == 0 && w.sy == 0);  // oben bündig
+  CHECK(w.binning && w.scale && std::fabs(w.crop - 0.2f) < 1e-6f && w.zoom == 1.0f);
+  CHECK(w.tx == 2060 && w.ty == 984 && w.ox == 16 && w.oy == 8);  // wie der Treiber bei VGA
   CHECK(camzoom::window(640, 480, R4X3, 1.0f, w, 0.2f, Edge::YLow));
   CHECK(w.sy == 384 && w.ey == 1920 + 31);  // unten bündig
-  CHECK(camzoom::window(640, 480, R4X3, 1.0f, w, 0.2f, Edge::XHigh));
-  CHECK(w.sx == 0 && w.sy == 192);
+  CHECK(camzoom::window(640, 480, R4X3, 1.0f, w, 0.2f, Edge::XHigh));  // 90°: seitlich
+  CHECK(w.ow == 512 && w.oh == 480 && w.sx == 0 && w.sy == 0 && w.ex - w.sx - 63 == 2048 && w.ey - w.sy - 31 == 1920);
   CHECK(camzoom::window(640, 480, R4X3, 1.0f, w, 0.2f, Edge::XLow));
   CHECK(w.sx == 512 && w.ex == 2560 + 63);
+  // ein Drittel (Platine im Bild): 640×320, gerundet auf 16 Pixel
+  CHECK(camzoom::window(640, 480, R4X3, 1.0f, w, 0.33f, Edge::YHigh));
+  CHECK(w.oh == 320 && w.ey - w.sy - 31 == 1280 && std::fabs(w.crop - 1.0f / 3.0f) < 1e-4f);
   // dazu 2× Zoom: mittig im verbleibenden Bild, nie im abgeschnittenen Streifen
   CHECK(camzoom::window(640, 480, R4X3, 2.0f, w, 0.2f, Edge::YHigh));
-  CHECK(w.ex - w.sx - 63 == 1024 && w.sy == 384 && w.sy + 768 <= 1536 && w.zoom == 2.0f);
-  // Grenzen: weniger Zoom übrig; UXGA höchstens 37,5 % (Fenster nie kleiner als 1600×1200)
-  CHECK(std::fabs(camzoom::maxZoom(640, 480, R4X3, 0.2f) - 3.2f) < 1e-4f);
-  CHECK(std::fabs(camzoom::maxCrop(1600, 1200, R4X3) - 0.375f) < 1e-4f);
-  CHECK(camzoom::window(1600, 1200, R4X3, 1.0f, w, 0.5f, Edge::YHigh));
-  CHECK(std::fabs(w.crop - 0.375f) < 1e-4f && w.ex - w.sx - 63 == 1600 && w.ey - w.sy - 31 == 1200 && w.sy == 0);
-  CHECK(!w.scale && !w.binning);
-  for (float c = 0.0f; c <= 0.4f; c += 0.01f) {
+  CHECK(w.ex - w.sx - 63 == 1280 && w.ey - w.sy - 31 == 768 && w.sx == 640 && w.sy == 384 && w.zoom == 2.0f);
+  CHECK(camzoom::window(640, 480, R4X3, 4.0f, w, 0.2f, Edge::YHigh) && w.zoom == 4.0f && !w.scale && !w.binning);
+  // UXGA: ohne Binning, Bildhöhe (VTS) passend zum kleineren Fenster; höchstens 50 %
+  CHECK(camzoom::window(1600, 1200, R4X3, 1.0f, w, 0.25f, Edge::YHigh));
+  CHECK(w.oh == 896 && !w.binning && w.ey - w.sy - 31 == 1434 && w.ty == w.ey - w.sy - 31 + 48);
+  CHECK(camzoom::window(1600, 1200, R4X3, 1.0f, w, 0.9f, Edge::YHigh) && w.oh == 592);
+  for (float c = 0.0f; c <= 0.5f; c += 0.01f) {
     for (int e = 0; e < 4; ++e) {
       for (float z = 1.0f; z <= 4.0f; z += 0.25f) {
         CHECK(camzoom::window(800, 600, R4X3, z, w, c, static_cast<Edge>(e)));
         const int ww = w.ex - w.sx - 63, wh = w.ey - w.sy - 31;
-        CHECK(ww >= 800 && wh >= 600 && w.sx >= 0 && w.sy >= 0 && w.sx + ww <= 2560 && w.sy + wh <= 1920);
-        CHECK(w.sx % 2 == 0 && w.sy % 2 == 0);
+        CHECK(ww >= w.ow && wh >= w.oh && w.sx >= 0 && w.sy >= 0 && w.sx + ww <= 2560 && w.sy + wh <= 1920);
+        CHECK(w.sx % 2 == 0 && w.sy % 2 == 0 && w.ow % 16 == 0 && w.oh % 8 == 0);
+        // nicht verzerrt: Fenster im Seitenverhältnis des Bilds
+        CHECK(std::fabs(static_cast<float>(ww) / wh - static_cast<float>(w.ow) / w.oh) < 0.01f);
+        // gleicher Maßstab wie ohne Abschneiden (bei 1×): nichts wird vergrößert
+        if (z == 1.0f) CHECK(std::fabs(static_cast<float>(ww) / w.ow - 2560.0f / 800.0f) < 0.05f);
         // nichts aus dem abgeschnittenen Streifen (2 Pixel Rundung)
         const float cut = w.crop * (e < 2 ? 1920 : 2560);
         if (e == 0) CHECK(w.sy + wh <= 1920 - cut + 2);

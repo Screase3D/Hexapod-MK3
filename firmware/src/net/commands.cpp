@@ -316,6 +316,7 @@ void buildTelemetry(JsonDocument& doc) {
   bool sta = wifi::staConnected();
   w["mode"] = wifi::isAccessPoint() ? (sta ? "ap+sta" : "ap") : "sta";
   if (sta) w["rssi"] = WiFi.RSSI();
+  if (wifi::powerSave()) w["ps"] = true;  // Energiesparmodus (Bluetooth an)
   doc["heap"] = ESP.getFreeHeap();
   doc["ws"] = web::wsClientCount();
   doc["ws_drop"] = web::wsDropped();

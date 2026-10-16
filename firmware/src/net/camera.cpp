@@ -97,7 +97,7 @@ void loadSettings() {
   g_settings.aec2 = p.getBool("aec2", g_settings.aec2);
   g_settings.lenc = p.getBool("lenc", g_settings.lenc);
   g_settings.bpc = p.getBool("bpc", g_settings.bpc);
-  g_settings.crop = constrain(p.getInt("crop", 0), 0, 40);
+  g_settings.crop = constrain(p.getInt("crop", 0), 0, 50);
   g_settings.crop_edge = p.getInt("cropedge", 0) == 1 ? 1 : 0;
   p.end();
 }
@@ -137,16 +137,11 @@ int activeFramesize() { return btReduces() ? g_settings.bt_framesize : g_setting
 // Zoom und Abschneiden am Sensor: nur OV5640 (Bildausschnitt statt ganzem Sensor); sonst
 // macht es die Oberfläche
 bool zoomHw() { return g_ok && g_pid == OV5640_PID; }
-// abgeschnittener Anteil bei Auflösung fs (das Fenster darf nicht kleiner als das Bild werden)
-float cropFor(int fs) {
-  const float c = g_settings.crop / 100.0f;
-  if (!zoomHw()) return c;
-  const float m = camzoom::maxCrop(resolution[fs].width, resolution[fs].height, resolution[fs].aspect_ratio);
-  return c < m ? c : m;
-}
+// abgeschnittener Anteil (Bild wird um ihn kleiner, der Rest bleibt im gleichen Maßstab)
+float cropNow() { return g_settings.crop / 100.0f; }
 float zoomMax(int fs) {
   if (!zoomHw()) return 4.0f;  // Oberfläche vergrößert das Bild
-  return camzoom::maxZoom(resolution[fs].width, resolution[fs].height, resolution[fs].aspect_ratio, cropFor(fs));
+  return camzoom::maxZoom(resolution[fs].width, resolution[fs].height, resolution[fs].aspect_ratio);
 }
 // Abzuschneidende Seite im Sensor-Array: unten bzw. oben im angezeigten Bild, über Drehung und
 // Spiegeln zurückgerechnet. Ungespiegelt liest der Sensor ab X/Y_ADDR_ST (links/oben) aus.
@@ -172,7 +167,7 @@ void applyToSensor() {
   const int fs = activeFramesize();
   const bool hw = zoomHw() && s->set_res_raw;
   const float z = hw ? zoomFor(fs) : 1.0f;
-  const float crop = hw ? cropFor(fs) : 0.0f;
+  const float crop = hw ? cropNow() : 0.0f;
   const int edge = static_cast<int>(cropEdge());
   if (fs != g_applied_fs || z != g_applied_zoom || crop != g_applied_crop || (crop > 0.0f && edge != g_applied_edge)) {
     // 1× ohne Abschneiden bzw. neue Auflösung: Werte des Treibers (auch PLL); sonst Ausschnitt
@@ -181,7 +176,7 @@ void applyToSensor() {
     camzoom::Window w;
     const resolution_info_t& r = resolution[fs];
     if (raw && camzoom::window(r.width, r.height, r.aspect_ratio, z, w, crop, static_cast<camzoom::Edge>(edge))) {
-      s->set_res_raw(s, w.sx, w.sy, w.ex, w.ey, w.ox, w.oy, w.tx, w.ty, r.width, r.height, w.scale, w.binning);
+      s->set_res_raw(s, w.sx, w.sy, w.ex, w.ey, w.ox, w.oy, w.tx, w.ty, w.ow, w.oh, w.scale, w.binning);
     }
     g_applied_fs = fs;
     g_applied_zoom = z;
@@ -553,7 +548,7 @@ bool applyJson(JsonVariantConst obj, String& err) {
   if (obj["aec2"].is<bool>()) next.aec2 = obj["aec2"];
   if (obj["lenc"].is<bool>()) next.lenc = obj["lenc"];
   if (obj["bpc"].is<bool>()) next.bpc = obj["bpc"];
-  if (obj["crop"].is<int>()) next.crop = constrain(obj["crop"].as<int>(), 0, 40);
+  if (obj["crop"].is<int>()) next.crop = constrain(obj["crop"].as<int>(), 0, 50);
   if (obj["crop_edge"].is<const char*>()) {
     const char* e = obj["crop_edge"];
     if (strcmp(e, "bottom") != 0 && strcmp(e, "top") != 0) {
@@ -611,7 +606,17 @@ void toJson(JsonObject obj) {
   obj["zoom_hw"] = zoomHw();
   obj["crop"] = g_settings.crop;
   obj["crop_edge"] = g_settings.crop_edge == 1 ? "top" : "bottom";
-  if (zoomHw()) obj["crop_active"] = roundf(cropFor(activeFramesize()) * 100.0f);  // bei dieser Auflösung
+  // Bildgröße des Streams (mit Abschneiden am Sensor kleiner als die Auflösung)
+  const resolution_info_t& r = resolution[activeFramesize()];
+  camzoom::Window w;
+  if (zoomHw() && camzoom::window(r.width, r.height, r.aspect_ratio, zoomFor(activeFramesize()), w, cropNow(),
+                                  cropEdge())) {
+    obj["out_w"] = w.ow;
+    obj["out_h"] = w.oh;
+  } else {
+    obj["out_w"] = r.width;
+    obj["out_h"] = r.height;
+  }
   obj["clients"] = g_stream_clients.load();
   obj["port"] = STREAM_PORT;
   JsonArray sizes = obj["framesizes"].to<JsonArray>();

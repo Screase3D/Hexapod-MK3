@@ -4,6 +4,17 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.22.0
+
+- **Rand abschneiden ohne Vergrößern:** Der Streifen fällt einfach weg, das Bild wird entsprechend flacher
+  (z. B. 640×320 statt 640×480 bei einem Drittel); der Rest bleibt in Breite und Maßstab gleich. Regler jetzt bis
+  50 %. OV5640: im Sensor (auch Fotos und Videos, etwas weniger Daten); sonst blendet die Oberfläche den Streifen
+  aus. Die Bildfläche nimmt das Format des Streams an (auch HD 16:9 ohne schwarze Balken).
+- **WLAN-Energiesparmodus sichtbar:** *Systemübersicht* (Zeile „WLAN-Energiesparen“), *Einstellungen → WLAN* und
+  die Stream-Statistik unter dem Kamerabild zeigen, ob das WLAN gerade im Modem-Sleep ist. Er ist nur an, solange
+  Bluetooth läuft (Controller am Roboter); schaltet man Bluetooth aus, läuft das WLAN sofort wieder mit voller
+  Leistung.
+
 ## 0.21.0
 
 - **Kamera: Rand abschneiden** (*Kamera → Rand abschneiden*, 0–40 %, Seite unten/oben im angezeigten Bild,

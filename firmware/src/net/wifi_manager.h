@@ -27,6 +27,9 @@ bool isAccessPoint();  // Access Point aktiv
 // er für die geringste Latenz aus.
 void setBluetoothActive(bool on);
 bool bluetoothActive();
+// WLAN-Energiesparmodus, wie er gerade im Funkmodul eingestellt ist (Modem-Sleep nur, solange
+// Bluetooth läuft; danach sofort wieder volle Leistung)
+bool powerSave();
 int lastDisconnectReason();             // letzter Trennungsgrund (WIFI_REASON_*)
 const char* disconnectText(int reason);  // Klartext (nie nullptr)
 int lastConnectTries();     // Anläufe bis zur letzten Verbindung (1 = sofort)

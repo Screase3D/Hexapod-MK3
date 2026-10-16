@@ -38,8 +38,9 @@ struct Settings {
   bool aec2;        // Nachtmodus: Belichtung über den Bildprozessor (länger, heller)
   bool lenc;        // Linsenkorrektur (dunkle Ränder ausgleichen)
   bool bpc;         // Pixelfehler-Korrektur (helle/dunkle Punkte)
-  // Rand abschneiden (Kamera sieht z. B. die Platine vor sich): Anteil in % und Seite im
-  // angezeigten Bild (0 unten, 1 oben). OV5640: im Sensor, sonst in der Oberfläche.
+  // Rand abschneiden (Kamera sieht z. B. die Platine vor sich): Anteil 0..50 % und Seite im
+  // angezeigten Bild (0 unten, 1 oben). Das Bild wird um den Streifen kleiner (nichts wird
+  // vergrößert). OV5640: im Sensor, sonst blendet ihn die Oberfläche aus.
   int crop;
   int crop_edge;
 };
