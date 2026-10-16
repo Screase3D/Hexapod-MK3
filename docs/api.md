@@ -129,6 +129,9 @@ Beispiel:
              "stance": 100},
              "range": {"z": [35, 100], "stance": [75, 135], "x": [-40, 40], "y": [-40, 40],
                        "roll": [-9.8, 9.8], "pitch": [-10.1, 10.1], "yaw": [-25, 25]},
+             // nur wenn ein Bereich enger als die Skala ist: was ihn begrenzt, je Rand
+             // [Bein 1..6, Gelenk 0 Coxa/1 Femur/2 Tibia/3 Fuß nicht erreichbar, Kalibriergrenze °] oder null
+             "range_why": {"z": [null, [2, 1, 95]]},
              "level": {"on": true, "active": true, "roll": -3.2, "pitch": 1.1},
              "alive": {"on": true, "act": "look"},
              "life": {"breathe": true, "bored": true, "lift": true, "walk_fx": true, "gaze": true, "sleep_min": 5,

@@ -273,7 +273,7 @@
 
               </div>
 
-              <div class="card o-pose">
+              <div class="card o-pose" id="pose-card">
                 <div class="card-head wrap">
                   <h2><svg class="ic"><use href="#i-body"/></svg>Haltung</h2>
                   <div class="head-switches">
@@ -290,11 +290,27 @@
                   </div>
                 </div>
                 <div class="profiles" id="profiles" aria-label="Profile"></div>
+                <p id="pose-placeholder" class="warn-text small" hidden>Beinmaße sind noch Platzhalter
+                  (<span class="mono">include/robot_geometry.h</span>) – erst nach dem Messen verwenden.</p>
+                <div id="pose-sliders"></div>
+                <p id="pose-why" class="warn-note small" hidden></p>
+                <div class="level-row">
+                  <label class="switch" title="Körper mit dem Lagesensor waagerecht halten (bzw. auf der eingestellten Neigung)">
+                    <input id="level-on" type="checkbox">
+                    <span class="slider"></span>
+                    <span class="switch-label">Lageausgleich</span>
+                  </label>
+                  <span id="level-info" class="muted small mono"></span>
+                  <button id="pose-reset" class="btn btn-small" type="button">Zurücksetzen</button>
+                </div>
+                <p id="level-fault" class="warn-text small" hidden>Lageausgleich abgeschaltet: Er hat die
+                  Schräglage verstärkt statt ausgeglichen. Einbaulage des Lagesensors unter
+                  <a href="#kamera">Kamera &amp; Lagesensor</a> prüfen.</p>
                 <p id="pose-warn" class="alert small" hidden></p>
-                <p class="muted small">Servos fahren beim Einschalten immer zuerst langsam in die Sitzhaltung; IK bleibt
-                  nach einem Neustart wie zuletzt (aufgestanden wird nur mit „Aufstehen“).
-                  Profil = Höhe, Fußabstand und Gang auf einen Tipp. Einzelwerte, Lageausgleich und Schritt unter <a href="#einstellungen">Einstellungen → Bewegung</a>; Verhalten, Emotes und Augen unter
-                  <a href="#verhalten">Verhalten</a>.</p>
+                <p class="muted small">Die Füße bleiben stehen, der Körper bewegt sich darüber – auch beim Laufen. Das Band
+                  unter einem Regler zeigt, wie weit die Beine bei den übrigen Werten reichen (Grenzen aus der
+                  Kalibrierung). Servos fahren beim Einschalten zuerst langsam in die Sitzhaltung; IK bleibt nach einem
+                  Neustart wie zuletzt. Schritt und Servos unter <a href="#einstellungen">Einstellungen</a>.</p>
               </div>
             </div>
           </div>
@@ -999,30 +1015,6 @@
         <section id="page-settings" class="page" data-title="Einstellungen">
           <h2 class="group-title">Bewegung</h2>
           <div class="grid-2">
-            <div class="card" id="pose-card">
-              <h2><svg class="ic"><use href="#i-body"/></svg>Haltung</h2>
-              <p id="pose-placeholder" class="warn-text small" hidden>Beinmaße sind noch Platzhalter
-                (<span class="mono">include/robot_geometry.h</span>) – erst nach dem Messen verwenden.</p>
-              <div id="pose-sliders"></div>
-              <div class="level-row">
-                <label class="switch" title="Körper mit dem Lagesensor waagerecht halten (bzw. auf der eingestellten Neigung)">
-                  <input id="level-on" type="checkbox">
-                  <span class="slider"></span>
-                  <span class="switch-label">Lageausgleich</span>
-                </label>
-                <span id="level-info" class="muted small mono"></span>
-              </div>
-              <p id="level-fault" class="warn-text small" hidden>Lageausgleich abgeschaltet: Er hat die
-                Schräglage verstärkt statt ausgeglichen. Einbaulage des Lagesensors unter
-                <a href="#kamera">Kamera &amp; Lagesensor</a> prüfen.</p>
-              <div class="row wrap">
-                <button id="pose-reset" class="btn" type="button">Zurücksetzen</button>
-              </div>
-              <p class="muted small">Die Füße bleiben stehen, der Körper bewegt sich darüber – auch beim Laufen. Unter jedem
-                Regler zeigt ein Band, wie weit die Beine bei den übrigen Werten reichen. Änderungen werden gespeichert;
-                die Profile unter Steuerung setzen mehrere Werte auf einmal.</p>
-            </div>
-            <div class="stack">
               <div class="card">
                 <h2><svg class="ic"><use href="#i-walk"/></svg>Laufen</h2>
                 <label class="slider-row">
@@ -1055,7 +1047,6 @@
                   <button id="ctl-assembly" class="btn" type="button" title="Alle Gelenke in die Montagestellung (Standardhaltung)">Montagestellung</button>
                 </div>
               </div>
-            </div>
           </div>
           <h2 class="group-title">Verbindung</h2>
           <div class="grid-2">

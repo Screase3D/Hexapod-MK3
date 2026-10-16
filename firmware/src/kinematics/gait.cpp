@@ -50,16 +50,16 @@ constexpr float SWING_START[NUM_TYPES][NUM_LEGS] = {
     {2.0f / 3.0f, 1.0f / 3.0f, 0.0f, 1.0f / 6.0f, 5.0f / 6.0f, 0.5f},
     // Welle: hl, ml, vl, hr, mr, vr nacheinander
     {2.0f / 6.0f, 1.0f / 6.0f, 0.0f, 5.0f / 6.0f, 4.0f / 6.0f, 3.0f / 6.0f},
-    // Klettern: wie Ripple (immer vier Füße am Boden)
-    {2.0f / 3.0f, 1.0f / 3.0f, 0.0f, 1.0f / 6.0f, 5.0f / 6.0f, 0.5f},
+    // Klettern: wie Dreifuß
+    {0.0f, 0.5f, 0.0f, 0.5f, 0.0f, 0.5f},
 };
 
 // Anteil der Schwungphase am Zyklus
-constexpr float SWING_FRACTION[NUM_TYPES] = {0.5f, 1.0f / 3.0f, 1.0f / 6.0f, 1.0f / 3.0f};
+constexpr float SWING_FRACTION[NUM_TYPES] = {0.5f, 1.0f / 3.0f, 1.0f / 6.0f, 0.5f};
 // Schrittdauer je Gangart (mal swing_s): Klettern schwingt langsamer (weiter Weg nach oben)
 constexpr float SWING_SCALE[NUM_TYPES] = {1.0f, 1.0f, 1.0f, CLIMB_SWING_SCALE};
 // Kastenbahn: Heben bis CLIMB_UP, vorschwingen zwischen CLIMB_GO und 1 - CLIMB_GO (Anteil Schwung)
-constexpr float CLIMB_UP = 0.35f;
+constexpr float CLIMB_UP = 0.4f;
 constexpr float CLIMB_GO = 0.25f;
 constexpr float CLIMB_FOLLOW = 150.0f;  // mm/s: so schnell folgt der vorgeschwungene Fuß dem Aufsetzpunkt
 constexpr float PHASE_EPS = 1e-5f;  // Rundung an den Fenstergrenzen
@@ -104,7 +104,9 @@ bool typeFromName(const char* name, Type& out) {
 float dutyFactor(Type t) { return 1.0f - SWING_FRACTION[static_cast<int>(t)]; }
 
 float cycleTime(Type t, float swing_s) {
-  return swing_s * SWING_SCALE[static_cast<int>(t)] / SWING_FRACTION[static_cast<int>(t)];
+  float s = swing_s * SWING_SCALE[static_cast<int>(t)];
+  if (t == Type::Climb && s < CLIMB_SWING_MIN) s = CLIMB_SWING_MIN;  // hoher Hub braucht Zeit
+  return s / SWING_FRACTION[static_cast<int>(t)];
 }
 
 float smoothStep5(float u) {

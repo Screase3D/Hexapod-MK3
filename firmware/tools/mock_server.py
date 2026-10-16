@@ -143,15 +143,15 @@ def wifi_json():
             "saved_ssid": state["wifi_ssid"], "ps": PAD["enabled"], "ap": ap, "sta": sta}
 
 
-SWING_FRACTION = {"tripod": 0.5, "ripple": 1 / 3, "wave": 1 / 6, "climb": 1 / 3}
-SWING_SCALE = {"climb": 2.25}  # Klettern: längere Schritte (Schrittdauer mal 2,25)
+SWING_FRACTION = {"tripod": 0.5, "ripple": 1 / 3, "wave": 1 / 6, "climb": 0.5}
+SWING_SCALE = {"climb": 2.0}  # Klettern: längerer Schwung (Schrittdauer mal 2)
 SWING_START = {  # wie gait.cpp: Beginn der Schwungphase je Bein
     "tripod": [0, 0.5, 0, 0.5, 0, 0.5],
     "ripple": [2 / 3, 1 / 3, 0, 1 / 6, 5 / 6, 0.5],
     "wave": [2 / 6, 1 / 6, 0, 5 / 6, 4 / 6, 3 / 6],
-    "climb": [2 / 3, 1 / 3, 0, 1 / 6, 5 / 6, 0.5],
+    "climb": [0, 0.5, 0, 0.5, 0, 0.5],
 }
-CLIMB_HEIGHT = 50
+CLIMB_HEIGHT = 45
 
 
 def smooth5(u):
@@ -208,7 +208,7 @@ def gait_status():
     cmd = state["walk"] if fresh else [0, 0, 0]
     sigma = SWING_FRACTION[g["type"]]
     scale = SWING_SCALE.get(g["type"], 1.0)
-    nominal = 50 / ((1 - sigma) * g["swing_s"] * scale / sigma)
+    nominal = (60 if g["type"] == "climb" else 50) / ((1 - sigma) * g["swing_s"] * scale / sigma)
     # wie gait.cpp: hoch gestellt reicht das Bein nicht weit -> Tempo sinkt
     z = state["pose"]["z"]
     reach = 1.0 if z <= 85 else max(0.0, 1 - (z - 85) / 15)
@@ -246,12 +246,20 @@ def alive_tel(g):
     return a
 
 
+# MOCK_Z_MAX=54: wie eine enge Kalibriergrenze (Bein 2 Femur) – Höhe endet dort, mit Grund (range_why)
+MOCK_Z_MAX = float(os.environ.get("MOCK_Z_MAX", "1000"))
+
+
+def pose_range_why():
+    return {"z": [None, [2, 1, 95]]} if MOCK_Z_MAX < 100 else {}
+
+
 def pose_range():
     """Grobe Nachbildung von motion.range: tief unten wenig Spielraum, Verschieben/Neigen kostet Höhe"""
     p = state["pose"]
     k = min(1.0, max(0.15, (p["z"] - 30) / 22))
     z_lo = min(p["z"], 35 + (abs(p["x"]) + abs(p["y"])) / 2 + (abs(p["roll"]) + abs(p["pitch"])) * 1.5)
-    z_hi = max(p["z"], min(100, z_max(p["stance"])))
+    z_hi = max(p["z"], min(100, z_max(p["stance"]), MOCK_Z_MAX))
     def sym(lim, cur):
         m = max(abs(cur), lim * k)
         return [round(-m, 1), round(m, 1)]
@@ -287,7 +295,7 @@ def life_tel(g):
 
 def motion_tel():
     g = gait_status()
-    m = {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "range": pose_range(), "gait": g,
+    m = {"mode": state["mode"], "posture": posture(), "pose": state["pose"], "range": pose_range(), "range_why": pose_range_why(), "gait": g,
          "level": level_tel(time.time()), "arms": arms(), "alive": alive_tel(g), "life": life_tel(g),
          "unreachable": [], "clamped": []}
     if gesture():
@@ -398,7 +406,7 @@ def live_msg():
                 u = p / sigma
                 if g["type"] == "climb":  # Kastenbahn wie gait.cpp: hoch, vor, runter
                     h = smooth5((u - 0.25) / 0.5)
-                    z = CLIMB_HEIGHT * smooth5((u if u < 0.5 else 1 - u) / 0.35)
+                    z = CLIMB_HEIGHT * smooth5((u if u < 0.5 else 1 - u) / 0.4)
                 else:
                     h = smooth5(u)
                     z = g["step_height"] * 16 * (u * (1 - u)) ** 2

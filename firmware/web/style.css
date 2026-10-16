@@ -499,6 +499,8 @@ details.fold[open] summary { margin-bottom: 4px; }
 .imu-cal.ok { color: inherit; }
 .imu-cal.failed { color: var(--warn-text); }
 .level-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0 4px; padding-top: 12px; border-top: 1px solid var(--border); }
+.level-row #pose-reset { margin-left: auto; }
+#pose-why { margin: 6px 0 0; }
 
 /* ---------- Laufen (Joysticks) ---------- */
 .o-walk { container-type: inline-size; }

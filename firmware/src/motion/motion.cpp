@@ -351,11 +351,43 @@ bool fieldOk(void* ctx, float v) {
   return checkState(s, 0.0f, c->lo, c->hi).ok();
 }
 constexpr uint32_t RANGE_REFRESH_MS = 2000;
-void poseRanges(const PoseState& t, float out[7][2]) {
+
+// Was eine Haltung verhindert (für die Anzeige am Regler): Bein, Gelenk (0 Coxa, 1 Femur,
+// 2 Tibia, 3 = Fuß nicht erreichbar) und die Kalibriergrenze, die am weitesten überschritten wäre
+struct LimitWhy {
+  int8_t leg = -1;  // < 0: keine Angabe
+  int8_t joint = 0;
+  float limit = 0.0f;
+};
+LimitWhy limitWhy(const PoseState& s, const float* lo, const float* hi) {
+  kin::Vec3 feet[NUM_LEGS];
+  neutralFeet(s.stance, feet);
+  LimitWhy w;
+  float worst = 0.0f;
+  for (int leg = 0; leg < NUM_LEGS; ++leg) {
+    kin::JointAngles a;
+    if (!kin::legIk(LEG_GEOMETRY, LEG_MOUNTS[leg], kin::bodyToLeg(LEG_MOUNTS[leg], kin::worldToBody(s.pose, feet[leg])),
+                    a)) {
+      if (w.joint != 3) w = {static_cast<int8_t>(leg), 3, 0.0f};
+      worst = 1e9f;
+      continue;
+    }
+    const float v[3] = {a.coxa, a.femur, a.tibia};
+    for (int j = 0; j < 3; ++j) {
+      const float under = lo[leg * 3 + j] - v[j], over = v[j] - hi[leg * 3 + j];
+      if (under > worst) worst = under, w = {static_cast<int8_t>(leg), static_cast<int8_t>(j), lo[leg * 3 + j]};
+      if (over > worst) worst = over, w = {static_cast<int8_t>(leg), static_cast<int8_t>(j), hi[leg * 3 + j]};
+    }
+  }
+  return w;
+}
+
+void poseRanges(const PoseState& t, float out[7][2], LimitWhy why_out[7][2]) {
   static PoseState last;
   static bool have = false;
   static uint32_t at = 0;
   static float cache[7][2];
+  static LimitWhy why[7][2];
   const uint32_t now = millis();
   bool same = have && now - at < RANGE_REFRESH_MS;
   for (int i = 0; same && i < 7; ++i) same = fieldValue(last, i) == fieldValue(t, i);
@@ -372,18 +404,30 @@ void poseRanges(const PoseState& t, float out[7][2]) {
       fieldLimits(i, a, b);
       if (target_ok) kin::feasibleInterval(fieldOk, &c, fieldValue(t, i), a, b, 16, 5, cache[i][0], cache[i][1]);
       else cache[i][0] = a, cache[i][1] = b;
+      // Grund an jedem Rand, der enger als die Oberflächen-Grenze ist (knapp dahinter nachsehen)
+      for (int e = 0; e < 2; ++e) {
+        why[i][e] = LimitWhy();
+        const float edge = cache[i][e], outer = e ? b : a;
+        if (!target_ok || fabsf(edge - outer) < 0.05f) continue;
+        PoseState s = t;
+        setFieldValue(s, i, edge + (e ? 0.5f : -0.5f));
+        why[i][e] = limitWhy(s, lo, hi);
+      }
     }
     last = t;
     have = true;
     at = now;
   }
-  for (int i = 0; i < 7; ++i) out[i][0] = cache[i][0], out[i][1] = cache[i][1];
+  for (int i = 0; i < 7; ++i) {
+    out[i][0] = cache[i][0], out[i][1] = cache[i][1];
+    why_out[i][0] = why[i][0], why_out[i][1] = why[i][1];
+  }
 }
 
 // Klettern: Fußhub so hoch, wie Knie und Femur (Grenze aus der Kalibrierung) es zulassen,
 // auch wenn ein Ecken-Bein beim Vorwärtslaufen bis CLIMB_INWARD mm zum Körper hin steht
 // (höchstens CLIMB_MAX_MM, mindestens der normale Fußhub)
-constexpr float CLIMB_MAX_MM = 50.0f;
+constexpr float CLIMB_MAX_MM = 45.0f;
 constexpr float CLIMB_INWARD = 20.0f;
 
 // Reichweite für die Gangart: Coxa-Achsen im Lauf-System (Körper verschoben bzw.
@@ -1469,12 +1513,30 @@ void toJson(JsonObject obj) {
   p["stance"] = t.stance;
   // erreichbarer Bereich je Größe (die anderen wie eingestellt), auf 0,1 gerundet nach innen
   float rng[7][2];
-  poseRanges(t, rng);
+  LimitWhy why[7][2];
+  poseRanges(t, rng, why);
   JsonObject r = obj["range"].to<JsonObject>();
   for (int i = 0; i < 7; ++i) {
     JsonArray a = r[POSE_FIELDS[i].key].to<JsonArray>();
     a.add(ceilf(rng[i][0] * 10.0f) / 10.0f);
     a.add(floorf(rng[i][1] * 10.0f) / 10.0f);
+  }
+  // was den Bereich begrenzt: [Bein 1..6, Gelenk 0..2 (3 = nicht erreichbar), Grenze °] je Rand
+  JsonObject rw;
+  for (int i = 0; i < 7; ++i) {
+    if (why[i][0].leg < 0 && why[i][1].leg < 0) continue;
+    if (rw.isNull()) rw = obj["range_why"].to<JsonObject>();
+    JsonArray a = rw[POSE_FIELDS[i].key].to<JsonArray>();
+    for (int e = 0; e < 2; ++e) {
+      if (why[i][e].leg < 0) {
+        a.add(nullptr);
+        continue;
+      }
+      JsonArray w = a.add<JsonArray>();
+      w.add(why[i][e].leg + 1);
+      w.add(why[i][e].joint);
+      w.add(roundf(why[i][e].limit));
+    }
   }
 
   JsonObject lv = obj["level"].to<JsonObject>();

@@ -528,6 +528,7 @@ const POSE_FIELDS = [
 ];
 const poseTouched = {};
 const poseRange = {};  // erreichbarer Bereich je Größe bei den übrigen Werten (Telemetrie motion.range)
+const poseWhy = {};    // was ihn begrenzt: je Rand [Bein, Gelenk (3 = nicht erreichbar), Grenze °] (motion.range_why)
 const poseSend = throttle((patch) => { send('pose', patch); posePending = {}; }, 60);
 let posePending = {};
 
@@ -585,7 +586,48 @@ function markPoseLimit(key) {
   const v = +input.value;
   const atEdge = narrowed && ((v >= r[1] && r[1] < max) || (v <= r[0] && r[0] > min));
   $(`pose-${key}-val`).classList.toggle('at-limit', !!atEdge);
-  input.title = narrowed ? `erreichbar: ${r[0]} bis ${r[1]} (bei den übrigen Werten)` : '';
+  const why = (poseWhy[key] || []).map((w) => (w ? limitText(w) : '')).filter(Boolean);
+  input.title = narrowed ? `erreichbar: ${r[0]} bis ${r[1]} (bei den übrigen Werten)${why.length ? ' – ' + why.join(' / ') : ''}` : '';
+}
+
+// "Bein 2 Femur: Kalibriergrenze 95°" bzw. "Bein 2 reicht nicht weiter"
+function limitText(w) {
+  const [leg, joint, lim] = w;
+  return joint === 3 ? `Bein ${leg} reicht nicht weiter` : `Bein ${leg} ${JOINTS[joint]}: Kalibriergrenze ${lim}°`;
+}
+
+// Unter den Reglern: was die Haltung gerade begrenzt (Wert am Rand) – mit Sprung zur Kalibrierung
+function renderPoseWhy() {
+  const box = $('pose-why');
+  const lines = [];
+  for (const [key, label, unit] of POSE_FIELDS) {
+    const input = $(`pose-${key}`);
+    const r = poseReach(key);
+    const w = poseWhy[key];
+    if (!input || !r || !w) continue;
+    const v = +input.value;
+    const edge = v >= r[1] && r[1] < +input.max ? 1 : (v <= r[0] && r[0] > +input.min ? 0 : -1);
+    if (edge < 0 || !w[edge]) continue;
+    lines.push({ text: `${label} ${edge ? 'max.' : 'min.'} ${r[edge]} ${unit} – ${limitText(w[edge])}`, w: w[edge] });
+  }
+  const key = JSON.stringify(lines.map((l) => l.text));
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = '';
+  box.hidden = !lines.length;
+  for (const l of lines) {
+    const p = document.createElement('div');
+    p.textContent = l.text;
+    if (l.w[1] < 3) {
+      const a = document.createElement('a');
+      a.href = '#kalibrierung';
+      a.textContent = ' Grenze ändern';
+      a.title = 'Die Grenze steht in der Kalibrierung dieses Servos – reicht der Servo mechanisch weiter, dort erweitern';
+      a.onclick = () => setTimeout(() => selectServo((l.w[0] - 1) * 3 + l.w[1]), 50);
+      p.append(' ·', a);
+    }
+    box.appendChild(p);
+  }
 }
 
 function renderPose(m) {
@@ -595,6 +637,8 @@ function renderPose(m) {
     const input = $(`pose-${key}`);
     if (m.range && Array.isArray(m.range[key])) poseRange[key] = m.range[key];
     else delete poseRange[key];
+    if (m.range_why && m.range_why[key]) poseWhy[key] = m.range_why[key];
+    else delete poseWhy[key];
     if (!input) continue;
     if (Date.now() - (poseTouched[key] || 0) < LOCAL_PRIORITY_MS || document.activeElement === input) {
       markPoseLimit(key);
@@ -604,6 +648,7 @@ function renderPose(m) {
     $(`pose-${key}-val`).textContent = `${Math.round(m.pose[key])} ${unit}`;
     markPoseLimit(key);
   }
+  renderPoseWhy();
   renderLevel(m.level);
   const warn = [];
   if (Date.now() < poseNote.until) warn.push(poseNote.text);

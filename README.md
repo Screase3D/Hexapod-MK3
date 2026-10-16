@@ -38,7 +38,7 @@ phone), or with an Xbox controller over Bluetooth.
 <li>Camera stream with zoom, snapshot, video, horizon, driver view</li>
 <li>Live 3D model (legs in the air, support polygon)</li>
 <li>Joysticks for walking, body or front legs; gait and speed</li>
-<li>Servo / IK switches and posture profiles</li>
+<li>Servo / IK switches, posture sliders (with the limiting joint shown), levelling, profiles</li>
 </ul>
 </td>
 <td width="50%" valign="top">
@@ -100,7 +100,7 @@ phone), or with an Xbox controller over Bluetooth.
 <b>Einstellungen</b> (settings)<br>
 <a href="docs/images/ui-settings.png"><img src="docs/images/ui-settings.png" alt="Settings"></a>
 <ul>
-<li>Movement: posture sliders, levelling, step timing, servo speed</li>
+<li>Movement: step timing, foot lift, servo speed</li>
 <li>Wi-Fi setup and signal meter, battery, firmware update, theme</li>
 </ul>
 </td>

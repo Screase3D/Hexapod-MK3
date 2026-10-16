@@ -37,7 +37,7 @@ static int g_checks = 0;
 constexpr float DT = 0.02f;  // 50 Hz wie der Regel-Task
 const gait::Type TYPES[] = {gait::Type::Tripod, gait::Type::Ripple, gait::Type::Wave, gait::Type::Climb};
 constexpr int NT = 4;
-const int MAX_SWING[] = {3, 2, 1, 2};
+const int MAX_SWING[] = {3, 2, 1, 3};
 // Femur höchstens (Standardgrenze der Kalibrierung, 3° Abstand wie in motion.cpp)
 constexpr float FEMUR_MAX = ASSEMBLY_POSE.femur + 70.0f - 3.0f;
 const int NEIGHBORS[6][2] = {{1, 3}, {0, 2}, {1, 5}, {0, 4}, {3, 5}, {2, 4}};  // vl ml hl hr mr vr im Kreis
@@ -64,9 +64,9 @@ static gait::Params firmwareParams(gait::Type t) {
   p.swing_s = GAIT_LIMITS.swing_default;
   p.step_height = GAIT_LIMITS.height_default;
   p.max_stride = gaitStrideMax(p.step_height);
-  // Klettern wie in motion.cpp (CLIMB_INWARD 20 mm, Hub bis 50 mm)
+  // Klettern wie in motion.cpp (CLIMB_INWARD 20 mm, Hub bis 45 mm)
   p.climb_height = gait::climbHeight(LEG_GEOMETRY, POSE_LIMITS.stance_default, POSE_LIMITS.height_default, 20.0f,
-                                     KNEE_MIN_DEG, FEMUR_MAX, p.step_height, 50.0f);
+                                     KNEE_MIN_DEG, FEMUR_MAX, p.step_height, 45.0f);
   return p;
 }
 
@@ -114,8 +114,8 @@ static void testProfiles() {
   CHECK_NEAR(gait::climbLift(0), 0, 1e-6);
   CHECK_NEAR(gait::climbLift(1), 0, 1e-6);
   CHECK_NEAR(gait::climbLift(0.5f), 1, 1e-6);
-  CHECK(gait::climbLift(0.25f) > 0.8f && gait::climbTravel(0.25f) < 1e-6f);
-  CHECK(gait::climbLift(0.75f) > 0.8f && gait::climbTravel(0.75f) > 1.0f - 1e-6f);
+  CHECK(gait::climbLift(0.25f) > 0.7f && gait::climbTravel(0.25f) < 1e-6f);
+  CHECK(gait::climbLift(0.75f) > 0.7f && gait::climbTravel(0.75f) > 1.0f - 1e-6f);
 }
 
 // Ohne Befehl: Stillstand, kein Bein hebt ab, Füße folgen dem Fußabstand
@@ -643,11 +643,11 @@ static void testClimb() {
   CHECK(p.climb_height >= 40.0f);
   // höherer Körper: mehr Hub
   const float high = gait::climbHeight(LEG_GEOMETRY, POSE_LIMITS.stance_default, 70.0f, 20.0f, KNEE_MIN_DEG,
-                                       FEMUR_MAX, 15.0f, 50.0f);
+                                       FEMUR_MAX, 15.0f, 45.0f);
   // ganz tiefer Körper: nur der normale Hub (mehr geht dort nicht), er kann aber weiter laufen
   // (Schritte zum Körper hin begrenzt die Reichweite, wie bei den anderen Gangarten)
   const float low = gait::climbHeight(LEG_GEOMETRY, POSE_LIMITS.stance_default, POSE_LIMITS.height_min, 20.0f,
-                                      KNEE_MIN_DEG, FEMUR_MAX, 15.0f, 50.0f);
+                                      KNEE_MIN_DEG, FEMUR_MAX, 15.0f, 45.0f);
   CHECK(low >= 15.0f && low < p.climb_height);
   CHECK(gait::minFootRadius(LEG_GEOMETRY, POSE_LIMITS.stance_default, POSE_LIMITS.height_min, low, KNEE_MIN_DEG, true,
                             FEMUR_MAX) < POSE_LIMITS.stance_default - 5.0f);
@@ -695,11 +695,12 @@ static void testClimb() {
   }
   CHECK(zmax > p.climb_height - 0.5f);
   CHECK(worst_low_travel < 8.0f);
-  CHECK(g.maxSpeed() > 0.0f && g.maxSpeed() < 0.5f * makeGait(gait::Type::Ripple, n).nominalSpeed() + 50.0f);
+  // halb so schnell wie Dreifuß (doppelt so langer Schwung, kürzere Schritte), schneller als Ripple
+  CHECK(g.maxSpeed() > 60.0f && g.maxSpeed() < 120.0f);  // Dreifuß: 175 mm/s
   CHECK(rate_max < 0.75f * GAIT_SERVO_SLEW_DEG_PER_S);
   std::printf("Info: Klettern Hub %.0f mm (Körper 70 mm: %.0f mm, 35 mm: %.0f mm), %.0f mm/s, Schwung %.1f s, Gelenk max. %.0f °/s, "
               "tief max. %.1f mm vor\n",
-              p.climb_height, high, low, g.maxSpeed(), gait::cycleTime(gait::Type::Climb, p.swing_s) / 3.0f, rate_max,
+              p.climb_height, high, low, g.maxSpeed(), gait::cycleTime(gait::Type::Climb, p.swing_s) * 0.5f, rate_max,
               worst_low_travel);
 }
 

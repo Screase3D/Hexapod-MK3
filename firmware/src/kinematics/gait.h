@@ -36,10 +36,10 @@
 // richtungsabhängig – Schritte quer zum Bein (Mittelbeine beim Vorwärtslaufen)
 // dürfen lang sein, Schritte zum Körper hin nur so lang wie nötig.
 //
-// Klettern: Muster wie Ripple, aber der Fuß hebt erst fast senkrecht sehr hoch ab (und
+// Klettern: Muster wie Dreifuß, aber der Fuß hebt erst fast senkrecht sehr hoch ab (und
 // etwas nach außen, das hält das Knie offen), schwingt oben vor und setzt senkrecht auf –
 // eine Kastenbahn, mit der er über Kanten (Teppich, Schwellen) steigt, statt hängen zu
-// bleiben. Langsamer (doppelte Schrittdauer, kürzere Schritte).
+// bleiben. Der Schwung dauert länger (doppelt, mindestens 0,7 s).
 
 #include <stdint.h>
 
@@ -53,7 +53,7 @@ enum class Type : uint8_t {
   Tripod,  // je 3 Beine gleichzeitig (schnell)
   Ripple,  // je 2 Beine (ein Bein pro Seite), ruhiger
   Wave,    // immer nur 1 Bein (langsam, sehr stabil)
-  Climb,   // Klettern: wie Ripple, Füße sehr hoch (Kastenbahn), langsam
+  Climb,   // Klettern: wie Dreifuß, Füße sehr hoch (Kastenbahn), längerer Schwung
 };
 constexpr int NUM_TYPES = 4;
 const char* typeName(Type t);  // "tripod", "ripple", "wave", "climb"
@@ -71,8 +71,9 @@ struct Params {
 // Klettern: größter Fußweg je Standphase, Schrittdauer (mal swing_s). Oben steht der Fuß
 // CLIMB_OUT weiter außen, mindestens aber CLIMB_OUT_MIN außerhalb seines Neutralpunkts
 // (hebt er nah am Körper ab, knickte das Knie sonst zu weit ein).
-constexpr float CLIMB_STRIDE = 50.0f;
-constexpr float CLIMB_SWING_SCALE = 2.25f;
+constexpr float CLIMB_STRIDE = 60.0f;
+constexpr float CLIMB_SWING_SCALE = 2.0f;
+constexpr float CLIMB_SWING_MIN = 0.7f;  // s
 constexpr float CLIMB_OUT = 15.0f;
 constexpr float CLIMB_OUT_MIN = 10.0f;
 // Auswärtsbogen (mm) bei Abstand r_path der Bahn und r_neutral des Neutralpunkts zur Coxa-Achse

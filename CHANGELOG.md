@@ -4,6 +4,17 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.23.0
+
+- **Haltungsregler wieder auf der Steuerung** (Karte *Haltung*: Höhe, Fußabstand, Verschieben, Neigen,
+  Lageausgleich, Zurücksetzen); unter *Einstellungen → Bewegung* bleiben Schritt und Servos.
+- **Sichtbar, was einen Regler begrenzt:** Endet ein Regler früher als seine Skala, steht darunter, warum –
+  z. B. „Höhe max. 54 mm – Bein 2 Femur: Kalibriergrenze 95°“ – mit Sprung zu diesem Servo in der
+  Kalibrierung („Grenze ändern“). Die Grenzen der Regler kommen allein aus den Gelenkgrenzen der Kalibrierung;
+  reicht ein Servo mechanisch weiter, dort erweitern. (Telemetrie `motion.range_why`.)
+- **Klettern schneller:** Dreifuß-Muster statt Ripple, Schwung doppelt statt 2,25-mal so lang, Schritte bis
+  60 mm, Fußhub bis 45 mm – vorwärts 75 statt 28 mm/s; die Gelenke drehen dabei sogar langsamer als vorher.
+
 ## 0.22.0
 
 - **Rand abschneiden ohne Vergrößern:** Der Streifen fällt einfach weg, das Bild wird entsprechend flacher
