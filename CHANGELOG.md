@@ -4,6 +4,14 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.26.0
+
+- **Englische Oberfläche, Stufe 3:** auch die Meldungen der Firmware erscheinen auf Englisch – Ereignisprotokoll
+  (Start und Neustartgrund, WLAN, Akku, Not-Aus, Controller/Bluetooth, Firmware-Update …), Fehlermeldungen der
+  Befehle, Hinweise beim Begrenzen der Haltung und die Controller-Meldungen (🎮 …). Die Firmware bleibt
+  unverändert deutsch; `i18n.js` erkennt ihre Meldungen an den printf-Vorlagen aus dem Quelltext (`EN_FMT`, gut
+  150 Meldungen) und übersetzt eingesetzte Werte wie Gründe oder „an“/„aus“ mit.
+
 ## 0.25.0
 
 - **Englische Oberfläche, Stufe 2:** auch die Hilfetexte (gut 40 Absätze, mit Links und Hervorhebungen) und die
