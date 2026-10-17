@@ -2300,7 +2300,10 @@ function bindLang() {
 // Joystick (walk/body, 10 Hz):
 //   Anschauen  Körper giert/nickt zum Ziel (Füße bleiben stehen)
 //   Drehen     dreht sich auf der Stelle zum Ziel
-//   Folgen     dreht sich und läuft hin bzw. weicht zurück, bis das Ziel so groß ist wie „Abstand“
+//   Folgen     dreht sich und läuft hin bzw. weicht zurück, bis das Ziel im eingestellten Abstand ist
+// Abstand: Durchmesser im Bild (auf den vollen Bildwinkel umgerechnet, Zoom/Ausschnitt egal) und
+// Objektgröße -> Entfernung = Brennweite · Größe / Durchmesser. Die Brennweite (in Bildpunkten bei
+// 160 Pixel Breite) ist für eine übliche Linse vorbelegt und lässt sich mit einem Maßband einmessen.
 // Licht ausgleichen (Schalter „Helligkeit automatisch“): die Helligkeitsschwelle wandert mit der
 // Helligkeit des Bildes und des Ziels, der Farbton folgt langsam (Weißabgleich, Lampenlicht);
 // Schatten/Glanz am Objekt zählen mit, solange sie mit sicher erkannten Bildpunkten verbunden sind.
@@ -2311,13 +2314,16 @@ const AI_KEY = 'hexapod.ai';
 const AI_W = 160;                // Breite des Auswertebilds (Pixel)
 const AI_TICK_MS = 100;
 const AI_LOST_MS = 400, AI_SEARCH_MS = 1500, AI_GIVEUP_MS = 12000;
-const AI_SAVED = ['target', 'tol', 'smin', 'vmin', 'size', 'speed', 'search', 'auto', 'eyes'];
+const AI_FOCAL = 133;            // ≈ 62° waagerechter Bildwinkel (übliche OV5640/OV2640-Linse)
+const AI_HIST_S = 30;            // Verlauf (Sekunden)
+const AI_SAVED = ['target', 'tol', 'smin', 'vmin', 'dist', 'obj', 'focal', 'speed', 'search', 'auto', 'eyes'];
 const AI = {
-  mode: 'off', target: null, tol: 16, smin: 40, vmin: 25, size: 25, speed: 60, search: true, mask: false, auto: true,
+  mode: 'off', target: null, tol: 16, smin: 40, vmin: 25, dist: 40, obj: 7, focal: AI_FOCAL, speed: 60, search: true,
+  mask: false, auto: true, cm: 0, hist: [],
   eyes: true, eyesSent: '', eyesAt: 0,
   timer: 0, canvas: null, ctx: null, w: 0, h: 0, data: null, blob: null, f: null, lastSeen: 0, lastEx: 0,
-  look: { yaw: 0, pitch: 0 }, sentMove: false, frames: 0, fpsAt: 0, fps: 0, wantSize: false, err: '',
-  scene: 0, light: 1, hue: null, objV: 0, sizes: [], e: null, eAt: 0, de: 0, hold: false,
+  look: { yaw: 0, pitch: 0 }, sentMove: false, frames: 0, fpsAt: 0, fps: 0, wantDist: false, err: '',
+  scene: 0, light: 1, hue: null, objV: 0, diams: [], e: null, eAt: 0, de: 0, hold: false,
 };
 
 function aiLoad() {
@@ -2356,7 +2362,8 @@ const hueDiff = (a, b) => ((a - b + 540) % 360) - 180;  // -180..180
 // Bild auswerten. Bildpunkte: 2 = sicher Zielfarbe, 1 = knapp daneben (Schatten, Glanz, Ränder) –
 // zählt nur, wenn mit sicheren verbunden. Von den zusammenhängenden Flächen gewinnt die größte,
 // solange das Ziel gerade gesehen wurde aber bevorzugt die nahe der letzten Lage.
-// -> {cx, cy, size, x0, y0, x1, y1 (0..1), edge (berührt den Bildrand), h, v (Mittel)} oder null
+// -> {cx, cy, x0, y0, x1, y1 (0..1), diam (Bildpunkte bei vollem Bildwinkel), edge (berührt den
+//     Bildrand), h, v (Mittel)} oder null
 function aiDetect(px, w, h) {
   const n = w * h;
   const buf = (k, T) => (AI[k] && AI[k].length === n ? AI[k] : (AI[k] = new T(n)));
@@ -2414,14 +2421,30 @@ function aiDetect(px, w, h) {
   if (!best || best.cnt < Math.max(12, n * 0.002) || best.hs < best.cnt * 0.3) return null;  // Rauschen
   let hm = Math.atan2(best.hsin, best.hcos) * 180 / Math.PI;
   if (hm < 0) hm += 360;
+  // Durchmesser eines gleich großen Kreises; ragt das Ziel nur oben/unten (bzw. nur seitlich) aus dem
+  // Bild, ist die freie Richtung der Umrandung meist noch der ganze Durchmesser (Ball am unteren Rand)
+  const cutX = best.x0 === 0 || best.x1 === w - 1, cutY = best.y0 === 0 || best.y1 === h - 1;
+  let diam = 2 * Math.sqrt(best.cnt / Math.PI);
+  if (cutY && !cutX) diam = Math.max(diam, best.x1 - best.x0 + 1);
+  else if (cutX && !cutY) diam = Math.max(diam, best.y1 - best.y0 + 1);
   return {
     cx: (best.sx / best.cnt + 0.5) / w, cy: (best.sy / best.cnt + 0.5) / h,
-    size: Math.sqrt(best.cnt / n),  // ~ Kantenlänge relativ zum Bild (wächst linear beim Näherkommen)
     x0: best.x0 / w, y0: best.y0 / h, x1: (best.x1 + 1) / w, y1: (best.y1 + 1) / h,
-    edge: best.x0 === 0 || best.y0 === 0 || best.x1 === w - 1 || best.y1 === h - 1,
+    diam: diam * AI_W / w * aiCoverage(), edge: cutX || cutY,
     h: hm, v: best.vs / best.hs,
   };
 }
+
+// Anteil des vollen waagerechten Bildwinkels im Stream: der OV5640 liest bei Zoom und Abschneiden
+// nur einen Ausschnitt des Sensors (bei 90°/270° wird seitlich abgeschnitten); sonst ist beides nur Anzeige
+function aiCoverage() {
+  const c = S.camera;
+  if (!c || !c.zoom_hw) return 1;
+  const z = Math.max(1, Math.min(c.zoom || 1, c.zoom_max || 1));
+  return (aiRot90() ? 1 - (c.crop || 0) / 100 : 1) / z;
+}
+const aiCm = (diam) => AI.focal * AI.obj / Math.max(diam, 0.5);
+const aiRound = (cm) => Math.round(cm / 5) * 5;
 
 // Bild -> Anzeige: bei 90°/270° dreht die Oberfläche das Bild im Uhrzeigersinn
 const aiRot90 = () => !!(S.camera && (S.camera.rotation === 90 || S.camera.rotation === 270));
@@ -2472,13 +2495,14 @@ function aiTick() {
     const b = aiDetect(AI.data.data, AI.w, AI.h);
     if (b) {
       const fresh2 = AI.f && now - AI.lastSeen < AI_LOST_MS;
-      if (!fresh2) AI.sizes = [];
-      // Größe: Median der letzten 3 Bilder (einzelne Ausreißer weg), dann glätten
-      AI.sizes.push(b.size);
-      if (AI.sizes.length > 3) AI.sizes.shift();
-      const med = [...AI.sizes].sort((x, y) => x - y)[AI.sizes.length >> 1];
-      const f = fresh2 ? AI.f : { cx: b.cx, cy: b.cy, size: med };
-      AI.f = { cx: f.cx + (b.cx - f.cx) * 0.55, cy: f.cy + (b.cy - f.cy) * 0.55, size: f.size + (med - f.size) * 0.4 };
+      if (!fresh2) AI.diams = [];
+      // Durchmesser: Median der letzten 3 Bilder (einzelne Ausreißer weg), dann glätten
+      AI.diams.push(b.diam);
+      if (AI.diams.length > 3) AI.diams.shift();
+      const med = [...AI.diams].sort((x, y) => x - y)[AI.diams.length >> 1];
+      const f = fresh2 ? AI.f : { cx: b.cx, cy: b.cy, diam: med };
+      AI.f = { cx: f.cx + (b.cx - f.cx) * 0.55, cy: f.cy + (b.cy - f.cy) * 0.55, diam: f.diam + (med - f.diam) * 0.4 };
+      AI.cm = aiCm(AI.f.diam);
       AI.blob = b;
       AI.lastSeen = now;
       if (AI.auto) {
@@ -2487,9 +2511,9 @@ function aiTick() {
         AI.hue = AI.hue === null ? hNow : (AI.hue + hueDiff(hNow, AI.hue) * 0.1 + 360) % 360;
         AI.objV = AI.objV ? AI.objV + (b.v - AI.objV) * 0.15 : b.v;
       }
-      if (AI.wantSize) {
-        AI.size = Math.round(clamp(AI.f.size * 100, 5, 60));
-        AI.wantSize = false;
+      if (AI.wantDist) {
+        AI.dist = clamp(aiRound(AI.cm), 10, 200);
+        AI.wantDist = false;
         aiSave();
         aiRenderControls();
       }
@@ -2501,6 +2525,7 @@ function aiTick() {
   aiControl(now);
   aiEyes(now);
   aiDraw();
+  aiHistory(now);
   aiRenderStatus(now);
 }
 
@@ -2557,14 +2582,14 @@ function aiControl(now) {
   AI.ready = ready;
 }
 
-// Abstand halten. Die Größe im Bild ist ~ 1/Entfernung, also Fehler als relative Entfernung:
-// e = Soll/Ist - 1 (0 = passt, 1 = doppelt so weit, -0.5 = halb so weit). PD-Regler: der D-Anteil
+// Abstand halten. Fehler als relative Entfernung: e = Ist/Soll - 1 (0 = passt, 1 = doppelt so weit,
+// -0.5 = halb so weit) – unabhängig davon, wie genau Objektgröße und Einmessen stimmen. PD-Regler: der D-Anteil
 // bremst schon beim Näherkommen (gegen das Nachlaufen von Gang-Rampe und Bildverzögerung) und
 // zieht bei einem weglaufenden Ziel mit. Hysterese: im Ziel (±5 %) bleibt er stehen, bis der
 // Abstand um mehr als 15 % abweicht. Berührt das Ziel den Bildrand, ist es dort abgeschnitten
 // (also eher näher) -> nicht darauf zu laufen. Ergebnis -0.5..1 (vorwärts), ohne Tempo.
 function aiFollow(now, ex) {
-  const e = clamp(AI.size / 100 / Math.max(AI.f.size, 0.01) - 1, -0.7, 3);
+  const e = clamp(AI.cm / AI.dist - 1, -0.7, 3);
   if (AI.e === null) {
     AI.de = 0;
   } else {
@@ -2661,7 +2686,93 @@ function aiDraw() {
     g.beginPath();
     g.arc(AI.f.cx * w, AI.f.cy * h, 4, 0, Math.PI * 2);
     g.fill();
+    // Abstand am Ziel, aufrecht (das Canvas ist bei 90°/270° mitgedreht)
+    const txt = `≈ ${Math.round(AI.cm)} cm`;
+    g.save();
+    if (aiRot90()) {
+      g.translate(b.x1 * w + 6, b.y0 * h);
+      g.rotate(-Math.PI / 2);
+      g.translate(-g.measureText(txt).width - 2, 0);
+    } else g.translate(b.x0 * w, Math.max(b.y0 * h - 6, 14));
+    g.font = '600 13px system-ui, sans-serif';
+    g.lineWidth = 3;
+    g.strokeStyle = 'rgba(0,0,0,0.6)';
+    g.strokeText(txt, 0, 0);
+    g.fillText(txt, 0, 0);
+    g.restore();
   }
+}
+
+// Verlauf für die Grafik: geschätzter Abstand (null = nicht gesehen), Soll und Lauf-Befehl
+function aiHistory(now) {
+  if (!AI.target) return;
+  const seen = AI.f && now - AI.lastSeen < AI_LOST_MS;
+  AI.hist.push({ t: now, cm: seen ? AI.cm : null, v: AI.walk ? AI.walk[0] : 0 });
+  while (AI.hist.length && now - AI.hist[0].t > AI_HIST_S * 1000) AI.hist.shift();
+  aiChart(now);
+}
+
+// Grafik der letzten 30 s: oben der geschätzte Abstand mit Soll (gestrichelt) und dem Bereich, in dem
+// er stehen bleibt (±15 %), darunter auf derselben Zeitachse der Lauf-Befehl (vor > 0, zurück < 0)
+function aiChart(now) {
+  const cv = $('ai-chart');
+  cv.hidden = !AI.target;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return;
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.body);
+  const col = (n) => css.getPropertyValue(n).trim();
+  const x = (t) => W * (1 - (now - t) / (AI_HIST_S * 1000));
+  const top = 18, h1 = Math.round(H * 0.66), v0 = h1 + 20, v1 = H - 2;
+  const max = Math.min(400, Math.max(AI.dist * 2, ...AI.hist.map((p) => p.cm || 0)) * 1.05);
+  const yd = (cm) => top + (h1 - top) * (1 - Math.min(cm, max) / max);
+  const yv = (v) => v0 + (v1 - v0) * (1 - (v + 0.5) / 1.5);
+  g.fillStyle = col('--accent-soft');
+  g.fillRect(0, yd(AI.dist * 1.15), W, yd(AI.dist * 0.85) - yd(AI.dist * 1.15));
+  g.strokeStyle = col('--muted');
+  g.lineWidth = 1;
+  g.setLineDash([4, 4]);
+  g.beginPath();
+  g.moveTo(0, yd(AI.dist)); g.lineTo(W, yd(AI.dist));
+  g.stroke();
+  g.setLineDash([]);
+  g.strokeStyle = col('--border');
+  g.beginPath();
+  g.moveTo(0, yv(0)); g.lineTo(W, yv(0));
+  g.stroke();
+  const line = (key, y, color) => {
+    g.strokeStyle = color;
+    g.lineWidth = 2;
+    g.lineJoin = 'round';
+    g.beginPath();
+    let pen = false;
+    for (const p of AI.hist) {
+      if (p[key] === null) { pen = false; continue; }
+      if (pen) g.lineTo(x(p.t), y(p[key])); else g.moveTo(x(p.t), y(p[key]));
+      pen = true;
+    }
+    g.stroke();
+  };
+  line('cm', yd, col('--accent'));
+  line('v', yv, col('--text'));
+  g.font = '11px system-ui, sans-serif';
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = col('--text');
+  const last = AI.hist[AI.hist.length - 1];
+  g.fillText(lang('Abstand', 'Distance') + (last && last.cm !== null ? ` ≈ ${Math.round(last.cm)} cm` : ' –'), 0, 11);
+  g.fillStyle = col('--muted');
+  const soll = `${lang('Soll', 'Target')} ${AI.dist} cm`;
+  g.fillText(soll, W - g.measureText(soll).width, 11);
+  g.fillText(lang('Laufen: vor ↑ / zurück ↓', 'Walking: forward ↑ / back ↓'), 0, v0 - 5);
+  const span = lang('letzte 30 s', 'last 30 s');
+  g.fillText(span, W - g.measureText(span).width, v0 - 5);
 }
 
 function aiRenderStatus(now) {
@@ -2683,12 +2794,13 @@ function aiRenderStatus(now) {
   else if (AI.blob && AI.f) {
     const [vx] = aiToView(AI.f.cx, AI.f.cy);
     const dir = vx < 0.45 ? lang('links', 'left') : vx > 0.55 ? lang('rechts', 'right') : lang('Mitte', 'centre');
-    const sz = Math.round(AI.f.size * 100);
-    st = lang(`Ziel erkannt: ${dir}, Größe ${sz} %`, `Target found: ${dir}, size ${sz} %`);
+    const cm = Math.round(AI.cm);
+    st = lang(`Ziel erkannt: ${dir}, ≈ ${cm} cm`, `Target found: ${dir}, ≈ ${cm} cm`);
+    if (AI.blob.edge) st += lang(' (ragt aus dem Bild)', ' (sticks out of the image)');
     if (AI.mode === 'follow' && AI.e !== null) {
       const d = AI.hold ? lang('Abstand passt', 'distance OK')
         : AI.e > 0 ? lang('zu weit weg', 'too far') : lang('zu nah', 'too close');
-      st += ` (${lang('Soll', 'target')} ${AI.size} %: ${d})`;
+      st += ` – ${lang('Soll', 'target')} ${AI.dist} cm: ${d}`;
     }
   } else if (AI.mode !== 'off' && AI.search && AI.lastSeen && now - AI.lastSeen > AI_SEARCH_MS && now - AI.lastSeen < AI_GIVEUP_MS) {
     st = lang('Ziel verloren – sucht …', 'Target lost – searching …');
@@ -2709,7 +2821,8 @@ function aiRenderControls() {
     if (document.activeElement !== $(id)) $(id).value = v;
     $(`${id}-val`).textContent = txt;
   };
-  set('ai-size', AI.size, `${AI.size} %`);
+  set('ai-dist', AI.dist, `${AI.dist} cm`);
+  set('ai-obj', AI.obj, `${AI.obj} cm`);
   set('ai-speed', AI.speed, `${AI.speed} %`);
   set('ai-tol', AI.tol, `±${AI.tol}°`);
   set('ai-smin', AI.smin, `${AI.smin} %`);
@@ -2777,21 +2890,40 @@ function bindAi() {
     // Schwellen passend zur gewählten Farbe (deutlich darunter, damit Schatten noch zählen)
     AI.smin = Math.round(clamp(s * 100 * 0.5, 15, 60));
     AI.vmin = Math.round(clamp(v * 100 * 0.35, 10, 50));
-    AI.wantSize = true;  // Abstand = Größe beim Antippen
+    AI.wantDist = true;  // Soll-Abstand = Abstand beim Antippen
     AI.f = null;
-    AI.sizes = [];
+    AI.diams = [];
+    AI.hist = [];
     aiResetAdapt();
     aiSave();
     aiRenderControls();
   });
-  $('ai-size-now').onclick = () => {
-    if (AI.f && Date.now() - AI.lastSeen < AI_LOST_MS) {
-      AI.size = Math.round(clamp(AI.f.size * 100, 5, 60));
-      aiSave();
-      aiRenderControls();
-    } else toast(lang('Kein Ziel im Bild', 'No target in view'), true);
+  const seenNow = () => {
+    if (AI.f && Date.now() - AI.lastSeen < AI_LOST_MS) return true;
+    toast(lang('Kein Ziel im Bild', 'No target in view'), true);
+    return false;
   };
-  for (const id of ['ai-size', 'ai-speed', 'ai-tol', 'ai-smin', 'ai-vmin']) {
+  $('ai-dist-now').onclick = () => {
+    if (!seenNow()) return;
+    AI.dist = clamp(aiRound(AI.cm), 10, 200);
+    aiSave();
+    aiRenderControls();
+  };
+  // Einmessen: Ziel in bekanntem Abstand -> Brennweite (gilt für die Kamera, auch für andere Objekte)
+  $('ai-cal').onclick = () => {
+    const cm = +$('ai-cal-cm').value;
+    if (!(cm >= 5 && cm <= 300)) {
+      toast(lang('Abstand 5–300 cm eintragen', 'Enter a distance of 5–300 cm'), true);
+      return;
+    }
+    if (!seenNow()) return;
+    AI.focal = Math.round(clamp(cm * AI.f.diam / AI.obj, 30, 1500));
+    AI.cm = aiCm(AI.f.diam);
+    aiSave();
+    aiRenderControls();
+    toast(lang(`Eingemessen: Ziel jetzt ${cm} cm`, `Calibrated: target now ${cm} cm`));
+  };
+  for (const id of ['ai-dist', 'ai-obj', 'ai-speed', 'ai-tol', 'ai-smin', 'ai-vmin']) {
     $(id).oninput = (e) => {
       AI[id.slice(3)] = +e.target.value;
       aiSave();

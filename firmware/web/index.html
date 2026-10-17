@@ -339,6 +339,7 @@
                   <span id="ai-swatch" class="ai-swatch" title="Zielfarbe"></span>
                   <span id="ai-status" class="small"></span>
                 </div>
+                <canvas id="ai-chart" class="ai-chart" hidden aria-label="Verlauf: Abstand und Laufen"></canvas>
                 <p class="muted small">Tippe im Bild auf das Objekt, dem er folgen soll – am besten etwas Kräftig-Farbiges
                   (Ball, Tasse, Spielzeug), das sich vom Hintergrund abhebt. Die Bildauswertung läuft hier im Browser,
                   nicht auf dem Roboter; sie arbeitet nur, solange diese Seite offen ist.</p>
@@ -359,11 +360,11 @@
                 <p id="ai-hint" class="warn-note small"></p>
                 <label class="slider-row">
                   <span>Abstand</span>
-                  <input id="ai-size" type="range" min="5" max="60" step="1">
-                  <span id="ai-size-val" class="mono"></span>
+                  <input id="ai-dist" type="range" min="10" max="200" step="5">
+                  <span id="ai-dist-val" class="mono"></span>
                 </label>
                 <div class="row wrap">
-                  <button id="ai-size-now" class="btn btn-small" type="button" title="Die jetzige Größe des Ziels im Bild als Abstand übernehmen">Jetzigen Abstand übernehmen</button>
+                  <button id="ai-dist-now" class="btn btn-small" type="button" title="Den jetzigen Abstand zum Ziel als Soll übernehmen">Jetzigen Abstand übernehmen</button>
                 </div>
                 <label class="slider-row">
                   <span>Tempo</span>
@@ -372,10 +373,26 @@
                 </label>
                 <label class="check"><input id="ai-search" type="checkbox"> Ziel verloren: suchen (dreht sich in die Richtung, in der er es zuletzt sah)</label>
                 <label class="check"><input id="ai-eyes" type="checkbox"> Augen in der Zielfarbe (blinken schnell, solange das Ziel verloren ist)</label>
-                <p class="muted small">Abstand = wie groß das Ziel im Bild sein soll: ist es kleiner, läuft er hin, ist es
-                  größer, weicht er etwas zurück. Er bremst schon beim Näherkommen und bleibt stehen, solange der Abstand
-                  ungefähr passt (±15 %). <kbd>Esc</kbd> ist wie immer Not-Aus; die Betriebsart geht beim Verlassen der Seite
-                  auf „Aus“.</p>
+                <p class="muted small">Ist das Ziel weiter weg als der Abstand, läuft er hin, ist es näher, weicht er etwas
+                  zurück. Er bremst schon beim Näherkommen und bleibt stehen, solange der Abstand ungefähr passt (±15 %).
+                  <kbd>Esc</kbd> ist wie immer Not-Aus; die Betriebsart geht beim Verlassen der Seite auf „Aus“.</p>
+              </div>
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-sliders"/></svg>Abstand messen</h2>
+                <label class="slider-row">
+                  <span>Objektgröße</span>
+                  <input id="ai-obj" type="range" min="2" max="50" step="1">
+                  <span id="ai-obj-val" class="mono"></span>
+                </label>
+                <div class="row wrap">
+                  <input id="ai-cal-cm" class="input-num" type="number" min="5" max="300" step="1" value="30" aria-label="Bekannter Abstand in cm">
+                  <span>cm</span>
+                  <button id="ai-cal" class="btn btn-small" type="button" title="Die Kamera mit einem Ziel in bekanntem Abstand einmessen">Einmessen</button>
+                </div>
+                <p class="muted small">Der Abstand wird aus der Größe des Ziels im Bild geschätzt – dafür braucht er die echte
+                  Größe (Durchmesser) des Objekts. Für genaue Werte einmal einmessen: Ziel in bekanntem Abstand vor die
+                  Kamera legen (gemessen ab Kameralinse), Abstand eintragen, „Einmessen“. Das gilt dann für die Kamera, auch
+                  für andere Objekte (nur deren Größe eintragen). Zoom und Bildausschnitt rechnet er heraus.</p>
               </div>
               <div class="card">
                 <h2><svg class="ic"><use href="#i-sliders"/></svg>Erkennung</h2>

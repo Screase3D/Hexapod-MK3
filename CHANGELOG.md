@@ -4,6 +4,22 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.33.0
+
+- **KI/Farbverfolgung – Abstand in Zentimetern:** Der Abstand zum Ziel wird geschätzt (Durchmesser im Bild,
+  Objektgröße, Brennweite) und angezeigt – im Status, am Ziel im Bild und in einer **Verlaufsgrafik** der letzten
+  30 s (Abstand mit Soll und Haltebereich ±15 %, darunter auf derselben Zeitachse der Lauf-Befehl vor/zurück). So
+  lässt sich sehen, was die Abstandsregelung gerade tut.
+- Der Soll-Abstand wird jetzt in cm eingestellt (10–200 cm) statt als Größe im Bild; beim Antippen bzw. mit
+  „Jetzigen Abstand übernehmen“ gilt der jetzige Abstand.
+- Neue Karte „Abstand messen“: Objektgröße (2–50 cm) und **Einmessen** – Ziel in bekanntem Abstand vor die Kamera,
+  Abstand eintragen, fertig; das gilt danach für die Kamera, auch für andere Objekte. Vorbelegt für eine übliche
+  Linse (≈ 62° waagerecht).
+- Zoom und Bildausschnitt des OV5640 werden herausgerechnet (vorher änderten sie die Größe im Bild und damit den
+  Abstand, den er hielt). Ragt das Ziel nur oben/unten aus dem Bild (Ball direkt vor dem Roboter), wird der
+  Durchmesser aus der Breite bestimmt statt aus der sichtbaren Fläche – vorher hielt er ein angeschnittenes Ziel für
+  weiter weg; der Status zeigt dann „ragt aus dem Bild“.
+
 ## 0.32.0
 
 - **KI/Farbverfolgung – Augen zeigen den Zustand:** Solange das Ziel im Bild ist, leuchten die Augen dauerhaft in
