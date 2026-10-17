@@ -2306,13 +2306,15 @@ function bindLang() {
 // Schatten/Glanz am Objekt zählen mit, solange sie mit sicher erkannten Bildpunkten verbunden sind.
 // Ziel verloren: anhalten, nach 1,5 s (wenn eingestellt) langsam in die zuletzt gesehene Richtung
 // drehen und suchen, nach 12 s aufgeben. Nur auf dieser Seite und nur, solange er steht.
+// Augen (abschaltbar): Zielfarbe, solange das Ziel im Bild ist, schnell blinkend, wenn es verloren ist.
 const AI_KEY = 'hexapod.ai';
 const AI_W = 160;                // Breite des Auswertebilds (Pixel)
 const AI_TICK_MS = 100;
 const AI_LOST_MS = 400, AI_SEARCH_MS = 1500, AI_GIVEUP_MS = 12000;
-const AI_SAVED = ['target', 'tol', 'smin', 'vmin', 'size', 'speed', 'search', 'auto'];
+const AI_SAVED = ['target', 'tol', 'smin', 'vmin', 'size', 'speed', 'search', 'auto', 'eyes'];
 const AI = {
   mode: 'off', target: null, tol: 16, smin: 40, vmin: 25, size: 25, speed: 60, search: true, mask: false, auto: true,
+  eyes: true, eyesSent: '', eyesAt: 0,
   timer: 0, canvas: null, ctx: null, w: 0, h: 0, data: null, blob: null, f: null, lastSeen: 0, lastEx: 0,
   look: { yaw: 0, pitch: 0 }, sentMove: false, frames: 0, fpsAt: 0, fps: 0, wantSize: false, err: '',
   scene: 0, light: 1, hue: null, objV: 0, sizes: [], e: null, eAt: 0, de: 0, hold: false,
@@ -2497,6 +2499,7 @@ function aiTick() {
     }
   }
   aiControl(now);
+  aiEyes(now);
   aiDraw();
   aiRenderStatus(now);
 }
@@ -2580,7 +2583,36 @@ function aiFollow(now, ex) {
   return v;
 }
 
+// Augen: Vorgabe gilt 2,5 s und wird jede Sekunde erneuert – schließt die Seite, gehen sie von selbst
+// zurück auf automatisch. Not-Aus und Akku-Warnungen haben in der Firmware Vorrang.
+function aiEyeColor() {
+  const t = AI.target, s = clamp(t.s * 1.25, 0.7, 1), h = (t.h % 360) / 60;
+  const f = (n) => {
+    const k = (n + h) % 6;
+    return Math.round(255 * (1 - s * Math.max(0, Math.min(k, 4 - k, 1))));
+  };
+  return `#${[f(5), f(3), f(1)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+function aiEyes(now) {
+  if (!AI.eyes || AI.mode === 'off' || !AI.target) {
+    aiEyesOff();
+    return;
+  }
+  const color = aiEyeColor();
+  const effect = AI.f && now - AI.lastSeen < AI_LOST_MS ? 'solid' : 'blink_fast';
+  if (color + effect !== AI.eyesSent || now - AI.eyesAt > 1000) {
+    sendQuiet('eyes', { color, effect, ms: 2500 });
+    AI.eyesSent = color + effect;
+    AI.eyesAt = now;
+  }
+}
+function aiEyesOff() {
+  if (AI.eyesSent) sendQuiet('eyes', { reset: true });
+  AI.eyesSent = '';
+}
+
 function aiStopMotion() {
+  aiEyesOff();
   if (AI.sentMove) sendQuiet('walk', { vx: 0, vy: 0, turn: 0 });
   if (AI.sentBody) sendQuiet('body', { x: 0, y: 0, roll: 0, pitch: 0, yaw: 0 });
   AI.sentMove = AI.sentBody = false;
@@ -2685,6 +2717,7 @@ function aiRenderControls() {
   $('ai-search').checked = AI.search;
   $('ai-mask').checked = AI.mask;
   $('ai-auto').checked = AI.auto;
+  $('ai-eyes').checked = AI.eyes;
   setSeg('ai-mode', AI.mode);
 }
 
@@ -2767,6 +2800,11 @@ function bindAi() {
   }
   $('ai-search').onchange = (e) => { AI.search = e.target.checked; aiSave(); };
   $('ai-mask').onchange = (e) => { AI.mask = e.target.checked; };
+  $('ai-eyes').onchange = (e) => {
+    AI.eyes = e.target.checked;
+    aiEyesOff();
+    aiSave();
+  };
   $('ai-auto').onchange = (e) => {
     AI.auto = e.target.checked;
     aiResetAdapt();
@@ -4058,7 +4096,7 @@ const LED_STATES = {
 const LED_EFFECTS = {
   off: 'aus', solid: 'Dauerlicht', breathe: 'Atmen', blink: 'Blinken', pulse: 'Herzschlag',
   wink: 'Blinzeln', alternate: 'Wechselblinken', rainbow: 'Regenbogen',
-  flicker: 'Flackern', strobe: 'Blitzen', scan: 'Hin und her', sleepy: 'Müde',
+  flicker: 'Flackern', strobe: 'Blitzen', scan: 'Hin und her', sleepy: 'Müde', blink_fast: 'Schnell blinken',
 };
 const L = { cfg: null, preview: null, previewUntil: 0, raf: 0, touched: 0, state: '' };
 
@@ -4115,6 +4153,7 @@ function ledRender(style, t) {
     }
     case 'flicker': k = [0, 1].map((e) => 0.3 + (0.7 * (ledHash(Math.floor(t / 60) * 2 + e + 7) % 1000)) / 999); break;
     case 'strobe': k = [t % 160 < 60 ? 1 : 0]; break;
+    case 'blink_fast': k = [t % 250 < 125 ? 1 : 0]; break;
     case 'scan': {
       const x = 0.5 - 0.5 * Math.cos((2 * Math.PI * (t % 1600)) / 1600);
       k = [1 - 0.9 * x, 0.1 + 0.9 * x];

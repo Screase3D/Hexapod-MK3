@@ -13,11 +13,12 @@ struct Rgb {
 bool operator==(const Rgb& a, const Rgb& b);
 
 // Neue Effekte nur hinten anhängen (Nummern stehen im NVS)
-enum class Effect : uint8_t { Off, Solid, Breathe, Blink, Pulse, Wink, Alternate, Rainbow, Flicker, Strobe, Scan, Sleepy };
-constexpr int NUM_EFFECTS = 12;
+enum class Effect : uint8_t { Off, Solid, Breathe, Blink, Pulse, Wink, Alternate, Rainbow, Flicker, Strobe, Scan, Sleepy,
+                              BlinkFast };
+constexpr int NUM_EFFECTS = 13;
 // "off", "solid", "breathe", "blink", "pulse", "wink", "alternate", "rainbow",
 // "flicker" (unruhig, je Auge eigen), "strobe" (schnelles Blitzen), "scan" (Licht wandert hin und her),
-// "sleepy" (gedimmt, langsames Lidschließen)
+// "sleepy" (gedimmt, langsames Lidschließen), "blink_fast" (schnell blinken, 4 Hz)
 const char* effectName(Effect e);
 bool effectFromName(const char* name, Effect& out);
 

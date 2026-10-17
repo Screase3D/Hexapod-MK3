@@ -63,6 +63,7 @@ phone), or with an Xbox controller over Bluetooth.
 <ul>
 <li>Colour tracking: tap the object in the image</li>
 <li>Look (body turns/tilts), turn on the spot, or follow at a set distance (brakes early, no back-and-forth); search when lost</li>
+<li>Eyes glow in the target colour and blink fast while it is lost</li>
 <li>Tolerance, saturation and brightness thresholds with automatic light compensation (shadows, lamp light), detected-pixel overlay</li>
 </ul>
 </td>

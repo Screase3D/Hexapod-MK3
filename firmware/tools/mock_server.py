@@ -863,7 +863,7 @@ LED_DEFAULT_STATES = [("ap", "#0050ff", "breathe"), ("idle", "#009900", "solid")
                       ("stand", "#00ffff", "wink"), ("walk", "#008cff", "solid"), ("arms", "#aa00ff", "breathe"),
                       ("gesture", "#ff00a0", "rainbow")]
 LED_EFFECTS = ["off", "solid", "breathe", "blink", "pulse", "wink", "alternate", "rainbow",
-               "flicker", "strobe", "scan", "sleepy"]
+               "flicker", "strobe", "scan", "sleepy", "blink_fast"]
 
 
 def led_defaults():

@@ -4,6 +4,16 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.32.0
+
+- **KI/Farbverfolgung – Augen zeigen den Zustand:** Solange das Ziel im Bild ist, leuchten die Augen dauerhaft in
+  der Zielfarbe (kräftig gesättigt); geht es verloren, blinken sie schnell in dieser Farbe; wird es wiedergefunden,
+  leuchten sie wieder durchgehend. Gilt in den Betriebsarten Anschauen/Drehen/Folgen, abschaltbar („Augen in der
+  Zielfarbe“). Die Vorgabe wird jede Sekunde erneuert und gilt 2,5 s – schließt die Seite, gehen die Augen von
+  selbst zurück auf automatisch; Betriebsart „Aus“ oder Verlassen der Seite setzt sie sofort zurück. Not-Aus und
+  Akku-Warnungen haben weiter Vorrang.
+- Neuer Augen-Effekt **„Schnell blinken“** (`blink_fast`, 4 Hz), auch auf der LED-Seite wählbar.
+
 ## 0.31.0
 
 - **KI/Farbverfolgung – Abstand halten ruhiger:** Der Abstand wird als relative Entfernung geregelt (Größe im Bild

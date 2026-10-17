@@ -177,6 +177,18 @@ static void testFunEffects() {
   CHECK(o[0].r == 80);
   render({col, Effect::Sleepy}, 3100, o);
   CHECK(o[0].r == 0);
+  // Schnell blinken: 4 Hz, halb an
+  on = 0;
+  for (uint32_t t = 0; t < 1000; t += 5) {
+    render({col, Effect::BlinkFast}, t, o);
+    CHECK(o[0] == o[1] && (o[0].r == 0 || o[0].r == 200));
+    on += o[0].r ? 1 : 0;
+  }
+  CHECK(on == 100);
+  render({col, Effect::BlinkFast}, 100, o);
+  CHECK(o[0].r == 200);
+  render({col, Effect::BlinkFast}, 130, o);
+  CHECK(o[0].r == 0);
   for (int i = static_cast<int>(Effect::Flicker); i < NUM_EFFECTS; ++i) {
     Effect e;
     CHECK(effectFromName(effectName(static_cast<Effect>(i)), e) && static_cast<int>(e) == i);

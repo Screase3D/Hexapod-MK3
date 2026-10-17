@@ -8,8 +8,8 @@ namespace ledfx {
 namespace {
 constexpr float TWO_PI = 6.28318531f;
 
-const char* const EFFECT_NAMES[NUM_EFFECTS] = {"off",       "solid",   "breathe", "blink",  "pulse", "wink",
-                                               "alternate", "rainbow", "flicker", "strobe", "scan",  "sleepy"};
+const char* const EFFECT_NAMES[NUM_EFFECTS] = {"off",     "solid",   "breathe", "blink", "pulse",  "wink",      "alternate",
+                                               "rainbow", "flicker", "strobe",  "scan",  "sleepy", "blink_fast"};
 const char* const STATE_NAMES[NUM_STATES] = {"boot", "wifi", "ap", "idle", "torque", "stand",
                                              "walk", "arms", "gesture", "bat_warn", "bat_low", "estop"};
 const char* const MODE_NAMES[3] = {"auto", "single", "off"};
@@ -183,6 +183,9 @@ void render(const Style& s, uint32_t t, Rgb out[2]) {
       k[0] = k[1] = 0.4f * lid_v;
       break;
     }
+    case Effect::BlinkFast:
+      k[0] = k[1] = (t % 250) < 125 ? 1.0f : 0.0f;
+      break;
   }
   out[0] = scale(s.color, k[0]);
   out[1] = scale(s.color, k[1]);
