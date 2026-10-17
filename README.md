@@ -1,12 +1,15 @@
 # Hexapod MK3
+<p align="center">
+  <img src="docs/Hexapod MKIII CAD_Full.png" alt="CAD Overview" width="100%">
+  </p>
 
-A 3D-printed six-legged robot with 18 servos, driven by an **ESP32-S3-CAM**. Inverse kinematics, three gaits,
+  
+A 3D-printed six-legged robot with 18 servos, driven by an **ESP32-S3-CAM**. Inverse kinematics, four gaits,
 a camera stream and a lot of personality – controlled from a web interface the robot serves itself (PC and
 phone), or with an Xbox controller over Bluetooth.
 
 <p align="center">
-  <img src="docs/images/ui-control.png" alt="Control page" width="74%">
-  <img src="docs/images/ui-phone.png" alt="Control page on a phone" width="22%">
+  <img src="docs/images/ui-control.png" alt="Control page" width="100%">
 </p>
 
 ## Features
@@ -128,11 +131,18 @@ phone), or with an Xbox controller over Bluetooth.
 | Controller | ESP32-S3-CAM (N16R8) | 16 MB flash, 8 MB PSRAM, CH340 on the "TTL" USB port |
 | Camera | OV5640 (OV2640 also detected) | sleeps without a stream (the OV5640 runs hot) |
 | Servo drivers | 2× PCA9685 | `0x40` right legs 4–6, `0x41` (A0 bridged) left legs 1–3 |
-| Servos | 18× MG90S | coxa / femur / tibia per leg |
+| Servos | 18× MG90S ("Racestar")| coxa / femur / tibia per leg |
+| Joints | 18× 693-ZZ bearings | one for every joint |
 | IMU | MPU6050 (GY-521) | `0x68` |
-| Eyes | 2× WS2812B | GPIO 14 |
-| Battery | 2S 18650 (6.0–8.4 V), 7.5 A fuse | no BMS – the firmware can protect the cells |
+| Eyes | 2× WS2812B (10mm LED strip) | GPIO 14 |
+| Battery | 2S 18650 (6.0–8.4 V), 7.5 A fuse | no BMS – the firmware can protect the cells with voltage divider (untested) |
+| Voltage | 0,28" Mini Digital DC Voltmeter - two wire | Mounted on backside, connected to battery |
+| Switch | DPDT MTS-203 (or alternative with M6 thread | Mounted on backside, connected to main battery circuit |
 | Power | 2× UBEC 5 V (one per PCA9685), mini buck 5 V | logic and servos on separate supplies |
+| Springs | 2× 7mm springs | Battery contacts |
+| Fastener| Metric M2, M3, selfthreading screws; M3 Washer; M2 and M3 nuts | Hardware for screwing everything |
+| Circuit | Prototyping board, JST plugs, wires, crimps | No off-the-shelf solution, see wiring diagramm |
+
 
 Main pins: I²C SDA 47 / SCL 21 (PCA9685, MPU6050), battery sense GPIO 1 (100 k / 47 k divider), eyes GPIO 14.
 All pins live in [`firmware/include/config.h`](firmware/include/config.h). Wiring:
@@ -194,3 +204,6 @@ Host tests for kinematics, gaits, posture, behaviour, LEDs and controller live i
 Further documentation (German): [kinematics & gaits](docs/kinematik.md) ·
 [calibration](docs/kalibrierung.md) · [hardware](docs/hardware.md) · [controller](docs/controller.md) ·
 [API](docs/api.md) · [changelog](CHANGELOG.md)
+
+# Credits
+CAD and hardware design by Screase3D and coded by Claude Opus 5.5 (Anthropic).
