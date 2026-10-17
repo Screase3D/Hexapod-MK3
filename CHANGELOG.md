@@ -4,6 +4,23 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.31.0
+
+- **KI/Farbverfolgung – Abstand halten ruhiger:** Der Abstand wird als relative Entfernung geregelt (Größe im Bild
+  ~ 1/Entfernung) mit PD-Regler: er bremst schon beim Näherkommen (gegen das Nachlaufen von Gang-Rampe und
+  Bildverzögerung) und zieht bei einem weglaufenden Ziel mit. Hysterese: im Ziel bleibt er stehen, bis der Abstand
+  um mehr als 15 % abweicht – kein Vor-und-zurück-Zappeln mehr. Die Größe wird über die letzten 3 Bilder per Median
+  gefiltert (einzelne Ausreißer, z. B. ein Schattenbild, zählen nicht); berührt das Ziel den Bildrand, läuft er
+  nicht darauf zu. In einer Simulation mit Bildrauschen und Verzögerung: vorher 10–18 Richtungswechsel, jetzt keiner.
+- **KI/Farbverfolgung – Helligkeit automatisch ausgleichen** (Schalter, Standard an): die Helligkeitsschwelle
+  wandert mit der Bildhelligkeit (gegenüber dem Antippen) und der des Ziels, der Farbton folgt langsam (Weißabgleich,
+  Lampenlicht; höchstens ¾ Toleranz vom angetippten weg). Schatten und Glanzstellen am Objekt zählen mit, solange sie
+  mit sicher erkannten Bildpunkten verbunden sind (Hysterese-Schwelle) – die Größe springt nicht mehr, wenn eine
+  Hälfte im Schatten liegt. Erkannt bleibt das Ziel auch bei 30 % oder 130 % Raumhelligkeit. Anzeige von Lichtfaktor
+  und nachgeführtem Farbton; in der Pixel-Einblendung kräftig = sicher, blass = knapp daneben.
+- Bei mehreren gleichfarbigen Flächen gewinnt die nahe der letzten Lage (statt nur die größte); der Status zeigt beim
+  Folgen den Soll-Abstand und ob er passt, zu weit oder zu nah ist.
+
 ## 0.30.0
 
 - **Neue Seite „KI“ mit Farbverfolgung:** Im Kamerabild auf ein farbiges Objekt tippen (Ball, Tasse, Spielzeug) –

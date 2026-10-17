@@ -2295,33 +2295,45 @@ function bindLang() {
 // ------------------------------------------------------- KI: Farbverfolgung ------
 // Die Bildauswertung läuft im Browser (der ESP32 liefert nur den Stream): Bild verkleinert in
 // ein Canvas, Bildpunkte der Zielfarbe (Farbton ± Toleranz, Mindest-Sättigung/-Helligkeit)
-// markieren, das größte zusammenhängende Objekt nehmen. Daraus Lage (waagerecht/senkrecht) und
-// Größe im Bild, geglättet. Steuerung wie vom Joystick (walk/body, 10 Hz):
+// markieren, zusammenhängende Flächen suchen, die beste nehmen (groß und nahe an der letzten
+// Lage). Daraus Lage (waagerecht/senkrecht) und Größe im Bild, geglättet. Steuerung wie vom
+// Joystick (walk/body, 10 Hz):
 //   Anschauen  Körper giert/nickt zum Ziel (Füße bleiben stehen)
 //   Drehen     dreht sich auf der Stelle zum Ziel
 //   Folgen     dreht sich und läuft hin bzw. weicht zurück, bis das Ziel so groß ist wie „Abstand“
+// Licht ausgleichen (Schalter „Helligkeit automatisch“): die Helligkeitsschwelle wandert mit der
+// Helligkeit des Bildes und des Ziels, der Farbton folgt langsam (Weißabgleich, Lampenlicht);
+// Schatten/Glanz am Objekt zählen mit, solange sie mit sicher erkannten Bildpunkten verbunden sind.
 // Ziel verloren: anhalten, nach 1,5 s (wenn eingestellt) langsam in die zuletzt gesehene Richtung
 // drehen und suchen, nach 12 s aufgeben. Nur auf dieser Seite und nur, solange er steht.
 const AI_KEY = 'hexapod.ai';
 const AI_W = 160;                // Breite des Auswertebilds (Pixel)
 const AI_TICK_MS = 100;
 const AI_LOST_MS = 400, AI_SEARCH_MS = 1500, AI_GIVEUP_MS = 12000;
+const AI_SAVED = ['target', 'tol', 'smin', 'vmin', 'size', 'speed', 'search', 'auto'];
 const AI = {
-  mode: 'off', target: null, tol: 16, smin: 40, vmin: 25, size: 25, speed: 60, search: true, mask: false,
+  mode: 'off', target: null, tol: 16, smin: 40, vmin: 25, size: 25, speed: 60, search: true, mask: false, auto: true,
   timer: 0, canvas: null, ctx: null, w: 0, h: 0, data: null, blob: null, f: null, lastSeen: 0, lastEx: 0,
   look: { yaw: 0, pitch: 0 }, sentMove: false, frames: 0, fpsAt: 0, fps: 0, wantSize: false, err: '',
+  scene: 0, light: 1, hue: null, objV: 0, sizes: [], e: null, eAt: 0, de: 0, hold: false,
 };
 
 function aiLoad() {
   try {
     const o = JSON.parse(localStorage.getItem(AI_KEY) || '{}');
-    for (const k of ['target', 'tol', 'smin', 'vmin', 'size', 'speed', 'search']) if (o[k] !== undefined) AI[k] = o[k];
+    for (const k of AI_SAVED) if (o[k] !== undefined) AI[k] = o[k];
   } catch (e) { /* egal */ }
+  aiResetAdapt();
 }
 function aiSave() {
   const o = {};
-  for (const k of ['target', 'tol', 'smin', 'vmin', 'size', 'speed', 'search']) o[k] = AI[k];
+  for (const k of AI_SAVED) o[k] = AI[k];
   try { localStorage.setItem(AI_KEY, JSON.stringify(o)); } catch (e) { /* egal */ }
+}
+// nachgeführten Farbton/Helligkeit auf die angetippte Farbe zurücksetzen
+function aiResetAdapt() {
+  AI.hue = AI.target ? AI.target.h : null;
+  AI.objV = AI.target ? AI.target.v : 0;
 }
 
 // RGB (0..255) -> Farbton 0..360, Sättigung/Helligkeit 0..1
@@ -2337,25 +2349,41 @@ function rgbHsv(r, g, b) {
   }
   return [h, max ? d / max : 0, max / 255];
 }
+const hueDiff = (a, b) => ((a - b + 540) % 360) - 180;  // -180..180
 
-// Bild auswerten: größtes Objekt der Zielfarbe -> {cx, cy, size, x0, y0, x1, y1} (0..1) oder null
-function aiDetect(px, w, h, t) {
+// Bild auswerten. Bildpunkte: 2 = sicher Zielfarbe, 1 = knapp daneben (Schatten, Glanz, Ränder) –
+// zählt nur, wenn mit sicheren verbunden. Von den zusammenhängenden Flächen gewinnt die größte,
+// solange das Ziel gerade gesehen wurde aber bevorzugt die nahe der letzten Lage.
+// -> {cx, cy, size, x0, y0, x1, y1 (0..1), edge (berührt den Bildrand), h, v (Mittel)} oder null
+function aiDetect(px, w, h) {
   const n = w * h;
-  const mask = AI.maskBuf && AI.maskBuf.length === n ? AI.maskBuf : (AI.maskBuf = new Uint8Array(n));
-  const smin = AI.smin / 100, vmin = AI.vmin / 100;
+  const buf = (k, T) => (AI[k] && AI[k].length === n ? AI[k] : (AI[k] = new T(n)));
+  const mask = buf('maskBuf', Uint8Array), hues = buf('hueBuf', Float32Array), vals = buf('valBuf', Float32Array);
+  const t = AI.target;
+  // Licht: Bild jetzt im Vergleich zum Antippen; das Ziel selbst (nachgeführt) darf dunkler sein
+  AI.light = AI.auto && t.scene ? clamp(AI.scene / t.scene, 0.3, 1.5) : 1;
+  let vmin = AI.vmin / 100 * AI.light;
+  if (AI.auto && AI.objV) vmin = Math.min(vmin, AI.objV * 0.5);
+  vmin = Math.max(vmin, 0.04);
+  const smin = AI.smin / 100, tol = AI.tol;
+  const hc = AI.auto && AI.hue !== null ? AI.hue : t.h;
+  const tolW = tol * 1.4, sminW = smin * 0.65, vminW = vmin * 0.45;
   for (let i = 0, j = 0; i < n; ++i, j += 4) {
     const [hh, ss, vv] = rgbHsv(px[j], px[j + 1], px[j + 2]);
-    let dh = Math.abs(hh - t.h);
-    if (dh > 180) dh = 360 - dh;
-    mask[i] = dh <= AI.tol && ss >= smin && vv >= vmin ? 1 : 0;
+    hues[i] = hh;
+    vals[i] = vv;
+    const dh = Math.abs(hueDiff(hh, hc));
+    if (dh <= tol && ss >= smin && vv >= vmin) mask[i] = 2;
+    else mask[i] = AI.auto && dh <= tolW && ss >= sminW && vv >= vminW && ss * vv >= 0.05 ? 1 : 0;
   }
-  // zusammenhängende Flächen (4er-Nachbarschaft), die größte gewinnt
+  // zusammenhängende Flächen (4er-Nachbarschaft) ab sicheren Bildpunkten
   const seen = AI.seenBuf && AI.seenBuf.length === n ? AI.seenBuf.fill(0) : (AI.seenBuf = new Uint8Array(n));
   const stack = AI.stackBuf && AI.stackBuf.length === n ? AI.stackBuf : (AI.stackBuf = new Int32Array(n));
+  const prev = AI.f && Date.now() - AI.lastSeen < 1000 ? AI.f : null;
   let best = null;
   for (let i = 0; i < n; ++i) {
-    if (!mask[i] || seen[i]) continue;
-    let sp = 0, cnt = 0, sx = 0, sy = 0, x0 = w, y0 = h, x1 = 0, y1 = 0;
+    if (mask[i] !== 2 || seen[i]) continue;
+    let sp = 0, cnt = 0, sx = 0, sy = 0, x0 = w, y0 = h, x1 = 0, y1 = 0, hs = 0, hcos = 0, hsin = 0, vs = 0;
     stack[sp++] = i;
     seen[i] = 1;
     while (sp) {
@@ -2363,18 +2391,33 @@ function aiDetect(px, w, h, t) {
       const x = k % w, y = (k - x) / w;
       ++cnt; sx += x; sy += y;
       if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (mask[k] === 2) {
+        ++hs;
+        hcos += Math.cos(hues[k] * Math.PI / 180);
+        hsin += Math.sin(hues[k] * Math.PI / 180);
+        vs += vals[k];
+      }
       if (x > 0 && mask[k - 1] && !seen[k - 1]) { seen[k - 1] = 1; stack[sp++] = k - 1; }
       if (x < w - 1 && mask[k + 1] && !seen[k + 1]) { seen[k + 1] = 1; stack[sp++] = k + 1; }
       if (y > 0 && mask[k - w] && !seen[k - w]) { seen[k - w] = 1; stack[sp++] = k - w; }
       if (y < h - 1 && mask[k + w] && !seen[k + w]) { seen[k + w] = 1; stack[sp++] = k + w; }
     }
-    if (!best || cnt > best.cnt) best = { cnt, sx, sy, x0, y0, x1, y1 };
+    let score = cnt;
+    if (prev) {
+      const dx = (sx / cnt + 0.5) / w - prev.cx, dy = (sy / cnt + 0.5) / h - prev.cy;
+      score = cnt / (1 + (dx * dx + dy * dy) / 0.09);  // in 30 % Bildbreite Entfernung: halbe Wertung
+    }
+    if (!best || score > best.score) best = { score, cnt, sx, sy, x0, y0, x1, y1, hs, hcos, hsin, vs };
   }
-  if (!best || best.cnt < Math.max(12, n * 0.002)) return null;  // Rauschen
+  if (!best || best.cnt < Math.max(12, n * 0.002) || best.hs < best.cnt * 0.3) return null;  // Rauschen
+  let hm = Math.atan2(best.hsin, best.hcos) * 180 / Math.PI;
+  if (hm < 0) hm += 360;
   return {
     cx: (best.sx / best.cnt + 0.5) / w, cy: (best.sy / best.cnt + 0.5) / h,
     size: Math.sqrt(best.cnt / n),  // ~ Kantenlänge relativ zum Bild (wächst linear beim Näherkommen)
     x0: best.x0 / w, y0: best.y0 / h, x1: (best.x1 + 1) / w, y1: (best.y1 + 1) / h,
+    edge: best.x0 === 0 || best.y0 === 0 || best.x1 === w - 1 || best.y1 === h - 1,
+    h: hm, v: best.vs / best.hs,
   };
 }
 
@@ -2401,6 +2444,11 @@ function aiFrame() {
     AI.w = w;
     AI.h = h;
     AI.err = '';
+    // Bildhelligkeit (Mittel der hellsten Farbkanäle, jeder 4. Bildpunkt)
+    const px = AI.data.data;
+    let sum = 0;
+    for (let j = 0; j < px.length; j += 16) sum += Math.max(px[j], px[j + 1], px[j + 2]);
+    AI.scene = sum / (px.length / 16) / 255;
   } catch (e) {
     AI.data = null;
     AI.err = lang('Kein Zugriff auf das Kamerabild (Browser blockiert es)', 'No access to the camera image (blocked by the browser)');
@@ -2419,14 +2467,24 @@ function aiTick() {
   }
   const fresh = aiFrame();
   if (fresh && AI.target) {
-    const b = aiDetect(AI.data.data, AI.w, AI.h, AI.target);
+    const b = aiDetect(AI.data.data, AI.w, AI.h);
     if (b) {
-      // glätten (Sprünge zwischen zwei Bildern dämpfen)
-      const f = AI.f && now - AI.lastSeen < AI_LOST_MS ? AI.f : { cx: b.cx, cy: b.cy, size: b.size };
-      const a = 0.55;
-      AI.f = { cx: f.cx + (b.cx - f.cx) * a, cy: f.cy + (b.cy - f.cy) * a, size: f.size + (b.size - f.size) * a };
+      const fresh2 = AI.f && now - AI.lastSeen < AI_LOST_MS;
+      if (!fresh2) AI.sizes = [];
+      // Größe: Median der letzten 3 Bilder (einzelne Ausreißer weg), dann glätten
+      AI.sizes.push(b.size);
+      if (AI.sizes.length > 3) AI.sizes.shift();
+      const med = [...AI.sizes].sort((x, y) => x - y)[AI.sizes.length >> 1];
+      const f = fresh2 ? AI.f : { cx: b.cx, cy: b.cy, size: med };
+      AI.f = { cx: f.cx + (b.cx - f.cx) * 0.55, cy: f.cy + (b.cy - f.cy) * 0.55, size: f.size + (med - f.size) * 0.4 };
       AI.blob = b;
       AI.lastSeen = now;
+      if (AI.auto) {
+        // Farbton und Helligkeit des Ziels langsam nachführen – höchstens 3/4 Toleranz vom angetippten Farbton weg
+        const hNow = AI.target.h + clamp(hueDiff(b.h, AI.target.h), -AI.tol * 0.75, AI.tol * 0.75);
+        AI.hue = AI.hue === null ? hNow : (AI.hue + hueDiff(hNow, AI.hue) * 0.1 + 360) % 360;
+        AI.objV = AI.objV ? AI.objV + (b.v - AI.objV) * 0.15 : b.v;
+      }
       if (AI.wantSize) {
         AI.size = Math.round(clamp(AI.f.size * 100, 5, 60));
         AI.wantSize = false;
@@ -2435,6 +2493,7 @@ function aiTick() {
       }
     } else {
       AI.blob = null;
+      if (AI.lastSeen && now - AI.lastSeen > AI_GIVEUP_MS) aiResetAdapt();
     }
   }
   aiControl(now);
@@ -2463,13 +2522,7 @@ function aiControl(now) {
         body = AI.look;
       } else {
         const turn = clamp(-dead(ex, 0.05) * 2.4, -1, 1) * k;
-        let fwd = 0;
-        if (AI.mode === 'follow') {
-          const want = AI.size / 100;
-          fwd = clamp((want - AI.f.size) / want * 2.0, -0.5, 1) * k;
-          if (Math.abs(fwd) < 0.06 * k) fwd = 0;
-          fwd *= Math.max(0, 1 - Math.abs(ex) * 2.5);  // erst hindrehen, dann laufen
-        }
+        const fwd = AI.mode === 'follow' ? aiFollow(now, ex) * k : 0;
         walk = [fwd, 0, turn];
       }
     } else if (AI.mode === 'look') {
@@ -2480,6 +2533,10 @@ function aiControl(now) {
     } else if (AI.search && AI.lastSeen && now - AI.lastSeen > AI_SEARCH_MS && now - AI.lastSeen < AI_GIVEUP_MS) {
       walk = [0, 0, -Math.sign(AI.lastEx || 1) * 0.35 * k];
     }
+  }
+  if (!seen || AI.mode !== 'follow' || !ready) {
+    AI.e = null;
+    AI.hold = false;
   }
   const moving = walk.some((v) => Math.abs(v) > 1e-3);
   if (moving || AI.sentMove) {
@@ -2495,6 +2552,32 @@ function aiControl(now) {
   }
   AI.walk = walk;
   AI.ready = ready;
+}
+
+// Abstand halten. Die Größe im Bild ist ~ 1/Entfernung, also Fehler als relative Entfernung:
+// e = Soll/Ist - 1 (0 = passt, 1 = doppelt so weit, -0.5 = halb so weit). PD-Regler: der D-Anteil
+// bremst schon beim Näherkommen (gegen das Nachlaufen von Gang-Rampe und Bildverzögerung) und
+// zieht bei einem weglaufenden Ziel mit. Hysterese: im Ziel (±5 %) bleibt er stehen, bis der
+// Abstand um mehr als 15 % abweicht. Berührt das Ziel den Bildrand, ist es dort abgeschnitten
+// (also eher näher) -> nicht darauf zu laufen. Ergebnis -0.5..1 (vorwärts), ohne Tempo.
+function aiFollow(now, ex) {
+  const e = clamp(AI.size / 100 / Math.max(AI.f.size, 0.01) - 1, -0.7, 3);
+  if (AI.e === null) {
+    AI.de = 0;
+  } else {
+    const dt = clamp((now - AI.eAt) / 1000, 0.02, 0.5);
+    AI.de += ((e - AI.e) / dt - AI.de) * 0.35;
+  }
+  AI.e = e;
+  AI.eAt = now;
+  AI.hold = Math.abs(e) < (AI.hold ? 0.15 : 0.05);
+  if (AI.hold) return 0;
+  let v = 1.6 * e + 0.5 * AI.de;
+  if (v * e <= 0) return 0;  // bremst nur, nie über das Ziel hinaus zurück
+  v = Math.sign(v) * Math.max(Math.abs(v), 0.15);
+  v = clamp(v, -0.5, 1) * Math.max(0, 1 - Math.abs(ex) * 2.5);  // erst hindrehen, dann laufen
+  if (AI.blob && AI.blob.edge && v > 0) v = 0;
+  return v;
 }
 
 function aiStopMotion() {
@@ -2520,8 +2603,8 @@ function aiDraw() {
     if (!AI.maskImg || AI.maskImg.width !== AI.w || AI.maskImg.height !== AI.h) AI.maskImg = new ImageData(AI.w, AI.h);
     const d = AI.maskImg.data;
     for (let i = 0; i < n; ++i) {
-      const on = AI.maskBuf[i];
-      d[i * 4] = 255; d[i * 4 + 1] = 0; d[i * 4 + 2] = 255; d[i * 4 + 3] = on ? 150 : 0;
+      const on = AI.maskBuf[i];  // 2 sicher, 1 knapp (zählt nur am Ziel)
+      d[i * 4] = 255; d[i * 4 + 1] = 0; d[i * 4 + 2] = 255; d[i * 4 + 3] = on === 2 ? 150 : on ? 60 : 0;
     }
     if (!AI.maskCv) AI.maskCv = document.createElement('canvas');
     AI.maskCv.width = AI.w;
@@ -2551,6 +2634,10 @@ function aiDraw() {
 
 function aiRenderStatus(now) {
   $('ai-fps').textContent = AI.fps ? `${AI.fps.toFixed(1)} fps` : '';
+  $('ai-light').textContent = AI.target && AI.auto && AI.data
+    ? lang(`Licht: ${Math.round(AI.light * 100)} % vom Antippen · Farbton ${Math.round(AI.hue ?? AI.target.h)}° (angetippt ${Math.round(AI.target.h)}°)`,
+      `Light: ${Math.round(AI.light * 100)} % of when tapped · hue ${Math.round(AI.hue ?? AI.target.h)}° (tapped ${Math.round(AI.target.h)}°)`)
+    : '';
   const sw = $('ai-swatch');
   if (AI.target) {
     sw.style.background = `hsl(${Math.round(AI.target.h)} ${Math.round(AI.target.s * 100)}% ${Math.round(Math.max(25, AI.target.v * 50))}%)`;
@@ -2564,7 +2651,13 @@ function aiRenderStatus(now) {
   else if (AI.blob && AI.f) {
     const [vx] = aiToView(AI.f.cx, AI.f.cy);
     const dir = vx < 0.45 ? lang('links', 'left') : vx > 0.55 ? lang('rechts', 'right') : lang('Mitte', 'centre');
-    st = lang(`Ziel erkannt: ${dir}, Größe ${Math.round(AI.f.size * 100)} %`, `Target found: ${dir}, size ${Math.round(AI.f.size * 100)} %`);
+    const sz = Math.round(AI.f.size * 100);
+    st = lang(`Ziel erkannt: ${dir}, Größe ${sz} %`, `Target found: ${dir}, size ${sz} %`);
+    if (AI.mode === 'follow' && AI.e !== null) {
+      const d = AI.hold ? lang('Abstand passt', 'distance OK')
+        : AI.e > 0 ? lang('zu weit weg', 'too far') : lang('zu nah', 'too close');
+      st += ` (${lang('Soll', 'target')} ${AI.size} %: ${d})`;
+    }
   } else if (AI.mode !== 'off' && AI.search && AI.lastSeen && now - AI.lastSeen > AI_SEARCH_MS && now - AI.lastSeen < AI_GIVEUP_MS) {
     st = lang('Ziel verloren – sucht …', 'Target lost – searching …');
   } else st = lang('Ziel nicht im Bild', 'Target not in view');
@@ -2591,6 +2684,7 @@ function aiRenderControls() {
   set('ai-vmin', AI.vmin, `${AI.vmin} %`);
   $('ai-search').checked = AI.search;
   $('ai-mask').checked = AI.mask;
+  $('ai-auto').checked = AI.auto;
   setSeg('ai-mode', AI.mode);
 }
 
@@ -2646,12 +2740,14 @@ function bindAi() {
       toast(lang('Dort ist keine deutliche Farbe – bitte auf etwas Kräftig-Farbiges tippen', 'No clear colour there – please tap something brightly coloured'), true);
       return;
     }
-    AI.target = { h, s, v };
+    AI.target = { h, s, v, scene: AI.scene };
     // Schwellen passend zur gewählten Farbe (deutlich darunter, damit Schatten noch zählen)
     AI.smin = Math.round(clamp(s * 100 * 0.5, 15, 60));
     AI.vmin = Math.round(clamp(v * 100 * 0.35, 10, 50));
     AI.wantSize = true;  // Abstand = Größe beim Antippen
     AI.f = null;
+    AI.sizes = [];
+    aiResetAdapt();
     aiSave();
     aiRenderControls();
   });
@@ -2671,6 +2767,11 @@ function bindAi() {
   }
   $('ai-search').onchange = (e) => { AI.search = e.target.checked; aiSave(); };
   $('ai-mask').onchange = (e) => { AI.mask = e.target.checked; };
+  $('ai-auto').onchange = (e) => {
+    AI.auto = e.target.checked;
+    aiResetAdapt();
+    aiSave();
+  };
   $('ai-img').onerror = () => {
     const view = $('ai-view');
     if (!view.classList.contains('live')) return;

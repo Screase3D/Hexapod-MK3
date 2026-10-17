@@ -371,9 +371,10 @@
                   <span id="ai-speed-val" class="mono"></span>
                 </label>
                 <label class="check"><input id="ai-search" type="checkbox"> Ziel verloren: suchen (dreht sich in die Richtung, in der er es zuletzt sah)</label>
-                <p class="muted small">Abstand = wie groß das Ziel im Bild sein soll (Anteil der Bildhöhe): ist es kleiner, läuft er
-                  hin, ist es größer, weicht er etwas zurück. <kbd>Esc</kbd> ist wie immer Not-Aus; die Betriebsart geht beim
-                  Verlassen der Seite auf „Aus“.</p>
+                <p class="muted small">Abstand = wie groß das Ziel im Bild sein soll: ist es kleiner, läuft er hin, ist es
+                  größer, weicht er etwas zurück. Er bremst schon beim Näherkommen und bleibt stehen, solange der Abstand
+                  ungefähr passt (±15 %). <kbd>Esc</kbd> ist wie immer Not-Aus; die Betriebsart geht beim Verlassen der Seite
+                  auf „Aus“.</p>
               </div>
               <div class="card">
                 <h2><svg class="ic"><use href="#i-sliders"/></svg>Erkennung</h2>
@@ -392,9 +393,12 @@
                   <input id="ai-vmin" type="range" min="0" max="90" step="1">
                   <span id="ai-vmin-val" class="mono"></span>
                 </label>
+                <label class="check"><input id="ai-auto" type="checkbox"> Helligkeit automatisch ausgleichen (Schatten, wechselndes Licht)</label>
+                <p id="ai-light" class="muted small mono"></p>
                 <label class="check"><input id="ai-mask" type="checkbox"> Erkannte Bildpunkte einblenden</label>
                 <p class="muted small">Erkennt er zu viel (Hintergrund wird mit markiert): Toleranz kleiner oder Sättigung höher.
-                  Verliert er das Ziel oft (z. B. im Schatten): Toleranz größer, Helligkeit niedriger. Weiße, graue und
+                  Verliert er das Ziel oft: Toleranz größer, Helligkeit niedriger. Kräftig markiert = sicher erkannt,
+                  blass = knapp daneben (Schatten, Glanz) – zählt nur mit, wenn es am Ziel hängt. Weiße, graue und
                   schwarze Dinge lassen sich nicht verfolgen – sie haben keine Farbe.</p>
               </div>
             </div>

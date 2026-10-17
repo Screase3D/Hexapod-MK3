@@ -59,8 +59,8 @@ phone), or with an Xbox controller over Bluetooth.
 <a href="docs/images/ui-ai.png"><img src="docs/images/ui-ai.png" alt="AI colour tracking"></a>
 <ul>
 <li>Colour tracking: tap the object in the image</li>
-<li>Look (body turns/tilts), turn on the spot, or follow at a set distance; search when lost</li>
-<li>Tolerance, saturation and brightness thresholds, detected-pixel overlay</li>
+<li>Look (body turns/tilts), turn on the spot, or follow at a set distance (brakes early, no back-and-forth); search when lost</li>
+<li>Tolerance, saturation and brightness thresholds with automatic light compensation (shadows, lamp light), detected-pixel overlay</li>
 </ul>
 </td>
 <td valign="top"></td>
