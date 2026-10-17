@@ -18,6 +18,8 @@ phone), or with an Xbox controller over Bluetooth.
   IMU levelling; stand up / sit down; front-leg mode (lift, steer, wave); body joystick and gestures.
 - **Personality** – emotes with animated eyes, games, a choreography editor, idle "alive" motions, breathing,
   boredom and falling asleep, wriggling when picked up, expressive walking (inertia, look-ahead, hip sway).
+- **AI: colour tracking** – tap an object in the camera image and the robot looks at it, turns towards it or
+  follows it at a set distance (and searches when it's lost); the image analysis runs in the browser.
 - **Camera** – MJPEG stream, zoom up to 4× and edge cropping (both on the OV5640 sensor, so real detail), photo and video
   recording in the browser, full-screen driver view with on-screen joysticks, artificial horizon.
 - **Input** – touch joysticks, keyboard (WASD), Xbox (Elite) controller via Bluetooth on the robot or via the
@@ -50,6 +52,18 @@ phone), or with an Xbox controller over Bluetooth.
 <li>Liveliness: idle motions, breathing, boredom/sleep, wriggling, gaze</li>
 </ul>
 </td>
+</tr>
+<tr>
+<td valign="top">
+<b>KI</b> (AI)<br>
+<a href="docs/images/ui-ai.png"><img src="docs/images/ui-ai.png" alt="AI colour tracking"></a>
+<ul>
+<li>Colour tracking: tap the object in the image</li>
+<li>Look (body turns/tilts), turn on the spot, or follow at a set distance; search when lost</li>
+<li>Tolerance, saturation and brightness thresholds, detected-pixel overlay</li>
+</ul>
+</td>
+<td valign="top"></td>
 </tr>
 <tr>
 <td valign="top">

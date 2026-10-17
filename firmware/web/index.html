@@ -31,6 +31,7 @@
       <symbol id="i-gear" viewBox="0 0 24 24"><path d="M18.9 10.6 21.5 10.9 21.5 13.1 18.9 13.4 17.8 15.9 19.6 17.9 17.9 19.6 15.9 17.8 13.4 18.9 13.1 21.5 10.9 21.5 10.6 18.9 8.1 17.8 6.1 19.6 4.4 17.9 6.2 15.9 5.1 13.4 2.5 13.1 2.5 10.9 5.1 10.6 6.2 8.1 4.4 6.1 6.1 4.4 8.1 6.2 10.6 5.1 10.9 2.5 13.1 2.5 13.4 5.1 15.9 6.2 17.9 4.4 19.6 6.1 17.8 8.1Z"/><circle cx="12" cy="12" r="3"/></symbol>
       <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
       <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></symbol>
+      <symbol id="i-ai" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.6"/><path d="M12 1.8v3.4M12 18.8v3.4M1.8 12h3.4M18.8 12h3.4"/></symbol>
       <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/></symbol>
@@ -75,6 +76,8 @@
           <svg class="ic"><use href="#i-control"/></svg><span class="nav-label">Steuerung</span></a>
         <a class="nav-item" href="#verhalten" data-page="fun" title="Verhalten">
           <svg class="ic"><use href="#i-sparkle"/></svg><span class="nav-label">Verhalten</span></a>
+        <a class="nav-item" href="#ki" data-page="ai" title="KI">
+          <svg class="ic"><use href="#i-ai"/></svg><span class="nav-label">KI</span></a>
         <a class="nav-item" href="#kamera" data-page="camera" title="Kamera &amp; Lagesensor">
           <svg class="ic"><use href="#i-camera"/></svg><span class="nav-label">Kamera &amp; Lagesensor</span></a>
         <a class="nav-item" href="#kalibrierung" data-page="cal" title="Kalibrierung &amp; Justierung">
@@ -311,6 +314,88 @@
                   unter einem Regler zeigt, wie weit die Beine bei den übrigen Werten reichen (Grenzen aus der
                   Kalibrierung). Servos fahren beim Einschalten zuerst langsam in die Sitzhaltung; IK bleibt nach einem
                   Neustart wie zuletzt. Schritt und Servos unter <a href="#einstellungen">Einstellungen</a>.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-ai" class="page" data-title="KI">
+          <div class="grid-2">
+            <div class="stack">
+              <div class="card">
+                <div class="card-head">
+                  <h2><svg class="ic"><use href="#i-camera"/></svg>Farbverfolgung</h2>
+                  <span id="ai-fps" class="muted small mono"></span>
+                </div>
+                <div class="cam-view ai-view" id="ai-view" title="Tippen: dieser Farbe folgen">
+                  <img id="ai-img" alt="Kamerabild (Farbverfolgung)" crossorigin="anonymous">
+                  <canvas id="ai-overlay" class="ai-overlay"></canvas>
+                  <div class="cam-placeholder">
+                    <svg class="ic"><use href="#i-camera-off"/></svg>
+                    <span id="ai-ph-text">Kamera startet …</span>
+                  </div>
+                </div>
+                <div class="ai-status">
+                  <span id="ai-swatch" class="ai-swatch" title="Zielfarbe"></span>
+                  <span id="ai-status" class="small"></span>
+                </div>
+                <p class="muted small">Tippe im Bild auf das Objekt, dem er folgen soll – am besten etwas Kräftig-Farbiges
+                  (Ball, Tasse, Spielzeug), das sich vom Hintergrund abhebt. Die Bildauswertung läuft hier im Browser,
+                  nicht auf dem Roboter; sie arbeitet nur, solange diese Seite offen ist.</p>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-ai"/></svg>Verhalten</h2>
+                <div class="field">
+                  <span class="field-label">Betriebsart</span>
+                  <div class="seg" id="ai-mode" role="radiogroup" aria-label="Betriebsart">
+                    <button type="button" role="radio" data-value="off">Aus</button>
+                    <button type="button" role="radio" data-value="look" title="Körper dreht und neigt sich zum Ziel, die Füße bleiben stehen">Anschauen</button>
+                    <button type="button" role="radio" data-value="turn" title="Dreht sich auf der Stelle zum Ziel">Drehen</button>
+                    <button type="button" role="radio" data-value="follow" title="Dreht sich zum Ziel und läuft hinterher, hält Abstand">Folgen</button>
+                  </div>
+                </div>
+                <p id="ai-hint" class="warn-note small"></p>
+                <label class="slider-row">
+                  <span>Abstand</span>
+                  <input id="ai-size" type="range" min="5" max="60" step="1">
+                  <span id="ai-size-val" class="mono"></span>
+                </label>
+                <div class="row wrap">
+                  <button id="ai-size-now" class="btn btn-small" type="button" title="Die jetzige Größe des Ziels im Bild als Abstand übernehmen">Jetzigen Abstand übernehmen</button>
+                </div>
+                <label class="slider-row">
+                  <span>Tempo</span>
+                  <input id="ai-speed" type="range" min="10" max="100" step="5">
+                  <span id="ai-speed-val" class="mono"></span>
+                </label>
+                <label class="check"><input id="ai-search" type="checkbox"> Ziel verloren: suchen (dreht sich in die Richtung, in der er es zuletzt sah)</label>
+                <p class="muted small">Abstand = wie groß das Ziel im Bild sein soll (Anteil der Bildhöhe): ist es kleiner, läuft er
+                  hin, ist es größer, weicht er etwas zurück. <kbd>Esc</kbd> ist wie immer Not-Aus; die Betriebsart geht beim
+                  Verlassen der Seite auf „Aus“.</p>
+              </div>
+              <div class="card">
+                <h2><svg class="ic"><use href="#i-sliders"/></svg>Erkennung</h2>
+                <label class="slider-row">
+                  <span>Farbtoleranz</span>
+                  <input id="ai-tol" type="range" min="4" max="45" step="1">
+                  <span id="ai-tol-val" class="mono"></span>
+                </label>
+                <label class="slider-row">
+                  <span>Min. Sättigung</span>
+                  <input id="ai-smin" type="range" min="0" max="90" step="1">
+                  <span id="ai-smin-val" class="mono"></span>
+                </label>
+                <label class="slider-row">
+                  <span>Min. Helligkeit</span>
+                  <input id="ai-vmin" type="range" min="0" max="90" step="1">
+                  <span id="ai-vmin-val" class="mono"></span>
+                </label>
+                <label class="check"><input id="ai-mask" type="checkbox"> Erkannte Bildpunkte einblenden</label>
+                <p class="muted small">Erkennt er zu viel (Hintergrund wird mit markiert): Toleranz kleiner oder Sättigung höher.
+                  Verliert er das Ziel oft (z. B. im Schatten): Toleranz größer, Helligkeit niedriger. Weiße, graue und
+                  schwarze Dinge lassen sich nicht verfolgen – sie haben keine Farbe.</p>
               </div>
             </div>
           </div>

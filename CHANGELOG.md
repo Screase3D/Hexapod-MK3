@@ -4,6 +4,22 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.30.0
+
+- **Neue Seite „KI“ mit Farbverfolgung:** Im Kamerabild auf ein farbiges Objekt tippen (Ball, Tasse, Spielzeug) –
+  der Roboter erkennt es und
+  - *Anschauen:* dreht und neigt den Körper zum Ziel, die Füße bleiben stehen,
+  - *Drehen:* dreht sich auf der Stelle zum Ziel,
+  - *Folgen:* dreht sich hin und läuft hinterher bzw. weicht zurück, bis das Ziel so groß im Bild ist wie
+    eingestellt („Abstand“, per Knopf aus der jetzigen Größe übernehmbar); Tempo einstellbar.
+  - Ziel verloren: er hält an und sucht nach 1,5 s langsam in der Richtung, in der er es zuletzt sah (abschaltbar,
+    gibt nach 12 s auf).
+  - Erkennung: Farbton ± Toleranz, Mindest-Sättigung und -Helligkeit (beim Antippen passend vorbelegt), größtes
+    zusammenhängendes Objekt, geglättet; Markierung und auf Wunsch die erkannten Bildpunkte im Bild.
+  - Die Bildauswertung läuft im Browser (ca. 10 Bilder/s auf 160 Pixel Breite), nicht auf dem ESP32; sie arbeitet
+    nur, solange die Seite offen ist, und nur im Stehen. Beim Verlassen der Seite geht sie auf „Aus“ und hält an.
+  - Funktioniert ohne Internet; Drehung (auch 90°/270°) wird berücksichtigt. Deutsch und Englisch.
+
 ## 0.26.0
 
 - **Englische Oberfläche, Stufe 3:** auch die Meldungen der Firmware erscheinen auf Englisch – Ereignisprotokoll

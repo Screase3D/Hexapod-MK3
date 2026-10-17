@@ -2170,7 +2170,7 @@ function bindGlobal() {
 
 // Seite -> Adresse (#steuerung …), damit Neuladen und Zurück-Taste funktionieren
 const PAGES = {
-  control: 'steuerung', fun: 'verhalten', camera: 'kamera', cal: 'kalibrierung', system: 'system', leds: 'leds',
+  control: 'steuerung', fun: 'verhalten', ai: 'ki', camera: 'kamera', cal: 'kalibrierung', system: 'system', leds: 'leds',
   pad: 'controller', settings: 'einstellungen',
 };
 const PAGE_ALIASES = { '#spielereien': 'fun' };  // alte Adressen (Lesezeichen)
@@ -2208,6 +2208,7 @@ function showTab(name) {
   setNavOpen(false);
   updateStream();
   updatePreview();
+  aiUpdate();
   v3Tick();
   funEyeTick();
   clearInterval(S.statusTimer);
@@ -2289,6 +2290,395 @@ function bindLang() {
     } catch (e) { /* egal */ }
     location.reload();
   });
+}
+
+// ------------------------------------------------------- KI: Farbverfolgung ------
+// Die Bildauswertung läuft im Browser (der ESP32 liefert nur den Stream): Bild verkleinert in
+// ein Canvas, Bildpunkte der Zielfarbe (Farbton ± Toleranz, Mindest-Sättigung/-Helligkeit)
+// markieren, das größte zusammenhängende Objekt nehmen. Daraus Lage (waagerecht/senkrecht) und
+// Größe im Bild, geglättet. Steuerung wie vom Joystick (walk/body, 10 Hz):
+//   Anschauen  Körper giert/nickt zum Ziel (Füße bleiben stehen)
+//   Drehen     dreht sich auf der Stelle zum Ziel
+//   Folgen     dreht sich und läuft hin bzw. weicht zurück, bis das Ziel so groß ist wie „Abstand“
+// Ziel verloren: anhalten, nach 1,5 s (wenn eingestellt) langsam in die zuletzt gesehene Richtung
+// drehen und suchen, nach 12 s aufgeben. Nur auf dieser Seite und nur, solange er steht.
+const AI_KEY = 'hexapod.ai';
+const AI_W = 160;                // Breite des Auswertebilds (Pixel)
+const AI_TICK_MS = 100;
+const AI_LOST_MS = 400, AI_SEARCH_MS = 1500, AI_GIVEUP_MS = 12000;
+const AI = {
+  mode: 'off', target: null, tol: 16, smin: 40, vmin: 25, size: 25, speed: 60, search: true, mask: false,
+  timer: 0, canvas: null, ctx: null, w: 0, h: 0, data: null, blob: null, f: null, lastSeen: 0, lastEx: 0,
+  look: { yaw: 0, pitch: 0 }, sentMove: false, frames: 0, fpsAt: 0, fps: 0, wantSize: false, err: '',
+};
+
+function aiLoad() {
+  try {
+    const o = JSON.parse(localStorage.getItem(AI_KEY) || '{}');
+    for (const k of ['target', 'tol', 'smin', 'vmin', 'size', 'speed', 'search']) if (o[k] !== undefined) AI[k] = o[k];
+  } catch (e) { /* egal */ }
+}
+function aiSave() {
+  const o = {};
+  for (const k of ['target', 'tol', 'smin', 'vmin', 'size', 'speed', 'search']) o[k] = AI[k];
+  try { localStorage.setItem(AI_KEY, JSON.stringify(o)); } catch (e) { /* egal */ }
+}
+
+// RGB (0..255) -> Farbton 0..360, Sättigung/Helligkeit 0..1
+function rgbHsv(r, g, b) {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d > 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return [h, max ? d / max : 0, max / 255];
+}
+
+// Bild auswerten: größtes Objekt der Zielfarbe -> {cx, cy, size, x0, y0, x1, y1} (0..1) oder null
+function aiDetect(px, w, h, t) {
+  const n = w * h;
+  const mask = AI.maskBuf && AI.maskBuf.length === n ? AI.maskBuf : (AI.maskBuf = new Uint8Array(n));
+  const smin = AI.smin / 100, vmin = AI.vmin / 100;
+  for (let i = 0, j = 0; i < n; ++i, j += 4) {
+    const [hh, ss, vv] = rgbHsv(px[j], px[j + 1], px[j + 2]);
+    let dh = Math.abs(hh - t.h);
+    if (dh > 180) dh = 360 - dh;
+    mask[i] = dh <= AI.tol && ss >= smin && vv >= vmin ? 1 : 0;
+  }
+  // zusammenhängende Flächen (4er-Nachbarschaft), die größte gewinnt
+  const seen = AI.seenBuf && AI.seenBuf.length === n ? AI.seenBuf.fill(0) : (AI.seenBuf = new Uint8Array(n));
+  const stack = AI.stackBuf && AI.stackBuf.length === n ? AI.stackBuf : (AI.stackBuf = new Int32Array(n));
+  let best = null;
+  for (let i = 0; i < n; ++i) {
+    if (!mask[i] || seen[i]) continue;
+    let sp = 0, cnt = 0, sx = 0, sy = 0, x0 = w, y0 = h, x1 = 0, y1 = 0;
+    stack[sp++] = i;
+    seen[i] = 1;
+    while (sp) {
+      const k = stack[--sp];
+      const x = k % w, y = (k - x) / w;
+      ++cnt; sx += x; sy += y;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (x > 0 && mask[k - 1] && !seen[k - 1]) { seen[k - 1] = 1; stack[sp++] = k - 1; }
+      if (x < w - 1 && mask[k + 1] && !seen[k + 1]) { seen[k + 1] = 1; stack[sp++] = k + 1; }
+      if (y > 0 && mask[k - w] && !seen[k - w]) { seen[k - w] = 1; stack[sp++] = k - w; }
+      if (y < h - 1 && mask[k + w] && !seen[k + w]) { seen[k + w] = 1; stack[sp++] = k + w; }
+    }
+    if (!best || cnt > best.cnt) best = { cnt, sx, sy, x0, y0, x1, y1 };
+  }
+  if (!best || best.cnt < Math.max(12, n * 0.002)) return null;  // Rauschen
+  return {
+    cx: (best.sx / best.cnt + 0.5) / w, cy: (best.sy / best.cnt + 0.5) / h,
+    size: Math.sqrt(best.cnt / n),  // ~ Kantenlänge relativ zum Bild (wächst linear beim Näherkommen)
+    x0: best.x0 / w, y0: best.y0 / h, x1: (best.x1 + 1) / w, y1: (best.y1 + 1) / h,
+  };
+}
+
+// Bild -> Anzeige: bei 90°/270° dreht die Oberfläche das Bild im Uhrzeigersinn
+const aiRot90 = () => !!(S.camera && (S.camera.rotation === 90 || S.camera.rotation === 270));
+const aiToView = (x, y) => (aiRot90() ? [1 - y, x] : [x, y]);
+const aiToImage = (x, y) => (aiRot90() ? [y, 1 - x] : [x, y]);
+
+function aiFrame() {
+  const img = $('ai-img');
+  if (!img.naturalWidth || !$('ai-view').classList.contains('live')) return false;
+  const w = AI_W, h = Math.max(1, Math.round(AI_W * img.naturalHeight / img.naturalWidth));
+  if (!AI.canvas) {
+    AI.canvas = document.createElement('canvas');
+    AI.ctx = AI.canvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (AI.canvas.width !== w || AI.canvas.height !== h) {
+    AI.canvas.width = w;
+    AI.canvas.height = h;
+  }
+  try {
+    AI.ctx.drawImage(img, 0, 0, w, h);
+    AI.data = AI.ctx.getImageData(0, 0, w, h);
+    AI.w = w;
+    AI.h = h;
+    AI.err = '';
+  } catch (e) {
+    AI.data = null;
+    AI.err = lang('Kein Zugriff auf das Kamerabild (Browser blockiert es)', 'No access to the camera image (blocked by the browser)');
+    return false;
+  }
+  AI.frames += 1;
+  return true;
+}
+
+function aiTick() {
+  const now = Date.now();
+  if (now - AI.fpsAt > 1000) {
+    AI.fps = AI.frames * 1000 / (now - AI.fpsAt || 1);
+    AI.frames = 0;
+    AI.fpsAt = now;
+  }
+  const fresh = aiFrame();
+  if (fresh && AI.target) {
+    const b = aiDetect(AI.data.data, AI.w, AI.h, AI.target);
+    if (b) {
+      // glätten (Sprünge zwischen zwei Bildern dämpfen)
+      const f = AI.f && now - AI.lastSeen < AI_LOST_MS ? AI.f : { cx: b.cx, cy: b.cy, size: b.size };
+      const a = 0.55;
+      AI.f = { cx: f.cx + (b.cx - f.cx) * a, cy: f.cy + (b.cy - f.cy) * a, size: f.size + (b.size - f.size) * a };
+      AI.blob = b;
+      AI.lastSeen = now;
+      if (AI.wantSize) {
+        AI.size = Math.round(clamp(AI.f.size * 100, 5, 60));
+        AI.wantSize = false;
+        aiSave();
+        aiRenderControls();
+      }
+    } else {
+      AI.blob = null;
+    }
+  }
+  aiControl(now);
+  aiDraw();
+  aiRenderStatus(now);
+}
+
+// Steuerung aus der Lage des Ziels (Anzeige-Koordinaten, Mitte = 0)
+function aiControl(now) {
+  const m = S.tel && S.tel.motion;
+  const ready = m && m.mode === 'pose' && m.posture === 'standing' && !(S.tel.servo && S.tel.servo.estop);
+  const seen = AI.f && now - AI.lastSeen < AI_LOST_MS;
+  let walk = [0, 0, 0];
+  let body = null;
+  if (AI.mode !== 'off' && ready) {
+    const k = AI.speed / 100;
+    if (seen) {
+      const [vx, vy] = aiToView(AI.f.cx, AI.f.cy);
+      const ex = vx - 0.5, ey = 0.5 - vy;  // + = rechts bzw. oben
+      AI.lastEx = ex;
+      const dead = (v, d) => (Math.abs(v) < d ? 0 : v - Math.sign(v) * d);
+      if (AI.mode === 'look') {
+        // schrittweise nachführen: das Bild bewegt sich mit dem Körper
+        AI.look.yaw = clamp(AI.look.yaw - dead(ex, 0.04) * 0.35, -1, 1);
+        AI.look.pitch = clamp(AI.look.pitch + dead(ey, 0.04) * 0.35, -1, 1);
+        body = AI.look;
+      } else {
+        const turn = clamp(-dead(ex, 0.05) * 2.4, -1, 1) * k;
+        let fwd = 0;
+        if (AI.mode === 'follow') {
+          const want = AI.size / 100;
+          fwd = clamp((want - AI.f.size) / want * 2.0, -0.5, 1) * k;
+          if (Math.abs(fwd) < 0.06 * k) fwd = 0;
+          fwd *= Math.max(0, 1 - Math.abs(ex) * 2.5);  // erst hindrehen, dann laufen
+        }
+        walk = [fwd, 0, turn];
+      }
+    } else if (AI.mode === 'look') {
+      // Ziel weg: langsam wieder geradeaus schauen
+      AI.look.yaw *= 0.92;
+      AI.look.pitch *= 0.92;
+      body = AI.look;
+    } else if (AI.search && AI.lastSeen && now - AI.lastSeen > AI_SEARCH_MS && now - AI.lastSeen < AI_GIVEUP_MS) {
+      walk = [0, 0, -Math.sign(AI.lastEx || 1) * 0.35 * k];
+    }
+  }
+  const moving = walk.some((v) => Math.abs(v) > 1e-3);
+  if (moving || AI.sentMove) {
+    sendQuiet('walk', { vx: +walk[0].toFixed(3), vy: 0, turn: +walk[2].toFixed(3) });
+    AI.sentMove = moving;
+  }
+  if (body) {
+    sendQuiet('body', { x: 0, y: 0, roll: 0, pitch: +body.pitch.toFixed(3), yaw: +body.yaw.toFixed(3) });
+    AI.sentBody = true;
+  } else if (AI.sentBody) {
+    sendQuiet('body', { x: 0, y: 0, roll: 0, pitch: 0, yaw: 0 });
+    AI.sentBody = false;
+  }
+  AI.walk = walk;
+  AI.ready = ready;
+}
+
+function aiStopMotion() {
+  if (AI.sentMove) sendQuiet('walk', { vx: 0, vy: 0, turn: 0 });
+  if (AI.sentBody) sendQuiet('body', { x: 0, y: 0, roll: 0, pitch: 0, yaw: 0 });
+  AI.sentMove = AI.sentBody = false;
+  AI.look = { yaw: 0, pitch: 0 };
+}
+
+// Markierung über dem Bild (in Bild-Koordinaten; das Canvas dreht wie das Bild)
+function aiDraw() {
+  const cv = $('ai-overlay');
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  if (cv.width !== w || cv.height !== h) {
+    cv.width = w;
+    cv.height = h;
+  }
+  const g = cv.getContext('2d');
+  g.clearRect(0, 0, w, h);
+  if (AI.mask && AI.maskBuf && AI.data && AI.target) {
+    const n = AI.w * AI.h;
+    if (!AI.maskImg || AI.maskImg.width !== AI.w || AI.maskImg.height !== AI.h) AI.maskImg = new ImageData(AI.w, AI.h);
+    const d = AI.maskImg.data;
+    for (let i = 0; i < n; ++i) {
+      const on = AI.maskBuf[i];
+      d[i * 4] = 255; d[i * 4 + 1] = 0; d[i * 4 + 2] = 255; d[i * 4 + 3] = on ? 150 : 0;
+    }
+    if (!AI.maskCv) AI.maskCv = document.createElement('canvas');
+    AI.maskCv.width = AI.w;
+    AI.maskCv.height = AI.h;
+    AI.maskCv.getContext('2d').putImageData(AI.maskImg, 0, 0);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(AI.maskCv, 0, 0, w, h);
+  }
+  // Fadenkreuz in der Bildmitte
+  g.strokeStyle = 'rgba(255,255,255,0.5)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(w / 2 - 10, h / 2); g.lineTo(w / 2 + 10, h / 2);
+  g.moveTo(w / 2, h / 2 - 10); g.lineTo(w / 2, h / 2 + 10);
+  g.stroke();
+  const b = AI.blob;
+  if (b && AI.f) {
+    g.strokeStyle = '#3fd17a';
+    g.lineWidth = 2;
+    g.strokeRect(b.x0 * w, b.y0 * h, (b.x1 - b.x0) * w, (b.y1 - b.y0) * h);
+    g.fillStyle = '#3fd17a';
+    g.beginPath();
+    g.arc(AI.f.cx * w, AI.f.cy * h, 4, 0, Math.PI * 2);
+    g.fill();
+  }
+}
+
+function aiRenderStatus(now) {
+  $('ai-fps').textContent = AI.fps ? `${AI.fps.toFixed(1)} fps` : '';
+  const sw = $('ai-swatch');
+  if (AI.target) {
+    sw.style.background = `hsl(${Math.round(AI.target.h)} ${Math.round(AI.target.s * 100)}% ${Math.round(Math.max(25, AI.target.v * 50))}%)`;
+  } else {
+    sw.style.background = '';
+  }
+  let st;
+  if (AI.err) st = AI.err;
+  else if (!$('ai-view').classList.contains('live')) st = lang('Kamera startet …', 'Camera starting …');
+  else if (!AI.target) st = lang('Noch keine Zielfarbe – tippe im Bild auf ein farbiges Objekt.', 'No target colour yet – tap a coloured object in the image.');
+  else if (AI.blob && AI.f) {
+    const [vx] = aiToView(AI.f.cx, AI.f.cy);
+    const dir = vx < 0.45 ? lang('links', 'left') : vx > 0.55 ? lang('rechts', 'right') : lang('Mitte', 'centre');
+    st = lang(`Ziel erkannt: ${dir}, Größe ${Math.round(AI.f.size * 100)} %`, `Target found: ${dir}, size ${Math.round(AI.f.size * 100)} %`);
+  } else if (AI.mode !== 'off' && AI.search && AI.lastSeen && now - AI.lastSeen > AI_SEARCH_MS && now - AI.lastSeen < AI_GIVEUP_MS) {
+    st = lang('Ziel verloren – sucht …', 'Target lost – searching …');
+  } else st = lang('Ziel nicht im Bild', 'Target not in view');
+  $('ai-status').textContent = st;
+  const m = S.tel && S.tel.motion;
+  let hint = '';
+  if (AI.mode !== 'off' && !AI.ready) {
+    hint = m && m.mode === 'pose'
+      ? lang('Erst aufstehen – nur im Stehen folgt er dem Ziel.', 'Stand up first – he only follows while standing.')
+      : lang('Erst Servos und IK einschalten und aufstehen (Steuerung).', 'Turn on servos and IK and stand up first (Control).');
+  }
+  $('ai-hint').textContent = hint;
+}
+
+function aiRenderControls() {
+  const set = (id, v, txt) => {
+    if (document.activeElement !== $(id)) $(id).value = v;
+    $(`${id}-val`).textContent = txt;
+  };
+  set('ai-size', AI.size, `${AI.size} %`);
+  set('ai-speed', AI.speed, `${AI.speed} %`);
+  set('ai-tol', AI.tol, `±${AI.tol}°`);
+  set('ai-smin', AI.smin, `${AI.smin} %`);
+  set('ai-vmin', AI.vmin, `${AI.vmin} %`);
+  $('ai-search').checked = AI.search;
+  $('ai-mask').checked = AI.mask;
+  setSeg('ai-mode', AI.mode);
+}
+
+// Stream und Auswertung nur, solange die Seite offen ist
+function aiUpdate() {
+  const on = S.tab === 'ai' && !document.hidden;
+  const img = $('ai-img');
+  const view = $('ai-view');
+  if (on && !view.classList.contains('live')) {
+    $('ai-ph-text').textContent = lang('Kamera startet …', 'Camera starting …');
+    img.crossOrigin = 'anonymous';
+    img.src = `${camBase()}/stream?t=${Date.now()}`;
+    view.classList.add('live');
+  } else if (!on && view.classList.contains('live')) {
+    img.src = 'data:,';
+    view.classList.remove('live');
+  }
+  if (on && !AI.timer) {
+    AI.fpsAt = Date.now();
+    AI.timer = setInterval(aiTick, AI_TICK_MS);
+  } else if (!on && AI.timer) {
+    clearInterval(AI.timer);
+    AI.timer = 0;
+    AI.mode = 'off';
+    aiStopMotion();
+    aiRenderControls();
+  }
+}
+
+function bindAi() {
+  aiLoad();
+  aiRenderControls();
+  bindSeg('ai-mode', (v) => {
+    AI.mode = v;
+    if (v === 'off') aiStopMotion();
+    else AI.look = { yaw: 0, pitch: 0 };
+  });
+  // Tippen ins Bild: Farbe dort (5×5 Pixel gemittelt) wird Ziel
+  $('ai-view').addEventListener('click', (e) => {
+    if (!AI.data) return;
+    const r = $('ai-view').getBoundingClientRect();
+    const [ix, iy] = aiToImage((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+    const px = clamp(Math.floor(ix * AI.w), 2, AI.w - 3), py = clamp(Math.floor(iy * AI.h), 2, AI.h - 3);
+    let rs = 0, gs = 0, bs = 0;
+    for (let dy = -2; dy <= 2; ++dy) {
+      for (let dx = -2; dx <= 2; ++dx) {
+        const j = ((py + dy) * AI.w + px + dx) * 4;
+        rs += AI.data.data[j]; gs += AI.data.data[j + 1]; bs += AI.data.data[j + 2];
+      }
+    }
+    const [h, s, v] = rgbHsv(rs / 25, gs / 25, bs / 25);
+    if (s < 0.15 || v < 0.12) {
+      toast(lang('Dort ist keine deutliche Farbe – bitte auf etwas Kräftig-Farbiges tippen', 'No clear colour there – please tap something brightly coloured'), true);
+      return;
+    }
+    AI.target = { h, s, v };
+    // Schwellen passend zur gewählten Farbe (deutlich darunter, damit Schatten noch zählen)
+    AI.smin = Math.round(clamp(s * 100 * 0.5, 15, 60));
+    AI.vmin = Math.round(clamp(v * 100 * 0.35, 10, 50));
+    AI.wantSize = true;  // Abstand = Größe beim Antippen
+    AI.f = null;
+    aiSave();
+    aiRenderControls();
+  });
+  $('ai-size-now').onclick = () => {
+    if (AI.f && Date.now() - AI.lastSeen < AI_LOST_MS) {
+      AI.size = Math.round(clamp(AI.f.size * 100, 5, 60));
+      aiSave();
+      aiRenderControls();
+    } else toast(lang('Kein Ziel im Bild', 'No target in view'), true);
+  };
+  for (const id of ['ai-size', 'ai-speed', 'ai-tol', 'ai-smin', 'ai-vmin']) {
+    $(id).oninput = (e) => {
+      AI[id.slice(3)] = +e.target.value;
+      aiSave();
+      aiRenderControls();
+    };
+  }
+  $('ai-search').onchange = (e) => { AI.search = e.target.checked; aiSave(); };
+  $('ai-mask').onchange = (e) => { AI.mask = e.target.checked; };
+  $('ai-img').onerror = () => {
+    const view = $('ai-view');
+    if (!view.classList.contains('live')) return;
+    view.classList.remove('live');
+    $('ai-ph-text').textContent = lang('Kamera nicht erreichbar – neuer Versuch …', 'Camera unreachable – retrying …');
+    setTimeout(aiUpdate, 3000);
+  };
+  document.addEventListener('visibilitychange', aiUpdate);
 }
 
 // -------------------------------------------------------------- Kamera ------
@@ -2422,6 +2812,10 @@ function renderCrop(c) {
     v.style.setProperty('--cam-op', rot90 ? (top ? 'right' : 'left') : (top ? 'bottom' : 'top'));
     v.classList.toggle('crop-ui', ui);
   }
+  // KI: ganzes Streambild (die Markierung liegt in Bild-Koordinaten darüber)
+  const ow = c.out_w || 640, oh = c.out_h || 480;
+  $('ai-view').style.setProperty('--cam-ar', rot90 ? `${oh} / ${ow}` : `${ow} / ${oh}`);
+  $('ai-view').classList.toggle('rot90', rot90);
   const size = crop > 0 ? ` – ${lang('jetzt', 'now')} ${rot90 ? h : w}×${rot90 ? w : h}` : '';
   $('cam-crop-note').textContent = lang((c.zoom_hw
     ? 'Der Sensor liest diesen Streifen gar nicht erst aus (auch in Fotos und Videos).'
@@ -5324,6 +5718,7 @@ function init() {
   bindGlobal();
   bindEditor();
   bindCamera();
+  bindAi();
   bindSystem();
   bindImu();
   bindModel();
