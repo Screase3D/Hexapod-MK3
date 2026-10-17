@@ -1,6 +1,8 @@
 'use strict';
 // Hexapod MK3 – Weboberfläche (ohne externe Abhängigkeiten, läuft auch im AP-Modus offline)
 
+// Text in der eingestellten Sprache (i18n.js) – für Sätze mit Werten; feste Texte übersetzt i18n.js selbst
+const lang = (de, en) => (window.UI_LANG === 'en' ? en : de);
 const LEGS = ['vorne links', 'Mitte links', 'hinten links', 'vorne rechts', 'Mitte rechts', 'hinten rechts'];
 const JOINTS = ['Coxa', 'Femur', 'Tibia'];
 const NUM_SERVOS = 18;
@@ -152,9 +154,10 @@ function describeClose(ev) {
   const open = ((now - S.wsOpenedAt) / 1000).toFixed(1);
   const idle = ((now - S.lastMsg) / 1000).toFixed(1);
   const codes = { 1000: 'normal', 1001: 'Seite verlassen', 1002: 'Protokollfehler', 1006: 'abgerissen', 1009: 'zu groß', 1011: 'Serverfehler' };
-  const why = S.wsStale || !ev ? `${WS_STALE_MS / 1000} s keine Daten`
+  const why = S.wsStale || !ev ? lang(`${WS_STALE_MS / 1000} s keine Daten`, `no data for ${WS_STALE_MS / 1000} s`)
     : `${codes[ev.code] || 'Code'} ${ev.code}${ev.reason ? ' ' + ev.reason : ''}`;
-  return `Verbindung getrennt (${why}) nach ${open} s, letzte Nachricht vor ${idle} s`;
+  return lang(`Verbindung getrennt (${why}) nach ${open} s, letzte Nachricht vor ${idle} s`,
+    `Connection lost (${why}) after ${open} s, last message ${idle} s ago`);
 }
 
 function connect() {
@@ -315,7 +318,7 @@ function renderConnection() {
       `${slow ? ' – Steuerung reagiert verzögert (WLAN-Empfang?)' : ''}`
     : '';
   $('sb-conn').classList.toggle('on', S.wsOpen);
-  $('sb-conn-text').textContent = S.wsOpen ? `Verbunden · ${location.hostname}${rtt ? ` · ${rtt} ms` : ''}` : (down ? 'Getrennt' : 'Verbinde …');
+  $('sb-conn-text').textContent = S.wsOpen ? `${lang('Verbunden', 'Connected')} · ${location.hostname}${rtt ? ` · ${rtt} ms` : ''}` : (down ? 'Getrennt' : 'Verbinde …');
   renderBanner();
 }
 
@@ -341,10 +344,10 @@ function renderBanner() {
     msg = `Servos gesperrt: ${t.servo.inhibit}`;
     cls = 'danger';
   } else if (t && t.bat.state === 'critical') {
-    msg = `Akku leer (${t.bat.v.toFixed(2)} V) – sofort laden!`;
+    msg = lang(`Akku leer (${t.bat.v.toFixed(2)} V) – sofort laden!`, `Battery empty (${t.bat.v.toFixed(2)} V) – charge now!`);
     cls = 'danger';
   } else if (t && t.bat.state === 'warn') {
-    msg = `Akku schwach (${t.bat.v.toFixed(2)} V) – bald laden`;
+    msg = lang(`Akku schwach (${t.bat.v.toFixed(2)} V) – bald laden`, `Battery low (${t.bat.v.toFixed(2)} V) – charge soon`);
   } else if (t && t.wifi && t.wifi.mode === 'ap' && S.tab !== 'settings') {
     msg = 'Access-Point-Modus – noch nicht mit dem Heimnetz verbunden';
     cls = 'info';
@@ -1188,8 +1191,10 @@ function renderWalk(m) {
       if (g.max_speed === 0 && g.max_side === 0) {
         limit = 'In dieser Haltung kann er nicht laufen – die Beine haben keinen Spielraum für Schritte. Höhe oder Standbreite näher an die Grundstellung bringen.';
       } else if (fwd < 0.6 || side < 0.6) {
-        limit = `Beinreichweite begrenzt das Tempo: vorwärts ${Math.round(fwd * 100)} %, seitwärts ${Math.round(side * 100)} % – `
-          + 'Höhe oder Standbreite näher an die Grundstellung bringen.';
+        limit = lang(`Beinreichweite begrenzt das Tempo: vorwärts ${Math.round(fwd * 100)} %, seitwärts ${Math.round(side * 100)} % – `
+          + 'Höhe oder Standbreite näher an die Grundstellung bringen.',
+        `Leg reach limits the speed: forward ${Math.round(fwd * 100)} %, sideways ${Math.round(side * 100)} % – `
+          + 'bring height or stance closer to the default posture.');
       }
     }
   }
@@ -1745,7 +1750,7 @@ function renderFun() {
   const run = FUN.run;
   $('fun-now').hidden = !run;
   if (run) {
-    const pos = run.step >= 0 ? ` – Schritt ${run.step + 1}/${run.steps.length}` : '';
+    const pos = run.step >= 0 ? ` – ${lang('Schritt', 'step')} ${run.step + 1}/${run.steps.length}` : '';
     $('fun-now-text').textContent = `${run.name}${run.label ? ` ${run.label}` : pos}${run.loop ? ' (Endlosschleife)' : ''}`;
   }
   document.querySelectorAll('[data-fun-play]').forEach((b) => {
@@ -1895,7 +1900,7 @@ function funRandom() {
   const e = pool[Math.floor(Math.random() * pool.length)];
   FUN.last = e.id;
   $('fun-random-out').textContent = e.name;
-  funGame('random', [{ t: 'emote', id: e.id }], `Überrasch mich: ${e.name}`);
+  funGame('random', [{ t: 'emote', id: e.id }], `${lang('Überrasch mich', 'Surprise me')}: ${tr(e.name)}`);
 }
 
 // ---- Augen
@@ -1945,7 +1950,7 @@ function bindFun() {
     else if (b.dataset.funEdit) funOpenEditor(b.dataset.funEdit);
     else if (b.dataset.funDel) {
       const c = FUN.own.find((x) => x.id === b.dataset.funDel);
-      if (!c || !confirm(`„${c.name}“ löschen?`)) return;
+      if (!c || !confirm(lang(`„${c.name}“ löschen?`, `Delete “${c.name}”?`))) return;
       if (FUN.run && FUN.run.id === c.id) funStop();
       FUN.own = FUN.own.filter((x) => x !== c);
       funStore();
@@ -2048,7 +2053,7 @@ function bindFun() {
     const i = FUN.own.findIndex((c) => c.id === clean.id);
     if (i >= 0) FUN.own[i] = clean;
     else FUN.own.push(clean);
-    if (funStore()) toast(`„${clean.name}“ gespeichert`);
+    if (funStore()) toast(lang(`„${clean.name}“ gespeichert`, `“${clean.name}” saved`));
     FUN.edit = JSON.parse(JSON.stringify(clean));
     $('fun-ed-title').textContent = 'Choreografie bearbeiten';
     renderFunList();
@@ -2314,7 +2319,7 @@ function renderCamPill(c) {
   pill.hidden = !n;
   if (!n) return;
   setPill('pill-cam', n > 1 ? `Kamera · ${n}` : 'Kamera', 'pill-on', '\u00a0');
-  pill.title = `Kamerastream läuft${n > 1 ? ` (${n} Zuschauer)` : ''}${c.fps !== undefined ? ` · ${c.fps.toFixed(1)} fps` : ''}`;
+  pill.title = `${lang('Kamerastream läuft', 'Camera stream running')}${n > 1 ? ` (${n} ${lang('Zuschauer', 'viewers')})` : ''}${c.fps !== undefined ? ` · ${c.fps.toFixed(1)} fps` : ''}`;
 }
 
 function renderCamStats(t) {
@@ -2334,21 +2339,22 @@ function renderCamStats(t) {
     return;
   }
   if (c.fps !== undefined) camRetries = 0;  // Stream läuft wieder
-  const parts = [`${(c.fps || 0).toFixed(1)} fps`, `${c.kb || 0} KB/Bild`, `${((c.kbps || 0) / 1000).toFixed(1)} Mbit/s`];
+  const parts = [`${(c.fps || 0).toFixed(1)} fps`, `${c.kb || 0} ${lang('KB/Bild', 'KB/frame')}`, `${((c.kbps || 0) / 1000).toFixed(1)} Mbit/s`];
   if (c.bt_fs) {  // Bluetooth an: kleinere Auflösung
     const f = ((S.camera && S.camera.framesizes) || []).find((x) => x.id === c.bt_fs);
     parts.push(`Bluetooth: ${f ? f.name.split(' ')[0] : 'kleiner'}`);
   }
   if (c.wake_ms) parts.push(`Start ${c.wake_ms} ms`);
   if (t.wifi && t.wifi.rssi !== undefined) parts.push(`WLAN ${t.wifi.rssi} dBm${t.wifi.ps ? ' (Energiesparen)' : ''}`);
-  if (c.err) parts.push(`Kamera-Aussetzer ${c.err}`);
+  if (c.err) parts.push(`${lang('Kamera-Aussetzer', 'camera dropouts')} ${c.err}`);
   el.textContent = parts.join(' · ');
 }
 
 function scheduleCamRetry() {
   clearTimeout(camRetryTimer);
   camRetries += 1;
-  $('cam-ph-text').textContent = `Stream unterbrochen – verbinde neu (Versuch ${camRetries}) …`;
+  $('cam-ph-text').textContent = lang(`Stream unterbrochen – verbinde neu (Versuch ${camRetries}) …`,
+    `Stream interrupted – reconnecting (attempt ${camRetries}) …`);
   camRetryTimer = setTimeout(() => {
     camRetryTimer = null;
     const img = $('cam-img');
@@ -2416,10 +2422,12 @@ function renderCrop(c) {
     v.style.setProperty('--cam-op', rot90 ? (top ? 'right' : 'left') : (top ? 'bottom' : 'top'));
     v.classList.toggle('crop-ui', ui);
   }
-  $('cam-crop-note').textContent = (c.zoom_hw
+  const size = crop > 0 ? ` – ${lang('jetzt', 'now')} ${rot90 ? h : w}×${rot90 ? w : h}` : '';
+  $('cam-crop-note').textContent = lang((c.zoom_hw
     ? 'Der Sensor liest diesen Streifen gar nicht erst aus (auch in Fotos und Videos).'
-    : 'Die Oberfläche blendet den Streifen aus.')
-    + ` Das Bild wird entsprechend flacher, nichts wird vergrößert${crop > 0 ? ` – jetzt ${rot90 ? h : w}×${rot90 ? w : h}` : ''}.`;
+    : 'Die Oberfläche blendet den Streifen aus.') + ` Das Bild wird entsprechend flacher, nichts wird vergrößert${size}.`,
+  (c.zoom_hw ? 'The sensor does not read this strip at all (photos and videos too).'
+    : 'The interface hides the strip.') + ` The image gets flatter accordingly, nothing is enlarged${size}.`);
 }
 
 function renderCamera() {
@@ -2433,7 +2441,7 @@ function renderCamera() {
   const bt = $('cam-btfs');
   if (!bt.options.length) {
     bt.add(new Option('wie oben', 0));
-    for (const f of c.framesizes || []) bt.add(new Option(`höchstens ${f.name}`, f.id));
+    for (const f of c.framesizes || []) bt.add(new Option(`${lang('höchstens', 'at most')} ${f.name}`, f.id));
   }
   bt.value = c.bt_framesize || 0;
   $('cam-q').value = c.quality;
@@ -2540,7 +2548,8 @@ function renderZoom() {
   if (document.activeElement !== r) r.value = ZOOM.z;
   $('cam-zoom-val').textContent = txt;
   $('cam-zoom-note').textContent = c.zoom_hw
-    ? `Sensor-Zoom: Ausschnitt mit voller Sensor-Auflösung, bei dieser Auflösung bis ${fmtZoom(zoomMax())} (kleinere Auflösung = mehr Zoom). Wird nicht gespeichert.`
+    ? lang(`Sensor-Zoom: Ausschnitt mit voller Sensor-Auflösung, bei dieser Auflösung bis ${fmtZoom(zoomMax())} (kleinere Auflösung = mehr Zoom). Wird nicht gespeichert.`,
+      `Sensor zoom: crop at full sensor resolution, up to ${fmtZoom(zoomMax())} at this resolution (lower resolution = more zoom). Not saved.`)
     : 'Digitaler Zoom: das Bild wird nur vergrößert.';
 }
 
@@ -2665,7 +2674,7 @@ async function startRecording() {
     REC.rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
   } catch (e) {
     cancelAnimationFrame(REC.raf);
-    toast(`Aufnahme nicht möglich: ${e.message}`, true);
+    toast(`${lang('Aufnahme nicht möglich', 'Recording not possible')}: ${e.message}`, true);
     return;
   }
   REC.ext = mime.includes('mp4') ? 'mp4' : 'webm';
@@ -2681,7 +2690,7 @@ async function startRecording() {
     a.download = `hexapod-${ts}.${REC.ext}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-    toast(`Video gespeichert (${(blob.size / 1048576).toFixed(1)} MB)`);
+    toast(lang(`Video gespeichert (${(blob.size / 1048576).toFixed(1)} MB)`, `Video saved (${(blob.size / 1048576).toFixed(1)} MB)`));
     REC.rec = null;
     renderRecording();
   };
@@ -2845,7 +2854,7 @@ function renderTiles() {
     const [cls, text] = wifiQuality(rssi);
     setTile('wifi', `${rssi} dBm`, statusEl(cls, text + (w && w.sta.ssid ? ` · ${w.sta.ssid}` : '') + (S.rtt ? ` · ${Math.round(S.rtt)} ms` : '')));
   } else if (w && w.ap.active) {
-    setTile('wifi', 'Access Point', `„${w.ap.ssid}“ · ${w.ap.clients} Gerät(e)`);
+    setTile('wifi', 'Access Point', `„${w.ap.ssid}“ · ${w.ap.clients} ${lang('Gerät(e)', 'device(s)')}`);
   } else setTile('wifi', '–');
 
   if (t && t.ctl) {
@@ -2857,7 +2866,7 @@ function renderTiles() {
   const c = t && t.cam;
   if (s && s.camera && !s.camera.ok) setTile('cam', 'fehlt', statusEl('bad', 'keine Kamera erkannt'));
   else if (c && c.clients && c.fps !== undefined) {
-    setTile('cam', `${c.fps.toFixed(1)} fps`, `${c.kb} KB/Bild · ${(c.kbps / 1000).toFixed(1)} Mbit/s`);
+    setTile('cam', `${c.fps.toFixed(1)} fps`, `${c.kb} ${lang('KB/Bild', 'KB/frame')} · ${(c.kbps / 1000).toFixed(1)} Mbit/s`);
   } else if (c && c.awake !== undefined) {
     setTile('cam', c.awake ? 'aktiv' : 'schläft', c.awake ? 'ohne Stream gleich im Schlaf' : 'wacht mit dem Stream auf');
   }
@@ -2946,7 +2955,8 @@ function renderProfiles() {
     b.type = 'button';
     b.className = 'profile';
     b.dataset.profile = p.id;
-    b.title = p.hint || `eigenes Profil: Höhe ${p.z} mm, Fußabstand ${p.stance} mm, ${p.type}`;
+    b.title = p.hint || lang(`eigenes Profil: Höhe ${p.z} mm, Fußabstand ${p.stance} mm, ${p.type}`,
+      `own profile: height ${p.z} mm, stance ${p.stance} mm, ${p.type}`);
     b.textContent = p.name;
     b.onclick = () => applyProfile(p);
     if (ownIdx === undefined) {
@@ -2962,9 +2972,9 @@ function renderProfiles() {
     del.className = 'profile-del';
     del.textContent = '×';
     del.title = 'Profil löschen';
-    del.setAttribute('aria-label', `Profil „${p.name}“ löschen`);
+    del.setAttribute('aria-label', lang(`Profil „${p.name}“ löschen`, `Delete profile “${p.name}”`));
     del.onclick = () => {
-      if (!confirm(`Profil „${p.name}“ löschen?`)) return;
+      if (!confirm(lang(`Profil „${p.name}“ löschen?`, `Delete profile “${p.name}”?`))) return;
       const list = ownProfiles();
       list.splice(ownIdx, 1);
       saveOwnProfiles(list);
@@ -3005,7 +3015,7 @@ function saveProfile() {
   });
   saveOwnProfiles(list);
   renderProfiles();
-  toast(`Profil „${name}“ gespeichert`);
+  toast(lang(`Profil „${name}“ gespeichert`, `Profile “${name}” saved`));
 }
 
 function markProfile() {
@@ -3084,7 +3094,7 @@ function renderFpv(t) {
   $('fpv-wave').hidden = MOVE.mode !== 'arms';
   $('fpv-wave').disabled = arms !== 'up';
   $('fpv-gesture').hidden = MOVE.mode !== 'body';
-  $('fpv-gesture').textContent = m.gesture ? 'Stopp' : `Geste: ${FPV_GESTURES[FPV.gesture][1]}`;
+  $('fpv-gesture').textContent = m.gesture ? 'Stopp' : `${lang('Geste', 'Gesture')}: ${tr(FPV_GESTURES[FPV.gesture][1])}`;
   $('fpv-hud').setAttribute('aria-pressed', S.hud);
 
   // Infozeile: Tempo, Hinweise (Reichweite, gesperrt, Controller)
@@ -3144,7 +3154,8 @@ function otaUpload() {
     otaStatus('firmware.factory.bin ist für den Browser-Flasher – hier firmware.bin wählen', 'warn-text');
     return;
   }
-  if (!confirm(`Firmware „${f.name}“ (${fmtBytes(f.size)}) aufspielen? Die Servos werden stromlos.`)) return;
+  if (!confirm(lang(`Firmware „${f.name}“ (${fmtBytes(f.size)}) aufspielen? Die Servos werden stromlos.`,
+    `Install firmware “${f.name}” (${fmtBytes(f.size)})? The servos will lose power.`))) return;
   OTA.busy = true;
   $('ota-start').disabled = true;
   $('ota-bar').hidden = false;
@@ -3157,7 +3168,7 @@ function otaUpload() {
     if (!e.lengthComputable) return;
     const pct = Math.round((e.loaded / e.total) * 100);
     $('ota-progress').style.width = `${pct}%`;
-    otaStatus(pct < 100 ? `Übertrage … ${pct} %` : 'Prüfe und schreibe …');
+    otaStatus(pct < 100 ? `${lang('Übertrage …', 'Transferring …')} ${pct} %` : lang('Prüfe und schreibe …', 'Checking and writing …'));
   };
   xhr.onload = () => {
     let r = {};
@@ -3168,7 +3179,7 @@ function otaUpload() {
       otaStatus('Erfolgreich – ESP32 startet neu, die Seite lädt danach neu …', 'ok-text');
       toast('Firmware übertragen – Neustart');
     } else {
-      otaStatus(r.msg || `Fehler (HTTP ${xhr.status})`, 'warn-text');
+      otaStatus(r.msg || `${lang('Fehler', 'Error')} (HTTP ${xhr.status})`, 'warn-text');
       $('ota-start').disabled = false;
     }
   };
@@ -3222,7 +3233,7 @@ function renderLog() {
     li.className = e.lvl;
     li.innerHTML = '<time></time><span class="lvl"></span><span></span>';
     li.firstChild.textContent = fmtTime(e.at);
-    li.firstChild.title = `${Math.round(e.ms / 1000)} s nach dem Start`;
+    li.firstChild.title = lang(`${Math.round(e.ms / 1000)} s nach dem Start`, `${Math.round(e.ms / 1000)} s after start`);
     li.lastChild.textContent = e.text;
     list.appendChild(li);
   }
@@ -3344,7 +3355,7 @@ function renderHistory(h) {
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.setAttribute('class', 'hist-svg');
     svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', `${m.name}: ${m.fmt(Math.min(...nums))} bis ${m.fmt(Math.max(...nums))} ${m.unit}`);
+    svg.setAttribute('aria-label', `${tr(m.name)}: ${m.fmt(Math.min(...nums))} ${lang('bis', 'to')} ${m.fmt(Math.max(...nums))} ${m.unit}`);
     svg.innerHTML = `<line class="hist-grid-line" x1="0" x2="${HW}" y1="${HH}" y2="${HH}"/>`
       + `<path class="hist-area" d="${area}"/><path class="hist-line" d="${line}"/>`
       + '<line class="hist-cross" y1="0" hidden/>';
@@ -3446,7 +3457,7 @@ async function loadStatus() {
       ['PSRAM frei', s.mem.psram ? `${fmtBytes(s.mem.psram_free)} von ${fmtBytes(s.mem.psram)}` : 'kein PSRAM'],
       ['WLAN', [
         w.sta.state === 'connected' ? `${w.sta.ssid} (${w.sta.rssi} dBm)` : '',
-        w.ap.active ? `Access Point „${w.ap.ssid}“ (${w.ap.clients} Geräte)` : '',
+        w.ap.active ? `Access Point „${w.ap.ssid}“ (${w.ap.clients} ${lang('Geräte', 'devices')})` : '',
       ].filter(Boolean).join(' · ')],
       ['WLAN-Energiesparen', w.ps === undefined ? '–'
         : (w.ps ? 'an (Modem-Sleep, solange Bluetooth läuft)' : 'aus – volle Leistung')],
@@ -3502,7 +3513,8 @@ async function scanI2c() {
   try {
     const r = await api('/api/i2c/scan', {});
     renderI2c(r);
-    toast(`I²C-Scan: ${r.devices.length} Gerät(e) gefunden` + (r.missing.length ? `, ${r.missing.length} fehlen` : ''));
+    toast(lang(`I²C-Scan: ${r.devices.length} Gerät(e) gefunden` + (r.missing.length ? `, ${r.missing.length} fehlen` : ''),
+      `I²C scan: ${r.devices.length} device(s) found` + (r.missing.length ? `, ${r.missing.length} missing` : '')));
   } catch (err) {
     toast(`I²C-Scan: ${err.message}`, true);
   } finally {
@@ -4198,7 +4210,7 @@ function openPadPick(id) {
       btn.innerHTML = '<span></span><small></small>';
       btn.firstChild.textContent = PAD_ACTIONS[a] || a;
       const others = a === 'none' ? [] : PAD_BUTTONS.filter(([b]) => b !== id && c.map[b] === a).map(([, short]) => short);
-      btn.lastChild.textContent = others.length ? `auch auf ${others.join(', ')}` : '';
+      btn.lastChild.textContent = others.length ? `${lang('auch auf', 'also on')} ${others.join(', ')}` : '';
       btn.onclick = async () => {
         closePadPick();
         if (a !== cur) {
@@ -4263,11 +4275,17 @@ function renderPad(p) {
   const ind = $('pad-ind');
   ind.hidden = !p.src;
   ind.textContent = `🎮 ${PAD_MODES[p.mode] || ''}`;
-  ind.title = `Controller (${p.src === 'ble' ? 'Bluetooth' : 'Browser'}), Tempo ${p.speed} %`;
+  ind.title = `Controller (${p.src === 'ble' ? 'Bluetooth' : 'Browser'}), ${lang('Tempo', 'speed')} ${p.speed} %`;
 
   let text = BLE_TEXT[p.ble] || p.ble;
-  if (p.ble === 'searching') text = `wartet auf ${p.name || 'den gekoppelten Controller'} – Controller einschalten`;
-  if (p.ble === 'pairing') text = `Kopplung läuft (noch ${p.pair_left || 0} s) – Kopplungstaste am Controller halten, bis das Logo schnell blinkt`;
+  if (p.ble === 'searching') {
+    text = lang(`wartet auf ${p.name || 'den gekoppelten Controller'} – Controller einschalten`,
+      `waiting for ${p.name || 'the paired controller'} – switch the controller on`);
+  }
+  if (p.ble === 'pairing') {
+    text = lang(`Kopplung läuft (noch ${p.pair_left || 0} s) – Kopplungstaste am Controller halten, bis das Logo schnell blinkt`,
+      `Pairing (${p.pair_left || 0} s left) – hold the pair button on the controller until the logo flashes fast`);
+  }
   if (p.ble === 'connected') text = `verbunden: ${p.name || 'Xbox-Controller'}${p.bat !== undefined ? ` · Akku ${p.bat} %` : ''}`;
   $('pad-ble-status').textContent = text;
   if (Date.now() - P.touched > LOCAL_PRIORITY_MS) $('pad-ble-on').checked = p.ble !== 'off';
@@ -4372,30 +4390,39 @@ function renderWifi(w) {
   let cur;
   if (sta.state === 'connected') {
     const q = sta.rssi >= -55 ? 'sehr gut' : sta.rssi >= -65 ? 'gut' : sta.rssi >= -75 ? 'mäßig' : 'schwach';
-    cur = `Verbunden mit „${sta.ssid}“ – Signal ${signalBars(sta.rssi)} ${q} (${sta.rssi} dBm${sta.channel ? `, Kanal ${sta.channel}` : ''}), Adresse ${sta.ip}.`;
+    const qq = tr(q);
+    cur = lang(`Verbunden mit „${sta.ssid}“ – Signal ${signalBars(sta.rssi)} ${q} (${sta.rssi} dBm${sta.channel ? `, Kanal ${sta.channel}` : ''}), Adresse ${sta.ip}.`,
+      `Connected to “${sta.ssid}” – signal ${signalBars(sta.rssi)} ${qq} (${sta.rssi} dBm${sta.channel ? `, channel ${sta.channel}` : ''}), address ${sta.ip}.`);
     if (sta.connect_ms) {
-      cur += ` Verbunden nach ${(sta.connect_ms / 1000).toFixed(1)} s${sta.tries > 1 ? ` (${sta.tries} Anläufe)` : ''}.`;
+      cur += lang(` Verbunden nach ${(sta.connect_ms / 1000).toFixed(1)} s${sta.tries > 1 ? ` (${sta.tries} Anläufe)` : ''}.`,
+        ` Connected after ${(sta.connect_ms / 1000).toFixed(1)} s${sta.tries > 1 ? ` (${sta.tries} attempts)` : ''}.`);
     }
     if (w.ap.active) {
-      cur += ' Access Point läuft noch' + (w.ap.off_in_s != null ? ` (aus in ${Math.max(0, w.ap.off_in_s)} s).` : '.');
+      cur += lang(' Access Point läuft noch' + (w.ap.off_in_s != null ? ` (aus in ${Math.max(0, w.ap.off_in_s)} s).` : '.'),
+        ' Access point still running' + (w.ap.off_in_s != null ? ` (off in ${Math.max(0, w.ap.off_in_s)} s).` : '.'));
     }
     if (w.ps !== undefined) {
-      cur += w.ps ? ' Energiesparmodus an, solange Bluetooth läuft (Controller am Roboter) – etwas mehr Verzögerung.'
-        : ' Energiesparmodus aus – volle Leistung.';
+      cur += w.ps ? lang(' Energiesparmodus an, solange Bluetooth läuft (Controller am Roboter) – etwas mehr Verzögerung.',
+        ' Power saving on while Bluetooth is running (controller on the robot) – slightly more latency.')
+        : lang(' Energiesparmodus aus – volle Leistung.', ' Power saving off – full power.');
     }
   } else if (sta.state === 'connecting') {
-    cur = `Verbinde mit „${sta.ssid}“ …${sta.try > 1 ? ` (Anlauf ${sta.try})` : ''}`;
+    cur = lang(`Verbinde mit „${sta.ssid}“ …${sta.try > 1 ? ` (Anlauf ${sta.try})` : ''}`,
+      `Connecting to “${sta.ssid}” …${sta.try > 1 ? ` (attempt ${sta.try})` : ''}`);
   } else {
-    cur = `Access-Point-Modus („${w.ap.ssid}“, ${w.ap.ip}). `;
+    cur = lang(`Access-Point-Modus („${w.ap.ssid}“, ${w.ap.ip}). `, `Access point mode (“${w.ap.ssid}”, ${w.ap.ip}). `);
     cur += w.saved_ssid
-      ? `Gespeichertes Netz: „${w.saved_ssid}“${sta.reason ? ` – ${sta.reason}` : ''}.${sta.retry_in ? ` Nächster Versuch in ${sta.retry_in} s.` : ''}`
-      : 'Noch kein Heimnetz eingerichtet.';
+      ? lang(`Gespeichertes Netz: „${w.saved_ssid}“${sta.reason ? ` – ${sta.reason}` : ''}.${sta.retry_in ? ` Nächster Versuch in ${sta.retry_in} s.` : ''}`,
+        `Saved network: “${w.saved_ssid}”${sta.reason ? ` – ${sta.reason}` : ''}.${sta.retry_in ? ` Next attempt in ${sta.retry_in} s.` : ''}`)
+      : lang('Noch kein Heimnetz eingerichtet.', 'No home network set up yet.');
   }
   $('wifi-current').textContent = cur;
   $('wifi-submit').textContent = w.ap.active ? 'Verbinden' : 'Speichern';
   $('wifi-hint').textContent = w.ap.active
-    ? 'Der Hexapod verbindet sich sofort mit dem gewählten Netz und zeigt danach hier seine neue Adresse an. Der Access Point läuft so lange weiter.'
-    : 'Im Heimnetz-Betrieb gelten neue Daten nach einem Neustart. Klappt die Verbindung dann nicht, startet wieder der Access Point „Hexapod-MK3“ (Passwort hexapod123, Adresse 192.168.4.1).';
+    ? lang('Der Hexapod verbindet sich sofort mit dem gewählten Netz und zeigt danach hier seine neue Adresse an. Der Access Point läuft so lange weiter.',
+      'The hexapod connects to the chosen network right away and then shows its new address here. The access point keeps running until then.')
+    : lang('Im Heimnetz-Betrieb gelten neue Daten nach einem Neustart. Klappt die Verbindung dann nicht, startet wieder der Access Point „Hexapod-MK3“ (Passwort hexapod123, Adresse 192.168.4.1).',
+      'On the home network, new data takes effect after a restart. If the connection then fails, the access point “Hexapod-MK3” starts again (password hexapod123, address 192.168.4.1).');
   if (!$('wifi-ssid').value && w.saved_ssid) $('wifi-ssid').value = w.saved_ssid;
 }
 
@@ -4479,8 +4506,9 @@ function renderRssi() {
   if (list.length > 1) {
     const d = list[list.length - 1].avg - first;
     verdict = Math.abs(d) < 3 ? 'Letzte Messung: kein merklicher Unterschied (unter 3 dB)'
-      : d > 0 ? `Letzte Messung: ${dec(d)} dB besser${d >= 6 ? ' – deutlich (doppelte Reichweite ab ca. 6 dB)' : ''}`
-        : `Letzte Messung: ${dec(-d)} dB schlechter`;
+      : d > 0 ? lang(`Letzte Messung: ${dec(d)} dB besser${d >= 6 ? ' – deutlich (doppelte Reichweite ab ca. 6 dB)' : ''}`,
+        `Last measurement: ${dec(d)} dB better${d >= 6 ? ' – significant (double range from approx. 6 dB)' : ''}`)
+        : lang(`Letzte Messung: ${dec(-d)} dB schlechter`, `Last measurement: ${dec(-d)} dB worse`);
   }
   $('rssi-verdict').textContent = verdict;
 }
@@ -4493,7 +4521,7 @@ function bindRssi() {
       toast('Keine Verbindung zum Hexapod', true);
       return;
     }
-    const label = $('rssi-label').value.trim() || `Messung ${RSSI.list.length + 1}`;
+    const label = $('rssi-label').value.trim() || `${lang('Messung', 'Measurement')} ${RSSI.list.length + 1}`;
     RSSI.run = { label, until: Date.now() + RSSI_MEASURE_MS, samples: [],
       timer: setTimeout(rssiFinish, RSSI_MEASURE_MS + 2000) };  // auch ohne Telemetrie beenden
     $('rssi-start').disabled = true;
@@ -4580,7 +4608,8 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', 
 // dann verliert dieses Gerät kurz den Access Point – Fehler beim Abfragen sind normal.
 async function followConnect(ssid) {
   const name = escapeHtml(ssid);
-  showWifiResult('', `Verbinde mit „${name}“ … Dieses Gerät kann dabei kurz die Verbindung zum Access Point verlieren.`);
+  showWifiResult('', lang(`Verbinde mit „${name}“ … Dieses Gerät kann dabei kurz die Verbindung zum Access Point verlieren.`,
+    `Connecting to “${name}” … This device may briefly lose its connection to the access point.`));
   const start = Date.now();
   let seenConnecting = false;
   while (Date.now() - start < 60000) {
@@ -4595,20 +4624,29 @@ async function followConnect(ssid) {
       const url = `http://${w.sta.ip}/`;
       const off = w.ap.off_in_s != null ? ` in ca. ${Math.max(0, w.ap.off_in_s)} s` : '';
       showWifiResult('ok',
-        `<b>Verbunden mit „${name}“!</b><br>Der Hexapod ist jetzt im Heimnetz erreichbar unter ` +
+        lang(`<b>Verbunden mit „${name}“!</b><br>Der Hexapod ist jetzt im Heimnetz erreichbar unter ` +
         `<a href="${url}">${url}</a> (oder <span class="mono">http://${escapeHtml(w.host)}</span>).` +
         `<ol><li>Dieses Gerät wieder mit „${name}“ verbinden.</li>` +
         `<li>Die Adresse öffnen und am besten als Lesezeichen speichern.</li></ol>` +
-        `Der Access Point „${escapeHtml(w.ap.ssid)}“ schaltet sich${off} ab.`);
+        `Der Access Point „${escapeHtml(w.ap.ssid)}“ schaltet sich${off} ab.`,
+        `<b>Connected to “${name}”!</b><br>The hexapod can now be reached on the home network at ` +
+        `<a href="${url}">${url}</a> (or <span class="mono">http://${escapeHtml(w.host)}</span>).` +
+        `<ol><li>Connect this device to “${name}” again.</li>` +
+        `<li>Open the address and best save it as a bookmark.</li></ol>` +
+        `The access point “${escapeHtml(w.ap.ssid)}” switches off${off}.`));
       return;
     } else if (st === 'failed' && (seenConnecting || Date.now() - start > 5000)) {
-      showWifiResult('error', `<b>Verbindung mit „${name}“ fehlgeschlagen.</b><br>` +
-        `${escapeHtml(w.sta.reason || '')}<br>Passwort prüfen und erneut versuchen.`);
+      showWifiResult('error', lang(`<b>Verbindung mit „${name}“ fehlgeschlagen.</b><br>` +
+        `${escapeHtml(w.sta.reason || '')}<br>Passwort prüfen und erneut versuchen.`,
+      `<b>Connection to “${name}” failed.</b><br>` +
+        `${escapeHtml(w.sta.reason || '')}<br>Check the password and try again.`));
       return;
     }
   }
-  showWifiResult('error', 'Keine Rückmeldung vom Hexapod. Ist dieses Gerät noch mit „Hexapod-MK3“ verbunden? ' +
-    'Dann die Seite neu laden – der Status steht oben in dieser Karte.');
+  showWifiResult('error', lang('Keine Rückmeldung vom Hexapod. Ist dieses Gerät noch mit „Hexapod-MK3“ verbunden? ' +
+    'Dann die Seite neu laden – der Status steht oben in dieser Karte.',
+  'No response from the hexapod. Is this device still connected to “Hexapod-MK3”? ' +
+    'Then reload the page – the status is shown at the top of this card.'));
 }
 
 async function reboot() {
@@ -4685,7 +4723,7 @@ function bindSystem() {
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      if (!confirm(`Kalibrierung aus „${file.name}“ importieren und speichern?`)) return;
+      if (!confirm(lang(`Kalibrierung aus „${file.name}“ importieren und speichern?`, `Import and save calibration from “${file.name}”?`))) return;
       toast((await api('/api/calibration', data)).msg);
       send('cal_get');
     } catch (err) {
@@ -5199,12 +5237,13 @@ function v3Info(now) {
   const air = [];
   for (let leg = 0; leg < 6; ++leg) if ((c.s >> leg) & 1) air.push(leg + 1);
   if (c.ik && c.tq) {
-    parts.push(air.length ? `In der Luft: ${air.length === 1 ? 'Bein' : 'Beine'} ${air.join(', ')}` : 'Alle Füße am Boden');
+    parts.push(air.length ? lang(`In der Luft: ${air.length === 1 ? 'Bein' : 'Beine'} ${air.join(', ')}`,
+      `In the air: ${air.length === 1 ? 'leg' : 'legs'} ${air.join(', ')}`) : lang('Alle Füße am Boden', 'All feet on the ground'));
   }
   if (V3.margin !== null && V3.margin !== undefined && c.tq) {
     parts.push(V3.margin > 0 ? `Standreserve ${Math.round(V3.margin)} mm` : 'Schwerpunkt außerhalb der Standfläche!');
   }
-  if (c.b) parts.push(`Höhe ${Math.round(c.b[2])} mm`);
+  if (c.b) parts.push(`${lang('Höhe', 'Height')} ${Math.round(c.b[2])} mm`);
   el.textContent = parts.join(' · ');
 }
 

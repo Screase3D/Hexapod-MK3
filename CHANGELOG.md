@@ -4,6 +4,16 @@ Die Firmware-Version steht in [`firmware/VERSION`](firmware/VERSION). Sie wird b
 zusammen mit dem Git-Stand eingebettet und unter *Einstellungen → Version* angezeigt (unten in der
 Seitenleiste, z. B. `v0.9.0`). Für eine neue Version: `VERSION` hochzählen und hier eintragen.
 
+## 0.25.0
+
+- **Englische Oberfläche, Stufe 2:** auch die Hilfetexte (gut 40 Absätze, mit Links und Hervorhebungen) und die
+  zusammengesetzten Zeilen mit Werten – WLAN-Status und -Hinweise, Akku-Warnungen, Grenze der Beinreichweite,
+  Kamera-Hinweise und -Statistik, Controller-Kopplung, Signalmessung, Profile, Firmware-Update, Rückfragen,
+  Verlauf („2 min ago“), Stimmung, 3D-Ansicht. Tooltips an Eingabefeldern werden jetzt ebenfalls übersetzt.
+  Noch deutsch: Meldungen, die die Firmware selbst erzeugt (Ereignisprotokoll, Begrenzungshinweise) – Stufe 3.
+  - Umsetzung: Absätze mit Elementen ersetzt `i18n.js` als Ganzes (Wörterbuch `EN_HTML`); Sätze mit Werten
+    haben in `app.js` eine englische Fassung (`lang(de, en)`).
+
 ## 0.24.0
 
 - **Oberfläche auf Englisch** (Stufe 1): *Einstellungen → Oberfläche → Sprache / Language* – Deutsch (Standard),

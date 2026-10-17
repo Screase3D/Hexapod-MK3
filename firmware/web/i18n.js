@@ -41,7 +41,9 @@
     "Akku schwach": "Battery low",
     "Akku –": "Battery –",
     "Akkuspannung": "Battery voltage",
+    "Akkuspannung (V)": "Battery voltage (V)",
     "Akkuüberwachung": "Battery monitoring",
+    "Aktuelle Haltung und Gangart als eigenes Profil speichern (in diesem Browser)": "Save the current posture and gait as your own profile (in this browser)",
     "Aktuelle Stellung = Montagestellung": "Current position = assembly pose",
     "Aktuelle Stellung = Referenz": "Current position = reference",
     "Alle Gelenke": "All joints",
@@ -52,6 +54,7 @@
     "Alle auf Montagestellung": "All to assembly pose",
     "Als Datei gespeichert (Zwischenablage nicht verfügbar)": "Saved as a file (clipboard not available)",
     "Als Kopie bearbeiten": "Edit as a copy",
+    "Alternativ: Controller per Bluetooth oder USB mit diesem Handy/PC verbinden. Die Seite leitet ihn an den Roboter weiter, solange sie geöffnet ist. Nach dem Verbinden einmal eine Taste drücken, damit der Browser ihn meldet.": "Alternatively: connect the controller to this phone/PC via Bluetooth or USB. The page forwards it to the robot as long as it is open. After connecting, press a button once so that the browser reports it.",
     "An der Reichweitengrenze – Körper lässt sich nicht weiter bewegen": "At the reach limit – the body cannot move further",
     "Angriff": "Attack",
     "Anhalten (Steuerung)": "Stop (control)",
@@ -104,6 +107,8 @@
     "Dann die Seite neu laden – der Status steht oben in dieser Karte.": "Then reload the page – the status is shown at the top of this card.",
     "Dauerlicht": "Steady",
     "Der Controller verbindet sich direkt mit dem Roboter – ohne Handy.": "The controller connects directly to the robot – no phone needed.",
+    "Der Kamera-Takt wirkt beim nächsten Start der Kamera (Stream stoppen, gut 10 s warten, wieder starten).": "The camera clock takes effect at the next camera start (stop the stream, wait a good 10 s, start again).",
+    "Die Board-LED sitzt direkt vor der Kamera und stört das Bild. Warnungen (Not-Aus, Akku) zeigen die Augen immer – auch bei „Aus“. Beim Ändern zeigen die Augen die neue Farbe kurz zur Vorschau.": "The board LED sits right in front of the camera and disturbs the image. Warnings (E-stop, battery) are always shown by the eyes – even with “Off”. When changing, the eyes briefly show the new colour as a preview.",
     "Die Oberfläche blendet den Streifen aus.": "The interface hides the strip.",
     "Diese Seite stammt von einer älteren Firmware.": "This page comes from an older firmware.",
     "Digitaler Zoom: das Bild wird nur vergrößert.": "Digital zoom: the image is only enlarged.",
@@ -118,6 +123,7 @@
     "ESP32 neu starten": "Restart ESP32",
     "Effekt": "Effect",
     "Eigene Choreografien als JSON-Datei sichern": "Save your choreographies as a JSON file",
+    "Eigene Choreografien werden in diesem Browser gespeichert – mit Export/Import auf andere Geräte übertragen. Vorlagen lassen sich als Kopie bearbeiten. Das Tempo gilt für alle Abläufe außer den fest eingebauten Gesten.": "Your own choreographies are saved in this browser – transfer them to other devices with export/import. Templates can be edited as a copy. The speed applies to all sequences except the built-in gestures.",
     "Ein": "On",
     "Eine Farbe": "Single colour",
     "Einklappen": "Collapse",
@@ -135,6 +141,7 @@
     "Erst aufstehen": "Stand up first",
     "Erst aufstehen – im Sitzen läuft der Roboter nicht.": "Stand up first – the robot doesn't walk while sitting.",
     "Erst den Stream starten": "Start the stream first",
+    "Erst einschalten, wenn der Spannungsteiler an GPIO 1 bestückt ist und der Messwert oben mit einem Multimeter übereinstimmt – ohne Teiler liefert der Pin Zufallswerte. Warnung < 6,8 V, Servos aus < 6,4 V, Tiefschlaf < 6,0 V (Aufwecken nur per Reset).": "Only switch on once the voltage divider on GPIO 1 is fitted and the reading above matches a multimeter – without the divider the pin returns random values. Warning < 6.8 V, servos off < 6.4 V, deep sleep < 6.0 V (wake only via reset).",
     "Fahren": "Drive",
     "Fahren (Steuerung, Modus Laufen) bzw. Körper verschieben (Modus Körper)": "Drive (control, walk mode) or shift the body (body mode)",
     "Fahren, Körper oder Gesten wecken ihn": "Driving, body moves or gestures wake him",
@@ -152,6 +159,8 @@
     "Foto in voller Auflösung": "Photo in full resolution",
     "Frag später nochmal.": "Ask again later.",
     "Fragen": "Ask",
+    "Freier Speicher": "Free memory",
+    "Freier Speicher (KB)": "Free memory (KB)",
     "Freigeben": "Release",
     "Freuen": "Happy",
     "Fußabstand": "Stance",
@@ -170,6 +179,7 @@
     "Ganz sicher!": "Absolutely!",
     "Gebaut": "Built",
     "Gekoppelten Controller vergessen?": "Forget the paired controller?",
+    "Gelenkwinkel aller 18 Servos (kalibriert, begrenzt auf Min/Max der Kalibrierung). Positiv: Coxa nach vorne, Femur nach oben, Tibia nach außen. Bewegt sich nur bei eingeschaltetem Torque; beendet die IK.": "Joint angles of all 18 servos (calibrated, limited to the min/max of the calibration). Positive: coxa forward, femur up, tibia outward. Only moves with torque on; ends IK.",
     "Gelände": "Terrain",
     "Gerät": "Device",
     "Gespeichertes Netz löschen": "Delete saved network",
@@ -194,6 +204,7 @@
     "Hauptmenü": "Main menu",
     "Heap frei": "Free heap",
     "Heben": "Lift",
+    "Heben: Er verlagert das Gewicht nach hinten, setzt die Mittelbeine vor und hebt dann die Vorderbeine. Je ein Joystick pro Bein, der Fuß folgt der Richtung: ↑ hoch / ↓ runter, ← → schwenken (nach vorne bzw. zur Seite). Er geht so weit, wie das Bein reicht. Laufen geht erst wieder nach dem Absetzen.": "Raise: he shifts his weight back, moves the middle legs forward and then raises the front legs. One joystick per leg, the foot follows the direction: ↑ up / ↓ down, ← → swing (forward or sideways). He goes as far as the leg reaches. Walking is possible again after lowering.",
     "Hell": "Light",
     "Helligkeit": "Brightness",
     "Herz": "Heart",
@@ -206,11 +217,13 @@
     "Höhe oder Standbreite näher an die Grundstellung bringen.": "Bring height or stance closer to the default posture.",
     "IK aus": "IK off",
     "Im Stand ab und zu kleine zufällige Bewegungen": "Small random movements now and then while standing",
+    "In dieser Haltung kann er nicht laufen – die Beine haben keinen Spielraum für Schritte. Höhe oder Standbreite näher an die Grundstellung bringen.": "He cannot walk in this posture – the legs have no room for steps. Bring height or stance closer to the default posture.",
     "Innen": "Indoor",
     "Istwinkel": "actual angles",
     "JPEG-Qualität": "JPEG quality",
     "Ja": "Yes",
     "Ja!": "Yes!",
+    "Je Zustand": "Per state",
     "Justieren": "Fine-tune",
     "Kalibrieren": "Calibrate",
     "Kalibriert, alle Gelenke": "Calibrated, all joints",
@@ -246,8 +259,10 @@
     "Körper höher/tiefer (Steuerung)": "Body higher/lower (control)",
     "Körper mit dem Lagesensor waagerecht halten (bzw. auf der eingestellten Neigung)": "Keep the body level with the IMU (or at the set tilt)",
     "Körper tiefer": "Body lower",
+    "Körper und Laufen in % des Joystick-Ausschlags (Körper: ±30 mm verschieben, ±12° neigen, ±15° drehen; + = vor/links/Nase hoch/links drehen), Höhe in mm relativ zur eingestellten Haltung. Bewegungen werden weich gefahren; was die Beine nicht erreichen, wird begrenzt.": "Body and walking in % of the joystick deflection (body: ±30 mm shift, ±12° tilt, ±15° turn; + = forward/left/nose up/turn left), height in mm relative to the set posture. Movements are smoothed; what the legs cannot reach is limited.",
     "Körper verschieben und neigen (Schwerpunkt), Gesten": "Shift and tilt the body (centre of gravity), gestures",
     "Körperhaltung per inverser Kinematik": "Body posture via inverse kinematics",
+    "Kürzere Schritte = schneller, aber hektischer. Langsam gelaufen werden die Schritte automatisch ruhiger (bis zur doppelten Schrittdauer). Quer zum Körper begrenzt die Reichweite der Beine das Tempo zusätzlich (das Knie darf nicht zu weit einknicken). Die Gangart lässt sich auch im Lauf wechseln: Der Roboter passt das Tempo an und die Beine finden in wenigen Schritten fließend in den neuen Takt. Alles wird gespeichert.": "Shorter steps = faster, but more hectic. When walking slowly the steps automatically become calmer (up to twice the step duration). Across the body, the reach of the legs additionally limits the speed (the knee must not bend too far). The gait can also be changed while walking: the robot adjusts the speed and the legs smoothly find the new rhythm within a few steps. Everything is saved.",
     "LB (Schulter links)": "LB (left bumper)",
     "LED-Einstellungen nicht verfügbar": "LED settings not available",
     "LED-Standard wiederhergestellt": "LED defaults restored",
@@ -278,8 +293,10 @@
     "Linkes Vorderbein": "Left front leg",
     "Links": "Left",
     "Links / rechts": "Left / right",
+    "Links: Körper verschieben (Schwerpunkt), rechts: neigen. Loslassen = zurück in die eingestellte Haltung. Die Füße bleiben stehen.": "Left: shift the body (centre of gravity), right: tilt. Release = back to the set posture. The feet stay put.",
     "Linsenkorrektur (dunkle Ränder)": "Lens correction (dark edges)",
     "Liste leeren": "Clear list",
+    "Läuft nur, solange diese Seite offen ist – Änderungen sind sofort zu sehen.": "Only runs while this page is open – changes are visible immediately.",
     "Max. Bildrate": "Max. frame rate",
     "Max. Verstärkung": "Max. gain",
     "Meine Choreografie": "My choreography",
@@ -329,6 +346,7 @@
     "Nick positiv": "Pitch positive",
     "Nicken": "Pitch",
     "Noch kein Heimnetz eingerichtet.": "No home network set up yet.",
+    "Noch keine Schritte": "No steps yet",
     "Noch keine eigenen Choreografien": "No choreographies of your own yet",
     "Not-Aus": "E-stop",
     "Not-Aus (Esc)": "E-stop (Esc)",
@@ -361,6 +379,7 @@
     "Passwort": "Password",
     "Pixelfehler korrigieren": "Correct pixel defects",
     "Profile": "Profiles",
+    "Prüfe und schreibe …": "Checking and writing …",
     "Pulsbreite in der Montagestellung": "Pulse width in the assembly pose",
     "RB (Schulter rechts)": "RB (right bumper)",
     "RT (Trigger)": "RT (trigger)",
@@ -383,6 +402,7 @@
     "Ruhig": "Calm",
     "Sauer": "Angry",
     "Schleichen": "Sneak",
+    "Schleife": "loop",
     "Schließen": "Close",
     "Schneller (bis 100 %)": "Faster (up to 100 %)",
     "Schritt": "Step",
@@ -390,6 +410,7 @@
     "Schrittdauer": "Step duration",
     "Schwung": "Swing",
     "Schärfe": "Sharpness",
+    "Seit dem letzten Start (bis zu 48 Einträge, gehen beim Neustart verloren). Der Grund des letzten Neustarts steht im ersten Eintrag – „Unterspannung“ deutet auf eine zu schwache 5-V-Versorgung unter Servolast hin.": "Since the last start (up to 48 entries, lost on restart). The reason for the last restart is in the first entry – “brownout” indicates a 5 V supply that is too weak under servo load.",
     "Seite": "Side",
     "Servo ±1 µs, mit Umschalt ±10 µs (Kalibrieren)": "Servo ±1 µs, with Shift ±10 µs (calibration)",
     "Servos abgeschaltet": "Servos switched off",
@@ -422,6 +443,8 @@
     "Standardbelegung wiederhergestellt": "Default mapping restored",
     "Standardwerte": "Defaults",
     "Standfläche": "Support polygon",
+    "Startet den ESP32 neu. Die Servos werden dabei stromlos, die Seite verbindet sich danach von selbst wieder.": "Restarts the ESP32. The servos lose power, the page reconnects by itself afterwards.",
+    "Stell eine Ja/Nein-Frage – laut oder im Kopf – und frag das Orakel. Es denkt nach und antwortet mit Kopf und Augen.": "Ask a yes/no question – out loud or in your head – and ask the oracle. It thinks and answers with head and eyes.",
     "Stellgeschwindigkeit": "Servo speed",
     "Steuerkreuz ←": "D-pad ←",
     "Steuerkreuz ↑": "D-pad ↑",
@@ -447,6 +470,7 @@
     "Taste X": "Button X",
     "Taste Y": "Button Y",
     "Taste belegen": "Assign button",
+    "Taste oder Beschriftung antippen, um die Funktion zu ändern. Gedrückte Tasten leuchten auf, sobald ein Controller aktiv ist. Sticks und Trigger hängen vom Modus ab (Taste Y wechselt ihn). P1–P4 sind die Paddles auf der Rückseite des Elite Series 2.": "Tap a button or label to change its function. Pressed buttons light up as soon as a controller is active. Sticks and triggers depend on the mode (button Y changes it). P1–P4 are the paddles on the back of the Elite Series 2.",
     "Tasten (antippen zum Ändern)": "Buttons (tap to change)",
     "Tastenkürzel": "Keyboard shortcuts",
     "Tempo": "Speed",
@@ -494,6 +518,7 @@
     "Vorderbeine sind oben – Laufen ist gesperrt.": "Front legs are up – walking is locked.",
     "Vorderbeine sind oben – erst absetzen, dann laufen.": "Front legs are up – lower them first, then walk.",
     "Vorheriger Servo (↑)": "Previous servo (↑)",
+    "Vorlage": "template",
     "Vorne": "Front",
     "Vorschau": "Preview",
     "Vorschau startet …": "Preview starting …",
@@ -503,6 +528,7 @@
     "WLAN-Daten gespeichert. Jetzt neu starten?": "Wi-Fi data saved. Restart now?",
     "WLAN-Energiesparen": "Wi-Fi power saving",
     "WLAN-Signal": "Wi-Fi signal",
+    "WLAN-Signal (dBm)": "Wi-Fi signal (dBm)",
     "Wache schieben": "Patrol",
     "Was die Joysticks steuern": "What the joysticks control",
     "Wechselblinken": "Alternating blink",
@@ -524,10 +550,12 @@
     "Zappeln beim Hochheben": "Wriggle when picked up",
     "Zeigen": "Show",
     "Zeit": "Time",
+    "Ziehen dreht die Ansicht (mit der Maus auch hoch/runter), Strg + Mausrad zoomt, Doppelklick setzt zurück. Daten kommen nur, solange die Ansicht sichtbar ist.": "Dragging rotates the view (with the mouse also up/down), Ctrl + mouse wheel zooms, double-click resets. Data only arrives while the view is visible.",
     "Ziel der Belichtungsautomatik: weniger = kürzere Belichtung, weniger Bewegungsunschärfe": "Target of the auto exposure: less = shorter exposure, less motion blur",
     "Zoom (auch Mausrad oder zwei Finger im Bild, Doppelklick = zurück)": "Zoom (also mouse wheel or two fingers in the image, double-click = reset)",
     "Zoom (auch zwei Finger im Bild)": "Zoom (also two fingers in the image)",
     "Zuhause (Glühlampe)": "Home (incandescent)",
+    "Zum Vergleichen von Antenne und Einbauort: Roboter nicht bewegen, messen, dann Antenne umstecken oder verlegen und erneut messen. Die Messungen bleiben auch nach einem Neustart erhalten.": "To compare antenna and mounting position: don’t move the robot, measure, then re-plug or move the antenna and measure again. The measurements are kept even after a restart.",
     "Zurücksetzen": "Reset",
     "Zuschauer": "viewers",
     "Zustand": "State",
@@ -549,6 +577,8 @@
     "drei Beine gleichzeitig – schnell": "three legs at a time – fast",
     "eigene Einstellung": "custom setting",
     "ein Bein nach dem anderen – langsam, sehr stabil": "one leg after the other – slow, very stable",
+    "gelangweilt": "bored",
+    "gerade eben": "just now",
     "gering (nur kräftiges Anheben)": "low (only a firm lift)",
     "gut": "good",
     "gähnt": "yawns",
@@ -562,6 +592,7 @@
     "hoch, Fuß 25 mm anheben": "high, lift feet 25 mm",
     "höher/tiefer": "higher/lower",
     "höher/tiefer ·": "higher/lower ·",
+    "jetzt": "now",
     "kalibriert": "calibrated",
     "kein Akku (USB)": "no battery (USB)",
     "kein Akku erkannt": "no battery detected",
@@ -628,6 +659,7 @@
     "vorne": "front",
     "vorne links": "front left",
     "vorne rechts": "front right",
+    "wach": "awake",
     "wie die Augen": "like the eyes",
     "wie oben": "same as above",
     "wirkt im Stehen": "works while standing",
@@ -648,11 +680,40 @@
     "über Kanten: Körper höher, Füße bis 50 mm hoch": "over edges: body higher, feet up to 45 mm",
     "– Gangart wechselt im Lauf": "– gait changes while walking",
     "– Steuerung reagiert verzögert (WLAN-Empfang?)": "– control responds with a delay (Wi-Fi reception?)",
+    "– beim Drehen und Umschauen leuchtet das Auge auf der Seite heller": "– when turning and looking around, the eye on that side glows brighter",
+    "– erkennt das Anheben am Lagesensor; zappelt immer nur mit drei Beinen, steht also auch bei einer Fehlerkennung": "– detects being lifted with the IMU; always wriggles with only three legs, so he still stands if it was a false detection",
+    "– im Stand ab und zu kleine zufällige Bewegungen: umschauen, Gewicht verlagern, Kopf schief, ein Bein heben, tippen": "– small random movements now and then while standing: looking around, shifting weight, tilting the head, lifting a leg, tapping",
+    "– im Stand hebt und senkt sich der Körper ganz leicht, die Augen atmen mit": "– while standing the body rises and falls very slightly, the eyes breathe along",
+    "– lehnt sich beim Anfahren zurück, schwingt beim Anhalten nach, schaut in die Kurve, Hüftschwung; schaut sich nach längerem Laufen manchmal um": "– leans back when starting, swings on when stopping, looks into the curve, hip sway; sometimes looks around after walking for a while",
     "– nichts –": "– nothing –",
+    "– steht er lange untätig, gähnt und seufzt er und legt sich schließlich schlafen; Steuern weckt ihn": "– if he stands idle for a long time, he yawns and sighs and finally lies down to sleep; controlling wakes him",
     "„Lebendig“ wirkt im Stand": "“Alive” works while standing",
     "↕ ausstrecken": "↕ extend",
     "↶ Drehen ↷": "↶ Turn ↷",
     "▲ VORNE": "▲ FRONT"
+  };
+  // Absätze mit eingebetteten Elementen (Links, Hervorhebungen): ganzes innerHTML, wie der Browser es
+  // liefert (Leerraum zusammengefasst) -> englisches HTML
+  const EN_HTML = {
+    "<b>Grenzen</b> eintragen, mit dem Test-Schieber prüfen, dann <b>Speichern</b>.": "Enter the <b>limits</b>, check with the test slider, then <b>save</b>.",
+    "<b>Montage:</b> Servohörner abnehmen, Torque ein, „Alle auf 1500 µs“. Hörner so aufstecken, dass jedes Bein möglichst nah an der <b>Montagestellung</b> steht: <i>Coxa</i> gerade vom Körper weg (Montagerichtung), <i>Femur</i> <span class=\"asm-femur\">55</span>° nach oben, Fußspitze ca. 35&nbsp;mm außerhalb des Knies = Grundstellung: Roboter auf 52&nbsp;mm aufbocken (Femur-Achse über dem Tisch), Fußspitzen 100&nbsp;mm von der Coxa-Achse auf den Tisch (Montagelehre, docs/montagelehre.pdf).": "<b>Assembly:</b> remove the servo horns, torque on, “All to 1500 µs”. Fit the horns so that each leg is as close as possible to the <b>assembly pose</b>: <i>coxa</i> straight away from the body (mounting direction), <i>femur</i> <span class=\"asm-femur\">55</span>° up, foot tip approx. 35&nbsp;mm outside the knee = default posture: jack the robot up to 52&nbsp;mm (femur axis above the table), foot tips 100&nbsp;mm from the coxa axis on the table (mounting jig, docs/montagelehre.pdf).",
+    "<b>Montagestellung</b> je Servo exakt anfahren (Rohmodus, ±1 µs) und „Aktuelle Stellung = Montagestellung“ drücken. Je Bein zuerst den Femur, dann die Tibia.": "Move each servo exactly to the <b>assembly pose</b> (raw mode, ±1 µs) and press “Current position = assembly pose”. Per leg first the femur, then the tibia.",
+    "<b>Richtung &amp; Maßstab:</b> Gelenk auf einen zweiten bekannten Winkel fahren (Coxa ±45°, Femur 0° = waagerecht, Tibia 0° = rechtwinklig zum Femur) und „Aktuelle Stellung = Referenz“ drücken. Positiv bedeutet: Coxa nach <b>vorne</b>, Femur nach <b>oben</b>, Tibia nach <b>außen</b>. Ohne diesen Schritt gilt die Standardrichtung (linke Seite umgekehrt, weil spiegelbildlich eingebaut) – mit dem Test-Schieber prüfen, sonst „Drehrichtung umkehren“.": "<b>Direction &amp; scale:</b> move the joint to a second known angle (coxa ±45°, femur 0° = horizontal, tibia 0° = perpendicular to the femur) and press “Current position = reference”. Positive means: coxa <b>forward</b>, femur <b>up</b>, tibia <b>outward</b>. Without this step the default direction applies (left side reversed because mounted mirror-inverted) – check with the test slider, otherwise “Reverse direction”.",
+    "<code>firmware.bin</code> aus <code>firmware/.pio/build/hexapod/</code> (nach dem Bauen) oder aus dem CI-Artefakt <i>hexapod-firmware</i> wählen – nicht <code>firmware.factory.bin</code>. Die Servos werden dabei stromlos; danach startet der ESP32 neu. Direkt aus PlatformIO geht es mit der Umgebung <code>hexapod_ota</code> (<code>pio run -e hexapod_ota -t upload</code>).": "Choose <code>firmware.bin</code> from <code>firmware/.pio/build/hexapod/</code> (after building) or from the CI artifact <i>hexapod-firmware</i> – not <code>firmware.factory.bin</code>. The servos lose power; then the ESP32 restarts. Directly from PlatformIO use the environment <code>hexapod_ota</code> (<code>pio run -e hexapod_ota -t upload</code>).",
+    "<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> verschieben · <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>R</kbd><kbd>F</kbd> höher/tiefer": "<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> shift · <kbd>Q</kbd><kbd>E</kbd> turn · <kbd>R</kbd><kbd>F</kbd> higher/lower",
+    "<kbd>W</kbd><kbd>S</kbd> vor/zurück · <kbd>A</kbd><kbd>D</kbd> seitlich · <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>R</kbd><kbd>F</kbd> höher/tiefer · <kbd>Leertaste</kbd> Stopp": "<kbd>W</kbd><kbd>S</kbd> forward/back · <kbd>A</kbd><kbd>D</kbd> sideways · <kbd>Q</kbd><kbd>E</kbd> turn · <kbd>R</kbd><kbd>F</kbd> higher/lower · <kbd>Space</kbd> stop",
+    "<kbd>←</kbd><kbd>→</kbd> ±1 µs · <kbd>Umschalt</kbd>+<kbd>←</kbd><kbd>→</kbd> ±10 µs · <kbd>↑</kbd><kbd>↓</kbd> vorheriger/nächster Servo · <kbd>Esc</kbd> Not-Aus": "<kbd>←</kbd><kbd>→</kbd> ±1 µs · <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> ±10 µs · <kbd>↑</kbd><kbd>↓</kbd> previous/next servo · <kbd>Esc</kbd> E-stop",
+    "Alles nur im IK-Betrieb, alles wird gespeichert. Die Augenfarben je Zustand stellt die Seite <a href=\"#leds\">LEDs</a> ein.": "Only in IK mode, everything is saved. The eye colours per state are set on the <a href=\"#leds\">LEDs</a> page.",
+    "Beinmaße sind noch Platzhalter (<span class=\"mono\">include/robot_geometry.h</span>) – erst nach dem Messen verwenden.": "Leg dimensions are still placeholders (<span class=\"mono\">include/robot_geometry.h</span>) – only use after measuring.",
+    "Der Controller verbindet sich direkt mit dem Roboter – ohne Handy. <b>Koppeln:</b> Controller einschalten, dann die Kopplungstaste (oben, neben dem USB-Anschluss) gedrückt halten, bis das Xbox-Logo schnell blinkt. Danach genügt Einschalten. Der ESP32-S3 kann nur Bluetooth Low Energy: Beim Elite Series 2 und älteren Controllern vorher die Firmware über die App „Xbox Zubehör“ aktualisieren. Ein Controller merkt sich nur ein Bluetooth-Gerät – mit dem Handy muss er danach neu gekoppelt werden. Bluetooth teilt sich die Antenne mit dem WLAN: Solange es an ist, spart das WLAN Energie und reagiert etwas träger; ausgeschaltet ist der Kamerastream am flüssigsten. Klappt das Koppeln nicht, steht der Grund unter <i>System → Ereignisse</i>.": "The controller connects directly to the robot – no phone needed. <b>Pairing:</b> switch the controller on, then hold the pair button (top, next to the USB port) until the Xbox logo flashes fast. After that, switching on is enough. The ESP32-S3 only supports Bluetooth Low Energy: on the Elite Series 2 and older controllers, update the firmware first with the “Xbox Accessories” app. A controller remembers only one Bluetooth device – it has to be paired with the phone again afterwards. Bluetooth shares the antenna with the Wi-Fi: while it is on, the Wi-Fi saves power and reacts a bit more slowly; switched off, the camera stream is smoothest. If pairing fails, the reason is shown under <i>System → Events</i>.",
+    "Die Füße bleiben stehen, der Körper bewegt sich darüber – auch beim Laufen. Das Band unter einem Regler zeigt, wie weit die Beine bei den übrigen Werten reichen (Grenzen aus der Kalibrierung). Servos fahren beim Einschalten zuerst langsam in die Sitzhaltung; IK bleibt nach einem Neustart wie zuletzt. Schritt und Servos unter <a href=\"#einstellungen\">Einstellungen</a>.": "The feet stay put, the body moves above them – also while walking. The band under a slider shows how far the legs reach with the other values (limits from the calibration). On power-up the servos first move slowly to the sitting pose; IK stays as it was after a restart. Step and servos under <a href=\"#einstellungen\">Settings</a>.",
+    "Diese Seite stammt von einer älteren Firmware. <a href=\"#\" onclick=\"location.reload(); return false;\">Neu laden</a>": "This page comes from an older firmware. <a href=\"#\" onclick=\"location.reload(); return false;\">Reload</a>",
+    "Ein Tipp genügt – sitzt der Roboter, steht er vorher auf (Servos müssen an sein). <kbd>Leertaste</kbd> oder ein zweiter Tipp hält an, <kbd>Esc</kbd> ist wie immer Not-Aus.": "One tap is enough – if the robot is sitting, it stands up first (servos must be on). <kbd>Space</kbd> or a second tap stops, <kbd>Esc</kbd> is the E-stop as always.",
+    "Höchstgeschwindigkeit bei Einzelbefehlen (Kalibrierung, Justierung, Montagestellung). Das Lauftempo bestimmen <b>Tempo</b> und Gangart (Steuerung) sowie die <b>Schrittdauer</b>; dabei gilt mindestens 600&nbsp;°/s, damit die Füße den Schrittbahnen folgen.": "Maximum speed for single commands (calibration, fine-tuning, assembly pose). The walking speed is set by <b>Speed</b> and gait (control) and the <b>step duration</b>; at least 600&nbsp;°/s applies there so that the feet follow the step paths.",
+    "Lageausgleich abgeschaltet: Er hat die Schräglage verstärkt statt ausgeglichen. Einbaulage des Lagesensors unter <a href=\"#kamera\">Kamera &amp; Lagesensor</a> prüfen.": "Levelling switched off: it increased the tilt instead of correcting it. Check the IMU mounting under <a href=\"#kamera\">Camera &amp; IMU</a>.",
+    "Pfeile auf der GY-521-Platine. Prüfen: Nase anheben → <b>Nick positiv</b>, rechte Seite absenken → <b>Roll positiv</b> (Werte in der Karte Lage).": "Arrows on the GY-521 board. Check: lift the nose → <b>pitch positive</b>, lower the right side → <b>roll positive</b> (values in the Attitude card).",
+    "Warnungen (Not-Aus, Akku) haben Vorrang. Die Effekte gibt es auch für die Zustände auf der Seite <a href=\"#leds\">LEDs</a>.": "Warnings (E-stop, battery) take priority. The effects are also available for the states on the <a href=\"#leds\">LEDs</a> page.",
+    "Was Sticks und Trigger im jeweiligen Modus tun, zeigt die Grafik oben (Modus oben rechts umschalten). In den Modus <i>Vorderbeine</i> zu wechseln hebt sie, ein anderer setzt sie ab.": "What the sticks and triggers do in each mode is shown in the graphic above (switch the mode at the top right). Switching to <i>front legs</i> mode raises them, another mode lowers them."
   };
   const label = (s) => lookup(s) ?? s;
   // Muster mit Zahlen (ganzer Text bzw. ein Teil zwischen „ · “ / „ – “)
@@ -670,6 +731,15 @@
     [/^Bein(e?) ([\d, ]+) (erreicht|erreichen) den Boden nicht$/, (m, p, a) => `Leg${p ? 's' : ''} ${a} can't reach the ground`],
     [/^Gangart: (.+)$/, (m, a) => `Gait: ${label(a)}`],
     [/^Jetzt: (.+)$/, (m, a) => `Now: ${label(a)}`],
+    [/^Stimmung: (.+)$/, (m, a) => `Mood: ${label(a)}`],
+    [/^(\d+) Schritte?$/, (m, a) => `${a} step${a === '1' ? '' : 's'}`],
+    [/^Antwortzeit (.+)$/, 'Response time $1'],
+    [/^WLAN (-?\d+ dBm.*)$/, 'Wi-Fi $1'],
+    [/^Akku (\d+ ?%)$/, 'Battery $1'],
+    [/^gebaut (.+)$/, 'built $1'],
+    [/^verbunden: (.+)$/, (m, a) => `connected: ${label(a)}`],
+    [/^vor (\d+ (?:s|min)(?: \d+ s)?)$/, '$1 ago'],
+    [/^Aktuelle Stellung = Montagestellung \((.+)\)$/, 'Current position = assembly pose ($1)'],
     [/^drücken: (.+)$/, (m, a) => `press: ${label(a)}`],
     [/^Kamera (OV\d+.*)$/, 'Camera $1'],
   ];
@@ -706,7 +776,7 @@
   if (LANG === 'de') return;
 
   const ATTRS = ['title', 'aria-label', 'placeholder', 'data-title'];
-  const SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, INPUT: 1 };
+  const SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1 };  // (Text darin nicht anfassen; Attribute schon)
   function textNode(n) {
     const p = n.parentNode;
     if (p && SKIP[p.nodeName]) return;
@@ -724,13 +794,22 @@
   }
   function walk(root) {
     if (root.nodeType === 3) return textNode(root);
-    if (root.nodeType !== 1 || SKIP[root.nodeName]) return;
+    if (root.nodeType !== 1) return;
     attrs(root);
+    if (SKIP[root.nodeName]) return;
     const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
     for (let n = w.nextNode(); n; n = w.nextNode()) {
       if (n.nodeType === 3) textNode(n);
-      else if (!SKIP[n.nodeName]) attrs(n);
+      else attrs(n);
     }
+  }
+  // zuerst ganze Absätze mit Links/Hervorhebungen (vor app.js: dessen Elemente entstehen danach)
+  const INLINE = /^(A|B|I|EM|STRONG|KBD|SPAN|CODE|BR|SMALL|SUP|SUB|U)$/;
+  const inlineOnly = (el) => [...el.children].every((c) => INLINE.test(c.tagName) && inlineOnly(c));
+  for (const el of document.body.querySelectorAll('p, li, dd, div, span, label, small')) {
+    if (!el.children.length || !inlineOnly(el)) continue;
+    const k = el.innerHTML.replace(/\s+/g, ' ').trim();
+    if (Object.prototype.hasOwnProperty.call(EN_HTML, k)) el.innerHTML = EN_HTML[k];
   }
   walk(document.body);
   document.title = tr(document.title);
