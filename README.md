@@ -1,12 +1,15 @@
 # Hexapod MK3
+<p align="center">
+  <img src="docs/Hexapod MKIII CAD_Full.png" alt="CAD Overview" width="100%">
+  </p>
 
-A 3D-printed six-legged robot with 18 servos, driven by an **ESP32-S3-CAM**. Inverse kinematics, three gaits,
+  
+A 3D-printed six-legged robot with 18 servos, driven by an **ESP32-S3-CAM**. Inverse kinematics, four gaits,
 a camera stream and a lot of personality – controlled from a web interface the robot serves itself (PC and
 phone), or with an Xbox controller over Bluetooth.
 
 <p align="center">
-  <img src="docs/images/ui-control.png" alt="Control page" width="74%">
-  <img src="docs/images/ui-phone.png" alt="Control page on a phone" width="22%">
+  <img src="docs/images/ui-control.png" alt="Control page" width="100%">
 </p>
 
 ## Features
@@ -194,3 +197,6 @@ Host tests for kinematics, gaits, posture, behaviour, LEDs and controller live i
 Further documentation (German): [kinematics & gaits](docs/kinematik.md) ·
 [calibration](docs/kalibrierung.md) · [hardware](docs/hardware.md) · [controller](docs/controller.md) ·
 [API](docs/api.md) · [changelog](CHANGELOG.md)
+
+# Credits
+CAD and hardware design by Screase3D and coded by Claude Opus 5.5 (Anthropic).
