@@ -1,113 +1,113 @@
-# Xbox-Controller
+# Xbox controller
 
-Der Hexapod lässt sich außer per Touch/Tastatur auch mit einem Xbox-Controller steuern – auf zwei Wegen
-(Seite **Controller** in der Oberfläche):
+Besides touch/keyboard, the hexapod can also be controlled with an Xbox controller – in two ways
+(**Controller** page in the UI):
 
-| Weg | Wie | Vorteil |
+| Way | How | Advantage |
 |---|---|---|
-| **Bluetooth am Roboter** | Controller koppelt direkt mit dem ESP32-S3 | kein Handy nötig |
-| **Controller an diesem Gerät** | Controller am Handy/PC (Bluetooth oder USB), die geöffnete Seite leitet ihn weiter | geht mit jedem Controller, den der Browser kennt |
+| **Bluetooth on the robot** | the controller pairs directly with the ESP32-S3 | no phone needed |
+| **Controller on this device** | controller on the phone/PC (Bluetooth or USB), the open page forwards it | works with any controller the browser recognises |
 
-Beide nutzen dieselbe Belegung, die der Roboter auswertet (`src/input/pad_map.cpp`). Touch-Steuerung und
-Controller funktionieren gleichzeitig; der Controller sendet nur, wenn an ihm etwas bewegt wird.
+Both use the same mapping, which the robot evaluates (`src/input/pad_map.cpp`). Touch control and
+controller work at the same time; the controller only sends when something on it is moved.
 
-## Bluetooth am Roboter
+## Bluetooth on the robot
 
-Der ESP32-S3 kann nur **Bluetooth Low Energy** (BLE), kein klassisches Bluetooth. Xbox-Controller der
-Series X|S können das ab Werk, der **Elite Series 2** (auch „Core“) und Xbox-One-Controller mit Bluetooth erst
-mit aktueller Firmware (seit Ende 2021). Also vorher einmal die App **Xbox Zubehör** (Windows/Xbox) öffnen
-und den Controller aktualisieren.
+The ESP32-S3 only supports **Bluetooth Low Energy** (BLE), not classic Bluetooth. Series X|S Xbox controllers
+support this out of the box; the **Elite Series 2** (also “Core”) and Xbox One controllers with Bluetooth only
+with current firmware (since late 2021). So open the **Xbox Accessories** app (Windows/Xbox) once beforehand
+and update the controller.
 
-1. *Controller* → Schalter **Bluetooth am Roboter** ein → **Koppeln** (sucht 60 s).
-2. Controller einschalten, dann die **Kopplungstaste** (oben neben dem USB-Anschluss) gedrückt halten, bis das
-   Xbox-Logo schnell blinkt.
-3. Nach ein paar Sekunden: *verbunden: Xbox Wireless Controller · Akku …*, der Controller vibriert kurz.
+1. *Controller* → switch **Bluetooth on the robot** on → **Pair** (searches for 60 s).
+2. Switch the controller on, then hold the **pair button** (top, next to the USB port) until the
+   Xbox logo flashes fast.
+3. After a few seconds: *connected: Xbox Wireless Controller · Battery …*, the controller vibrates briefly.
 
-Danach genügt es, den Controller einzuschalten – der Roboter sucht ihn mit wenig Funklast und verbindet
-sich von selbst. **Vergessen** löscht die Kopplung.
+After that, switching the controller on is enough – the robot searches for it with little radio load and
+connects automatically. **Forget** deletes the pairing.
 
-Hinweise:
+Notes:
 
-- Ein Xbox-Controller merkt sich **ein** Bluetooth-Gerät (plus eine Xbox). Nach dem Koppeln mit dem Roboter
-  muss er mit dem Handy/PC neu gekoppelt werden und umgekehrt (Doppeltipp auf die Kopplungstaste wechselt
-  zwischen den zuletzt gekoppelten Geräten).
-- Bluetooth und WLAN teilen sich die Antenne. Solange Bluetooth an ist, läuft das WLAN deshalb im
-  Energiesparmodus (Modem-Sleep, vom ESP32 für den gemeinsamen Betrieb vorgeschrieben): Antwortzeit und
-  Kamerastream werden etwas träger. Die Verbindung zum Controller läuft mit 15–30 ms Intervall; den
-  Wunsch des Controllers nach 7,5 ms lehnt der Roboter ab, sonst bliebe für das WLAN kaum Funkzeit. Ist Bluetooth aus, wird es gar nicht gestartet (kein Speicher, keine
-  Funkzeit) und das WLAN läuft wieder ohne Energiesparen – dann ist der Kamerastream am flüssigsten.
-- Klappt das Koppeln nicht, steht im **Ereignisprotokoll** (*System*), ob überhaupt Bluetooth-Geräte bzw. ein
-  Xbox-Controller gesehen wurden. „Kein Xbox-Controller gefunden“ heißt meist: Controller-Firmware zu alt
-  oder die Kopplungstaste nicht lange genug gehalten. Beim Verbinden stehen dort außerdem Intervall und freier Speicher,
-  bei einer Trennung der Grund. Ist das WLAN mit verbundenem Controller weg: Controller ausschalten – der
-  Roboter sucht dann nur noch selten und das WLAN kommt zurück.
-- Bricht die Verbindung ab (Controller aus, außer Reichweite), hält der Roboter nach spätestens ca. 2 s an
-  (Bluetooth-Timeout; der Controller meldet nur Änderungen, ein gehaltener Stick gilt bis dahin weiter).
-- Noch nicht mit echter Hardware getestet: Der Bericht des Controllers wird wie bei der Bibliothek
+- An Xbox controller remembers **one** Bluetooth device (plus one Xbox). After pairing with the robot,
+  it has to be paired again with the phone/PC and vice versa (double-tapping the pair button switches
+  between the most recently paired devices).
+- Bluetooth and Wi-Fi share the antenna. While Bluetooth is on, the Wi-Fi therefore runs in
+  power-saving mode (modem sleep, mandated by the ESP32 for coexistence): response time and
+  camera stream become somewhat more sluggish. The connection to the controller runs at a 15–30 ms interval; the
+  robot rejects the controller's request for 7.5 ms, otherwise there would be hardly any airtime left for the Wi-Fi. If Bluetooth is off, it is not started at all (no memory, no
+  airtime) and the Wi-Fi runs without power saving again – the camera stream is then at its smoothest.
+- If pairing fails, the **Events** log (*System*) shows whether any Bluetooth devices or an
+  Xbox controller were seen at all. “No Xbox controller found” usually means: controller firmware too old
+  or the pair button not held long enough. On connecting, it also lists the interval and free memory,
+  and on a disconnect, the reason. If the Wi-Fi drops out while the controller is connected: switch the controller off – the
+  robot then only searches occasionally and the Wi-Fi comes back.
+- If the connection drops (controller off, out of range), the robot stops after approx. 2 s at the latest
+  (Bluetooth timeout; the controller only reports changes, so a held stick remains in effect until then).
+- Not yet tested with real hardware: the controller's report is evaluated as in the library
   [XboxSeriesXControllerESP32](https://github.com/asukiaaa/arduino-XboxSeriesXControllerESP32)
-  ausgewertet (Bluetooth-Stack: [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 2.5.1). Bewegen sich
-  die Sticks in der Grafik verkehrt herum, hilft *Sticks oben/unten umkehren*.
+  (Bluetooth stack: [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 2.5.1). If the sticks
+  move the wrong way round in the graphic, *Invert sticks up/down* helps.
 
-## Controller an diesem Gerät
+## Controller on this device
 
-Schalter **Controller an diesem Gerät** ein (gilt für diesen Browser). Controller per Bluetooth oder USB mit dem
-Handy/PC verbinden und eine Taste drücken – der Browser meldet ihn erst dann. Die Seite schickt den
-Zustand alle 50 ms an den Roboter, solange sie geöffnet ist (egal welche Unterseite). Die Xbox-Taste und die
-Elite-Paddles meldet der Browser meist nicht.
+Switch **Controller on this device** on (applies to this browser). Connect the controller to the
+phone/PC via Bluetooth or USB and press a button – only then does the browser report it. The page sends the
+state to the robot every 50 ms while it is open (regardless of which sub-page). The browser usually does not report the Xbox button and the
+Elite paddles.
 
-## Belegung
+## Mapping
 
-Oben auf der Seite *Controller* ist der Controller groß abgebildet, jede Taste mit ihrer Funktion:
+At the top of the *Controller* page the controller is shown large, each button with its function:
 
-- **Ändern:** Taste oder Beschriftung antippen → Funktion wählen (nach Themen sortiert; „auch auf B“ zeigt,
-  wo eine Funktion schon liegt – mehrere Tasten dürfen dieselbe haben). Wird sofort gespeichert,
-  *Standard* stellt alles zurück.
-- **Live:** Ist ein Controller aktiv (Bluetooth oder Browser), leuchten gedrückte Tasten samt Beschriftung auf,
-  die Sticks bewegen sich mit und die Trigger füllen sich. Wechselt der Modus am Controller, folgt die Grafik.
-- **Sticks und Trigger** sind fest je Modus (gestrichelte Kästen); oben rechts zwischen *Laufen*, *Körper* und
-  *Vorderbeine* umschalten, um ihre Funktion zu sehen. *Sticks tauschen* (Karte *Sticks*) legt das Fahren
-  auf den rechten Stick (z. B. für Linkshänder), in allen Modi.
-- Auf dem Handy steht unter der Grafik eine Liste zum Antippen.
+- **Change:** tap a button or label → choose a function (sorted by topic; “also on B” shows
+  where a function is already assigned – several buttons may have the same one). Saved immediately;
+  *Default* resets everything.
+- **Live:** if a controller is active (Bluetooth or browser), pressed buttons light up together with their label,
+  the sticks move along and the triggers fill up. If the mode changes on the controller, the graphic follows.
+- **Sticks and triggers** are fixed per mode (dashed boxes); switch between *Walk*, *Body* and
+  *Front legs* at the top right to see their function. *Swap sticks* (*Sticks* card) puts driving
+  on the right stick (e.g. for left-handers), in all modes.
+- On a phone, a tappable list appears below the graphic.
 
-Die Sticks hängen vom **Modus** ab (Taste Y wechselt, die Steuerung zeigt ihn als 🎮-Abzeichen):
+The sticks depend on the **mode** (button Y changes it; the control panel shows it as a 🎮 badge):
 
-| Modus | linker Stick | rechter Stick | Trigger |
+| Mode | Left stick | Right stick | Triggers |
 |---|---|---|---|
-| Laufen | fahren (vor/zurück, seitlich) | drehen | RT schneller bis 100 %, LT langsamer |
-| Körper | verschieben | neigen (rollen/nicken) | LT/RT drehen |
-| Vorderbeine | linkes Bein (Fuß folgt dem Stick) | rechtes Bein | RT ausstrecken, LT heranziehen |
+| Walk | drive (forward/back, sideways) | turn | RT faster up to 100 %, LT slower |
+| Body | shift | tilt (roll/pitch) | LT/RT turn |
+| Front legs | left leg (foot follows the stick) | right leg | RT extend, LT pull in |
 
-In den Modus *Vorderbeine* zu wechseln hebt sie (im Stand), ein anderer Modus setzt sie wieder ab.
+Switching to *Front legs* mode raises them (while standing); any other mode lowers them again.
 
-Tasten (Standard, in der Grafik frei änderbar):
+Buttons (default, freely changeable in the graphic):
 
-| Taste | Aktion |
+| Button | Action |
 |---|---|
-| A | Aufstehen / Hinsetzen (Servos aus: erst einschalten, dann noch einmal drücken) |
-| B | Stopp (auch Geste beenden) |
-| X | Vorderbeine heben / absetzen |
-| Y | Modus wechseln (Laufen → Körper → Vorderbeine) |
-| LB / RB | Gangart zurück / weiter |
-| Steuerkreuz ↑ ↓ | Körper höher / tiefer (5 mm, Halten wiederholt) |
-| Steuerkreuz ← → | Tempo − / + (10 %) |
-| View | Lebendig an/aus |
-| Menü | nächste Geste (Kreisen, Ja, Nein, Liegestütz, Tanzen) |
-| Xbox | **Not-Aus** (Freigeben nur in der Oberfläche) |
-| LS / RS (drücken) | Lageausgleich an/aus / Winken |
-| Share | Haltung zurücksetzen |
-| P1 / P2 / P3 / P4 | Modus Laufen / Körper / Vorderbeine / Stopp (Elite-Paddles) |
+| A | Stand up / sit down (servos off: switch them on first, then press again) |
+| B | Stop (also ends a gesture) |
+| X | Raise / lower front legs |
+| Y | Change mode (Walk → Body → Front legs) |
+| LB / RB | Previous / next gait |
+| D-pad ↑ ↓ | Body higher / lower (5 mm, holding repeats) |
+| D-pad ← → | Speed − / + (10 %) |
+| View | Alive on/off |
+| Menu | Next gesture (Circle, Yes, No, Push-up, Dance) |
+| Xbox | **E-stop** (release only in the UI) |
+| LS / RS (press) | Levelling on/off / Wave |
+| Share | Reset posture |
+| P1 / P2 / P3 / P4 | Mode Walk / Body / Front legs / Stop (Elite paddles) |
 
-Weitere wählbare Aktionen: Modus direkt, einzelne Gesten, Servos an/aus. Eine beim Verbinden noch
-gedrückte Taste (z. B. die Xbox-Taste zum Einschalten) löst nichts aus.
+Further selectable actions: mode directly, individual gestures, servos on/off. A button still
+pressed when connecting (e.g. the Xbox button used to switch on) triggers nothing.
 
-**Sticks:** *Tempo* ist das Grundtempo beim Laufen, *Totzone* der Ausschlag, der ignoriert wird (gegen
-Wandern der Sticks), *Feinfühligkeit* macht kleine Ausschläge feiner (Kennlinie), ohne den Höchstwert zu
-ändern.
+**Sticks:** *Speed* is the base speed when walking, *Dead zone* the deflection that is ignored (against
+stick drift), *Fine control around the centre* makes small deflections finer (response curve) without changing the
+maximum.
 
-Meldungen des Controllers (Modus, Gangart, Fehler wie „Erst aufstehen“) erscheinen in der Oberfläche.
+Controller messages (mode, gait, errors such as “Stand up first”) appear in the UI.
 
 ## Tests
 
-[`test_host/pad_test.cpp`](../firmware/test_host/pad_test.cpp): Auswertung des Bluetooth-Berichts (Sticks,
-Trigger, Tasten, Steuerkreuz, Elite-Paddles), Totzone und Kennlinie, Richtungen je Modus, Flanken und
-Wiederholung, Moduswechsel, Belegung.
+[`test_host/pad_test.cpp`](../firmware/test_host/pad_test.cpp): evaluation of the Bluetooth report (sticks,
+triggers, buttons, D-pad, Elite paddles), dead zone and response curve, directions per mode, edges and
+repetition, mode change, mapping.
