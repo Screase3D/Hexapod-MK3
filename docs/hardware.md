@@ -1,86 +1,86 @@
-# Hardware und Pinbelegung
+# Hardware and Pin Assignment
 
-Quelle: [`hexapod_schaltplan_v4.png`](hexapod_schaltplan_v4.png) und
-[`ESP32_S3_Camera_Instructions.pdf`](ESP32_S3_Camera_Instructions.pdf) (Seite „Product Pin Description“).
-Alle Pins stehen zentral in [`firmware/include/config.h`](../firmware/include/config.h).
+Source: [`hexapod_schaltplan_v4.png`](hexapod_schaltplan_v4.png) and
+[`ESP32_S3_Camera_Instructions.pdf`](ESP32_S3_Camera_Instructions.pdf) (page “Product Pin Description”).
+All pins are defined centrally in [`firmware/include/config.h`](../firmware/include/config.h).
 
-## Komponenten
+## Components
 
-| Baugruppe | Typ | Anmerkung |
+| Assembly | Type | Note |
 |---|---|---|
-| Controller | ESP32-S3-CAM (ESP32-S3 N16R8) | 16 MB Flash, 8 MB Octal-PSRAM, CH340 an der Buchse „TTL“ |
-| Kamera | OV5640 (verbaut), OV2640 laut Board-Doku | Typ wird automatisch erkannt; der OV5640 wird im Dauerbetrieb sehr heiß → Firmware legt ihn ohne Stream schlafen, Kühlkörper/Luft am Modul hilft |
-| Servotreiber | 2× PCA9685 | #1 = 0x40 (linke Seite), #2 = 0x41 (A0 gebrückt, rechte Seite) |
-| Servos | 18× MG90S | Coxa / Femur / Tibia je Bein |
-| Lagesensor | MPU6050 (GY-521) | 0x68 (AD0 an GND), an 3V3 |
-| Stromversorgung | 2× 18650 in Serie (2S, **ohne BMS**), Sicherung 7,5 A | V_BAT 6,0–8,4 V |
-| Servo-Versorgung | 2× UBEC auf 5 V | je ein UBEC pro PCA9685 (9 Servos) |
-| Logik-Versorgung | Mini-Buck 5 V | ESP32 + LEDs |
-| Augen | 2× WS2812B | über Diode D1 (≈ 4,3 V) und 330 Ω |
+| Controller | ESP32-S3-CAM (ESP32-S3 N16R8) | 16 MB flash, 8 MB octal PSRAM, CH340 on the “TTL” port |
+| Camera | OV5640 (fitted), OV2640 according to the board docs | Type is detected automatically; the OV5640 gets very hot in continuous operation → the firmware puts it to sleep when not streaming; a heat sink/airflow on the module helps |
+| Servo driver | 2× PCA9685 | #1 = 0x40 (left side), #2 = 0x41 (A0 bridged, right side) |
+| Servos | 18× MG90S | Coxa / femur / tibia per leg |
+| IMU | MPU6050 (GY-521) | 0x68 (AD0 to GND), on 3V3 |
+| Power supply | 2× 18650 in series (2S, **no BMS**), 7.5 A fuse | V_BAT 6.0–8.4 V |
+| Servo supply | 2× UBEC at 5 V | one UBEC per PCA9685 (9 servos) |
+| Logic supply | Mini buck 5 V | ESP32 + LEDs |
+| Eyes | 2× WS2812B | via diode D1 (≈ 4.3 V) and 330 Ω |
 
-## ESP32-Pins
+## ESP32 pins
 
-| GPIO | Funktion | Bemerkung |
+| GPIO | Function | Remark |
 |---|---|---|
-| 47 | I²C SDA | PCA9685 #1/#2, MPU6050 (Wire, Port 0, 400 kHz) |
+| 47 | I²C SDA | PCA9685 #1/#2, MPU6050 (Wire, port 0, 400 kHz) |
 | 21 | I²C SCL | |
-| 1 | Akkuspannung (ADC1_CH0) | Teiler R1 100 kΩ / R2 47 kΩ, 100 nF → Faktor 3,128 |
-| 14 | WS2812B-Augen (Daten) | RMT |
-| 48 | WS2812 auf dem Board | Statusanzeige standardmäßig nur beim Start und Verbinden mit dem WLAN, danach aus (sitzt vor der Kamera); Seite *LEDs*: auch „wie die Augen“ oder ganz aus |
-| 0 | BOOT-Taster | derzeit ungenutzt |
-| 4 / 5 | Kamera SCCB SDA / SCL | eigener I²C-Port 1 |
-| 15 | Kamera XCLK | 20 MHz |
-| 16, 17, 18, 12, 10, 8, 9, 11 | Kamera Y9 … Y2 (D7 … D0) | |
-| 6 / 7 / 13 | Kamera VSYNC / HREF / PCLK | |
-| 38, 39, 40 | SD-Karte (CMD, CLK, DATA) | frei für spätere Aufzeichnung |
-| 35, 36, 37 | Octal-PSRAM | **nicht verwenden** |
-| 43 / 44 | UART0 TX / RX (CH340) | Serieller Monitor, 115200 Baud |
+| 1 | Battery voltage (ADC1_CH0) | Divider R1 100 kΩ / R2 47 kΩ, 100 nF → factor 3.128 |
+| 14 | WS2812B eyes (data) | RMT |
+| 48 | WS2812 on the board | Status indicator by default only at startup and while connecting to Wi-Fi, then off (sits in front of the camera); *LEDs* page: also “like the eyes” or completely off |
+| 0 | BOOT button | currently unused |
+| 4 / 5 | Camera SCCB SDA / SCL | separate I²C port 1 |
+| 15 | Camera XCLK | 20 MHz |
+| 16, 17, 18, 12, 10, 8, 9, 11 | Camera Y9 … Y2 (D7 … D0) | |
+| 6 / 7 / 13 | Camera VSYNC / HREF / PCLK | |
+| 38, 39, 40 | SD card (CMD, CLK, DATA) | free for future recording |
+| 35, 36, 37 | Octal PSRAM | **do not use** |
+| 43 / 44 | UART0 TX / RX (CH340) | Serial monitor, 115200 baud |
 
-## Servo-Zuordnung
+## Servo mapping
 
-Servo-ID = Bein × 3 + Gelenk (Gelenk 0 = Coxa, 1 = Femur, 2 = Tibia).
+Servo ID = leg × 3 + joint (joint 0 = coxa, 1 = femur, 2 = tibia).
 
-| Bein (UI) | Position | PCA9685 | Kanäle Coxa / Femur / Tibia | Servo-IDs |
+| Leg (UI) | Position | PCA9685 | Channels coxa / femur / tibia | Servo IDs |
 |---|---|---|---|---|
-| 1 | vorne links | #2 (0x41) | CH0 / CH1 / CH2 | 0 / 1 / 2 |
-| 2 | Mitte links | #2 (0x41) | CH3 / CH4 / CH5 | 3 / 4 / 5 |
-| 3 | hinten links | #2 (0x41) | CH6 / CH7 / CH8 | 6 / 7 / 8 |
-| 4 | vorne rechts | #1 (0x40) | CH0 / CH1 / CH2 | 9 / 10 / 11 |
-| 5 | Mitte rechts | #1 (0x40) | CH3 / CH4 / CH5 | 12 / 13 / 14 |
-| 6 | hinten rechts | #1 (0x40) | CH6 / CH7 / CH8 | 15 / 16 / 17 |
+| 1 | front left | #2 (0x41) | CH0 / CH1 / CH2 | 0 / 1 / 2 |
+| 2 | middle left | #2 (0x41) | CH3 / CH4 / CH5 | 3 / 4 / 5 |
+| 3 | rear left | #2 (0x41) | CH6 / CH7 / CH8 | 6 / 7 / 8 |
+| 4 | front right | #1 (0x40) | CH0 / CH1 / CH2 | 9 / 10 / 11 |
+| 5 | middle right | #1 (0x40) | CH3 / CH4 / CH5 | 12 / 13 / 14 |
+| 6 | rear right | #1 (0x40) | CH6 / CH7 / CH8 | 15 / 16 / 17 |
 
-Die beiden PCA9685 sind gespiegelt eingebaut: **#1 (0x40) sitzt rechts** und versorgt über
-UBEC 1 die Beine 4–6, **#2 (0x41, A0 gebrückt) sitzt links** mit UBEC 2 und den Beinen 1–3.
+The two PCA9685 boards are mounted mirrored: **#1 (0x40) sits on the right** and, via
+UBEC 1, supplies legs 4–6; **#2 (0x41, A0 bridged) sits on the left** with UBEC 2 and legs 1–3.
 
-Weicht die Verkabelung ab, nur die Tabelle `SERVO_MAP` in
-[`firmware/src/servo/servo_map.h`](../firmware/src/servo/servo_map.h) anpassen.
+If the wiring differs, only adjust the `SERVO_MAP` table in
+[`firmware/src/servo/servo_map.h`](../firmware/src/servo/servo_map.h).
 
-## Hinweise zur Schaltung
+## Circuit notes
 
-- **Akku ohne BMS:** Die Firmware kann die Zellen in drei Stufen schützen:
-  Warnung unter 6,8 V, Servos aus unter 6,4 V (nach 5 s), Tiefschlaf des ESP32 unter 6,0 V
-  (nach 10 s). UBECs und Buck ziehen auch dann noch Ruhestrom – einen leeren Akku also
-  trotzdem zeitnah abstecken. Schwellen in `config.h` (`BAT_*`).
-- **Akkuüberwachung schalten:** Unter *Einstellungen* → *Akku* gibt es zwei Schalter, gespeichert im NVS:
-  *Akkuüberwachung* (Warnung + Servo-Abschaltung) und *Tiefschlaf bei Tiefentladung*
-  (wirkt nur bei eingeschalteter Überwachung). **Ab Werk ist die Überwachung aus**, weil
-  GPIO 1 ohne bestückten Spannungsteiler offen ist und Zufallswerte liefert. Gemessen und
-  angezeigt wird trotzdem („Messwert (ungeprüft)“): Nach dem Einlöten des Teilers den Wert
-  mit einem Multimeter am Akku vergleichen und erst dann einschalten. Die Werkseinstellung
-  steht in `BAT_MONITOR_DEFAULT` / `BAT_DEEP_SLEEP_DEFAULT`.
-- **Kein OE-Pin verdrahtet:** Die PCA9685-Ausgänge werden per I²C abgeschaltet
-  („Torque aus“, Not-Aus). Nach dem Einschalten sind alle Ausgänge aus, bis Torque in der
-  Oberfläche aktiviert wird.
-- **Gestaffeltes Einschalten:** Beim Aktivieren von Torque wird alle 20 ms ein weiterer Servo
-  zugeschaltet, und die Pulsanfänge der Kanäle sind über die PWM-Periode verteilt. Das
-  begrenzt die Stromspitzen auf den UBECs.
-- **Sicheres Einschalten:** Die echte Stellung der Servos ist vor dem Einschalten unbekannt. Jeder
-  Servo geht deshalb zuerst in die Sitzhaltung (drückt einen liegenden Roboter nicht hoch) und fährt
-  von dort mit höchstens 45 °/s zu seinem Sollwert – egal, welcher Sollwert zuletzt galt (z. B.
-  Montagestellung). Ebenso langsam fahren die „Alle …“-Befehle der Kalibrierung.
-- **PCA9685-Oszillator:** nominal 25 MHz, real oft 24–27 MHz. Über die Kalibrierung wird das
-  ausgeglichen; wer es genau will, misst 1500 µs mit Oszilloskop/Logic-Analyzer und trägt den
-  korrigierten Wert in `PCA1_OSC_HZ` / `PCA2_OSC_HZ` ein.
-- **ESP-Versorgung:** entweder Mini-Buck oder USB, nicht beides ohne Schottky-Diode
-  (siehe Schaltplan). Zum Flashen per USB also den Hauptschalter SW1 ausschalten – oder ein
-  USB-Kabel bzw. -Adapter ohne 5-V-Leitung verwenden, wenn der Akku dranbleiben soll.
+- **Battery without BMS:** The firmware can protect the cells in three stages:
+  warning below 6.8 V, servos off below 6.4 V (after 5 s), ESP32 deep sleep below 6.0 V
+  (after 10 s). The UBECs and buck still draw quiescent current even then – so disconnect an empty battery
+  promptly anyway. Thresholds in `config.h` (`BAT_*`).
+- **Switching battery monitoring:** Under *Settings* → *Battery* there are two switches, stored in NVS:
+  *Battery monitoring* (warning + servo shutdown) and *Deep sleep on deep discharge*
+  (only effective with monitoring switched on). **Monitoring is off by factory default**, because
+  GPIO 1 is floating without a fitted voltage divider and returns random values. The voltage is still measured and
+  displayed (“Reading (unchecked)”): after soldering in the divider, compare the value
+  with a multimeter at the battery and only then switch it on. The factory default
+  is set in `BAT_MONITOR_DEFAULT` / `BAT_DEEP_SLEEP_DEFAULT`.
+- **No OE pin wired:** The PCA9685 outputs are switched off via I²C
+  (“Torque off”, emergency stop). After power-up all outputs are off until torque is enabled in the
+  UI.
+- **Staggered power-up:** When torque is enabled, another servo is switched on every 20 ms,
+  and the pulse start times of the channels are distributed across the PWM period. This
+  limits the current peaks on the UBECs.
+- **Safe power-up:** The actual position of the servos is unknown before power-up. Each
+  servo therefore first goes to the sitting pose (does not push up a robot lying down) and moves
+  from there at no more than 45 °/s to its target – regardless of which target last applied (e.g.
+  the assembly pose). The calibration's “All …” commands move just as slowly.
+- **PCA9685 oscillator:** nominally 25 MHz, in practice often 24–27 MHz. Calibration
+  compensates for this; if you want it exact, measure 1500 µs with an oscilloscope/logic analyzer and enter the
+  corrected value in `PCA1_OSC_HZ` / `PCA2_OSC_HZ`.
+- **ESP supply:** either mini buck or USB, not both without a Schottky diode
+  (see schematic). So to flash via USB, switch off the main switch SW1 – or use a
+  USB cable or adapter without a 5 V line if the battery is to stay connected.

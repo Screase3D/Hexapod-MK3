@@ -203,9 +203,9 @@ Host tests for kinematics, gaits, posture, behaviour, LEDs and controller live i
 [`firmware/test_host/`](firmware/test_host); CI runs them and builds the firmware on every push
 ([`.github/workflows/firmware.yml`](.github/workflows/firmware.yml)).
 
-Further documentation (German): [kinematics & gaits](docs/kinematik.md) ·
+Further documentation: [kinematics & gaits](docs/kinematik.md) ·
 [calibration](docs/kalibrierung.md) · [hardware](docs/hardware.md) · [controller](docs/controller.md) ·
-[API](docs/api.md) · [changelog](CHANGELOG.md)
+[API](docs/api.md) · [changelog](CHANGELOG.md) (German)
 
 # Credits
 CAD and hardware design by Screase3D and coded by Claude Opus 5.5 (Anthropic).

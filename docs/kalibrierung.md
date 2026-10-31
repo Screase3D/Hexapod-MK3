@@ -1,181 +1,179 @@
-# Servo-Kalibrierung
+# Servo Calibration
 
-Die inverse Kinematik rechnet in **Gelenkwinkeln**. Die Kalibrierung legt für jeden der
-18 Servos fest, welche Pulsbreite zu welchem Winkel gehört. Bezugspunkt ist die
-**Montagestellung** – die Stellung, in der die Servohörner bei Servo-Mitte (1500 µs)
-aufgesteckt werden:
+The inverse kinematics works in **joint angles**. Calibration defines, for each of the
+18 servos, which pulse width corresponds to which angle. The reference point is the
+**assembly pose** – the pose in which the servo horns are fitted with the servo centred (1500 µs):
 
 ```
-puls_us = center_us + (winkel_deg − ref_deg) × us_per_deg     (begrenzt auf min_deg … max_deg)
+puls_us = center_us + (winkel_deg − ref_deg) × us_per_deg     (clamped to min_deg … max_deg)
 ```
 
-| Wert | Bedeutung |
+| Value | Meaning |
 |---|---|
-| `ref_deg` | Gelenkwinkel der Montagestellung, fest je Gelenktyp (`ASSEMBLY_POSE` in `robot_geometry.h`): Coxa 0°, Femur +55,4°, Tibia −33,8° |
-| `center_us` | Pulsbreite in der Montagestellung (nach dem Aufstecken ≈ 1500 µs) |
-| `us_per_deg` | Steigung; das **Vorzeichen** ist die Drehrichtung (MG90S ≈ ±11,1 µs/°) |
-| `min_deg`, `max_deg` | Software-Endanschläge des Gelenks (Gelenkwinkel) |
+| `ref_deg` | Joint angle of the assembly pose, fixed per joint type (`ASSEMBLY_POSE` in `robot_geometry.h`): coxa 0°, femur +55.4°, tibia −33.8° |
+| `center_us` | Pulse width in the assembly pose (≈ 1500 µs after fitting the horns) |
+| `us_per_deg` | Slope; the **sign** is the direction of rotation (MG90S ≈ ±11.1 µs/°) |
+| `min_deg`, `max_deg` | Software end stops of the joint (joint angles) |
 
-Die Werte liegen im NVS des ESP32 (überleben Neustart und Firmware-Update) und lassen sich im
-Bereich **Kalibrierung & Justierung** mit **Export** als JSON sichern – am besten eine Kopie ins
-Repository legen.
+The values are stored in the ESP32's NVS (they survive restarts and firmware updates) and can be
+backed up as JSON with **Export** in the **Calibration & fine-tuning** section – ideally, put a copy in the
+repository.
 
-## Montagestellung
+## Assembly pose
 
-Die Hörner werden nicht bei 0° (Femur waagerecht), sondern in der **Grundstellung** aufgesteckt,
-in der der Roboter steht (Höhe wie im CAD aufgebockt, Füße 100 mm von der Coxa-Achse):
+The horns are not fitted at 0° (femur horizontal) but in the **default posture**
+in which the robot stands (height jacked up as in the CAD model, feet 100 mm from the coxa axis):
 
-| Gelenk | Montagestellung | Gelenkwinkel |
+| Joint | Assembly pose | Joint angle |
 |---|---|---|
-| Coxa | Bein zeigt in Montagerichtung (Ecken 45°, Mitte 90°) | 0° |
-| Femur | 55,4° nach oben | +55,4° |
-| Tibia | Linie Knie → Fußspitze 68° unter der Waagerechten, Fußspitze 35 mm außerhalb des Knies | −33,8° |
+| Coxa | Leg points in the mounting direction (corners 45°, middle 90°) | 0° |
+| Femur | 55.4° upward | +55.4° |
+| Tibia | Line knee → foot tip 68° below horizontal, foot tip 35 mm outside the knee | −33.8° |
 
-Praktisch heißt das: **Roboter so aufbocken, dass die Femur-Achsen 52 mm über dem Tisch liegen**
-(Chassis-Unterkante ca. 28 mm) und die Fußspitzen **100 mm von der Coxa-Achse** entfernt auf den
-Tisch stellen – dann steht jedes Bein genau in der Montagestellung.
+In practice this means: **jack the robot up so that the femur axes are 52 mm above the table**
+(underside of the chassis approx. 28 mm) and place the foot tips on the table **100 mm from the coxa axis**
+– then every leg is exactly in the assembly pose.
 
-So liegt die Servo-Mitte mitten im Arbeitsbereich: Laufen und Sitzen bleiben innerhalb von ±50°,
-nur der ganz hoch gestellte Körper braucht −65° am Femur (siehe [kinematik.md](kinematik.md)). Die Montagestellung ist zugleich die **Standardhaltung**
-der IK – „Alle auf Montagestellung“ stellt den Roboter hin.
+This puts the servo centre in the middle of the working range: walking and sitting stay within ±50°;
+only the body at its highest setting needs −65° at the femur (see [kinematik.md](kinematik.md)). The assembly pose is also the **default posture**
+of the IK – “All to assembly pose” makes the robot stand.
 
-Zum Aufstecken und Prüfen gibt es eine **Lehre zum Ausdrucken**:
-[montagelehre.pdf](montagelehre.pdf) (A4, mit 100 % drucken, Kontrollmaß 50 mm nachmessen).
-Sie zeigt die Achslinien in Originalgröße: Femur-Achse und Knie-Achse als Kreuze, die
-Fußspitze als Marke, den gebogenen Unterschenkel als Umriss und eine Winkellehre für die Coxa.
-Wer es genauer will, konstruiert im CAD kleine Keile, die zwischen Coxa-Halter und Femur bzw.
-Femur und Tibia genau 55,4° bzw. 56,2° (Kniewinkel zwischen den Achslinien) einstellen.
+For fitting and checking there is a **printable jig**:
+[montagelehre.pdf](montagelehre.pdf) (A4, print at 100 %, measure the 50 mm check dimension).
+It shows the axis lines at full scale: femur axis and knee axis as crosses, the
+foot tip as a mark, the curved lower leg as an outline, and an angle gauge for the coxa.
+If you want more precision, design small wedges in CAD that set exactly 55.4° between coxa bracket and femur
+and 56.2° (knee angle between the axis lines) between femur and tibia.
 
-## Gelenk-Konvention
+## Joint convention
 
-Gilt für **beide Körperseiten gleich**, damit links und rechts dieselben Zahlen bedeuten.
+Applies **identically to both sides of the body**, so that the same numbers mean the same thing on the left and right.
 
-### Nullstellung (alle Gelenke 0°)
+### Zero position (all joints 0°)
 
-Die Winkel-Konvention ist reine Mathematik; die Montagestellung oben hat andere Winkel.
+The angle convention is pure mathematics; the assembly pose above has different angles.
 
-Draufsicht (vorne = oben) – jede Coxa zeigt entlang ihrer Montageachse gerade vom Körper weg:
+Top view (front = up) – each coxa points straight away from the body along its mounting axis:
 
 ```
-            ▲ VORNE
-   Bein 1 ──┐     ┌── Bein 4
+            ▲ FRONT
+   Leg 1 ───┐     ┌── Leg 4
             │     │
-   Bein 2 ──┤     ├── Bein 5
+   Leg 2 ───┤     ├── Leg 5
             │     │
-   Bein 3 ──┘     └── Bein 6
+   Leg 3 ───┘     └── Leg 6
 ```
 
-Seitenansicht eines Beins – Femur waagerecht, Tibia im rechten Winkel dazu (senkrecht nach unten):
+Side view of a leg – femur horizontal, tibia at a right angle to it (pointing straight down):
 
 ```
-   Körper ┃
-          ┃═●━━━━━━━━━━━●   ● = Gelenkachsen (Femur-Gelenk, Knie)
+     Body ┃
+          ┃═●━━━━━━━━━━━●   ● = joint axes (femur joint, knee)
           ┃   Femur     ┃
                         ┃ Tibia
                         ┃
-                        ▼ Fuß
+                        ▼ Foot
 ```
 
-### Positive Drehrichtung
+### Positive direction of rotation
 
-| Gelenk | 0° | positiver Winkel |
+| Joint | 0° | positive angle |
 |---|---|---|
-| **Coxa** | Bein zeigt entlang der Montageachse vom Körper weg | Fuß schwenkt nach **vorne** |
-| **Femur** | Oberschenkel waagerecht | Oberschenkel hebt sich (**nach oben**) |
-| **Tibia** | Unterschenkel 90° zum Femur (bei waagerechtem Femur senkrecht nach unten) | Fuß bewegt sich nach **außen** (Knie öffnet sich) |
+| **Coxa** | Leg points away from the body along the mounting axis | Foot swings **forward** |
+| **Femur** | Upper leg horizontal | Upper leg rises (**upward**) |
+| **Tibia** | Lower leg at 90° to the femur (pointing straight down when the femur is horizontal) | Foot moves **outward** (knee opens) |
 
-„Tibia“ meint die Linie von der Kniegelenkachse zur Fußspitze – bei gebogenen Unterschenkeln
-also nicht die Außenkante des Bauteils.
+“Tibia” means the line from the knee joint axis to the foot tip – with curved lower legs,
+that is not the outer edge of the part.
 
-### Standard-Drehrichtung und schneller Richtungstest
+### Default direction of rotation and quick direction test
 
-Die Beine sind links und rechts **spiegelbildlich** aufgebaut, darum dreht links jedes Gelenk bei
-gleichem Puls andersherum (Femur/Tibia: Servos gespiegelt eingebaut; Coxa: alle Wellen zeigen nach
-oben, „Fuß nach vorne“ ist aber links im und rechts gegen den Uhrzeigersinn). Ohne Kalibrierschritt
-„Richtung“ gilt deshalb rechts +11,1 µs/° und links −11,1 µs/° (`SERVO_DEFAULT_DIR` in
+The legs on the left and right are built as **mirror images**, so on the left every joint turns
+the other way for the same pulse (femur/tibia: servos mounted mirrored; coxa: all shafts point
+up, but “foot forward” is clockwise on the left and counter-clockwise on the right). Without the
+“direction” calibration step, the defaults are therefore +11.1 µs/° on the right and −11.1 µs/° on the left (`SERVO_DEFAULT_DIR` in
 `src/servo/servo_map.h`).
 
-Prüfen, bevor der Roboter steht oder läuft (Torque an, Roboter aufgebockt): unter
-*Kalibrierung & Justierung* → **Justieren** je Bein den Schieber von der Montagestellung aus ein Stück
-nach **rechts** (größerer Winkel) schieben:
+Check before the robot stands or walks (torque on, robot jacked up): under
+*Calibration & fine-tuning* → **Fine-tune**, move each leg's slider a little from the assembly pose
+to the **right** (larger angle):
 
-| Gelenk | richtig, wenn … |
+| Joint | correct if … |
 |---|---|
-| Coxa | der Fuß nach **vorne** schwenkt (bei Bein 1 und 4 also Richtung Kamera) |
-| Femur | der Oberschenkel nach **oben** geht |
-| Tibia | die Fußspitze nach **außen** geht |
+| Coxa | the foot swings **forward** (towards the camera for legs 1 and 4) |
+| Femur | the upper leg goes **up** |
+| Tibia | the foot tip goes **outward** |
 
-Bewegt sich ein Gelenk andersherum: unter **Kalibrieren** den Servo wählen,
-**„Drehrichtung umkehren“**, am Ende **Speichern**. Die Montagestellung bleibt dabei erhalten.
-Typisches Bild, wenn eine ganze Seite falsch dreht: Beim Hinsetzen/Aufstehen bewegt sie sich
-spiegelverkehrt, und beim Laufen kommt der Roboter nicht vorwärts.
+If a joint moves the other way: under **Calibrate**, select the servo,
+press **“Reverse direction”**, and finally **Save**. The assembly pose is preserved.
+Typical symptom when an entire side turns the wrong way: when sitting down/standing up it moves
+mirror-inverted, and when walking the robot makes no forward progress.
 
-## Ablauf
+## Procedure
 
-> Vor dem ersten Einschalten: Roboter aufbocken, sodass die Beine frei hängen.
-> Not-Aus: roter **STOP**-Knopf oder Taste **Esc**.
+> Before powering on for the first time: jack the robot up so that the legs hang freely.
+> Emergency stop: red **STOP** button or the **Esc** key.
 
-1. **Hörner aufstecken.** Servohörner abnehmen. Unter *Kalibrierung & Justierung* **Torque**
-   einschalten und **„Alle auf 1500 µs“** drücken. Jetzt die Hörner/Beinteile so aufstecken, dass jedes
-   Bein so nah wie möglich an der Montagestellung steht (Montagelehre). Die Verzahnung erlaubt
-   nur Schritte von einem Zahn (≈ 18°) – also den Zahn wählen, bei dem die Abweichung am
-   kleinsten ist; den Rest erledigt Schritt 2.
-2. **Montagestellung feinjustieren.** Ein Gelenk in der Beinübersicht anklicken, im Rohmodus
-   mit ±1/±10 µs (oder Pfeiltasten ←/→, mit Umschalt ±10) exakt in die Montagestellung fahren
-   und **„Aktuelle Stellung = Montagestellung“** drücken. Je Bein **zuerst den Femur**, dann
-   die Tibia (die Lehre richtet sich an Femur- und Knie-Achse aus).
-3. **Richtung und Maßstab.** Das Gelenk auf einen zweiten bekannten Winkel fahren, den Winkel
-   **mit Vorzeichen laut Tabelle oben** eintragen und **„Aktuelle Stellung = Referenz“**
-   drücken. Daraus ergibt sich `us_per_deg` inklusive Drehrichtung. Gut messbar sind:
-   - Coxa ±45°: Eckbeine stehen dann parallel bzw. quer zur Körperlängsachse, Mittelbeine
-     parallel zu den Eckbeinen in Montagestellung (Winkellehre C),
-   - Femur 0°: waagerecht (rote Linie der Lehre, Wasserwaagen-App),
-   - Tibia 0°: rechtwinklig zum Femur (blaue Linie der Lehre).
+1. **Fit the horns.** Remove the servo horns. Under *Calibration & fine-tuning*, switch **Torque**
+   on and press **“All to 1500 µs”**. Now fit the horns/leg parts so that each
+   leg is as close as possible to the assembly pose (mounting jig). The spline only allows
+   steps of one tooth (≈ 18°) – so choose the tooth with the smallest
+   deviation; step 2 takes care of the rest.
+2. **Fine-tune the assembly pose.** Click a joint in the leg overview, move it exactly into the assembly pose in raw mode
+   with ±1/±10 µs (or the arrow keys ←/→, with Shift ±10),
+   and press **“Current position = assembly pose”**. For each leg, do **the femur first**, then
+   the tibia (the jig is aligned to the femur and knee axes).
+3. **Direction and scale.** Move the joint to a second known angle, enter the angle
+   **with the sign according to the table above**, and press **“Current position = reference”**.
+   This yields `us_per_deg` including the direction of rotation. Easy to measure are:
+   - Coxa ±45°: the corner legs are then parallel or perpendicular to the body's longitudinal axis, the middle legs
+     parallel to the corner legs in the assembly pose (angle gauge C),
+   - Femur 0°: horizontal (red line on the jig, spirit-level app),
+   - Tibia 0°: perpendicular to the femur (blue line on the jig).
 
-   Wer diesen Schritt auslässt, prüft die Richtung mit dem Test-Schieber und nutzt bei Bedarf
-   **„Drehrichtung umkehren“** – die Montagestellung bleibt dabei erhalten.
-4. **Grenzen.** Mit dem Test-Schieber (Abschnitt 3, kalibriert) langsam bis kurz vor
-   mechanische Kollisionen fahren und `Min`/`Max` eintragen → **„Werte übernehmen“**.
-5. Für alle 18 Servos wiederholen (↑/↓ springt zum vorherigen/nächsten Servo). Kalibrierte
-   Gelenke bekommen in der Übersicht einen grünen Punkt.
-6. **Speichern** – erst dann landen die Werte dauerhaft im NVS. „Verwerfen“ lädt den letzten
-   gespeicherten Stand, „Standardwerte“ setzt alles zurück (ebenfalls erst mit Speichern
-   dauerhaft).
-7. Oben auf der Seite **Export** drücken und die JSON-Datei sichern.
+   If you skip this step, check the direction with the test slider and, if necessary, use
+   **“Reverse direction”** – the assembly pose is preserved.
+4. **Limits.** With the test slider (section 3, calibrated), move slowly until just before
+   mechanical collisions and enter `Min`/`Max` → **“Apply values”**.
+5. Repeat for all 18 servos (↑/↓ jumps to the previous/next servo). Calibrated
+   joints get a green dot in the overview.
+6. **Save** – only then are the values stored permanently in NVS. “Discard” reloads the last
+   saved state, “Defaults” resets everything (also only permanent after Save).
+7. Press **Export** at the top of the page and keep the JSON file safe.
 
-## Hinweise
+## Notes
 
-- Umschalter **Justieren** (gleiche Seite): alle 18 Gelenke kalibriert auf einen Blick, je ein
-  Schieber – praktisch, um nach dem Kalibrieren alle Beine gemeinsam zu prüfen.
-- Der **Rohmodus ignoriert die Grenzen** (nur 500–2500 µs absolut). Langsam fahren, solange die
-  Beine montiert sind.
-- Alle Bewegungen laufen über eine Rampe (Standard 240 °/s, einstellbar unter *Einstellungen* → *Servos*).
-- Nach dem Einschalten fahren die Servos beim Aktivieren von Torque direkt in die
-  Sitzhaltung (Füße weit außen, siehe [kinematik.md](kinematik.md#aufstehen-und-hinsetzen); die
-  echte Position ist vorher unbekannt). Für die Montage danach „Alle auf 1500 µs (Montage)“.
-- Import einer JSON-Datei überschreibt alle 18 Servos und speichert sofort.
-- Kalibrierungen aus älteren Firmware-Ständen (Bezug 0°, Version 1) werden beim Laden und beim
-  Import automatisch auf die Montagestellung umgerechnet; nie kalibrierte Servos (1500 µs,
-  Standardsteigung) bleiben Standardwerte. Nach dem Umstecken der Hörner trotzdem neu kalibrieren.
-- Wird `ASSEMBLY_POSE` in `robot_geometry.h` geändert, müssen die Hörner neu ausgerichtet und
-  Schritt 2 wiederholt werden.
+- **Fine-tune** toggle (same page): all 18 joints calibrated at a glance, one
+  slider each – handy for checking all legs together after calibration.
+- **Raw mode ignores the limits** (only 500–2500 µs absolute). Move slowly while the
+  legs are mounted.
+- All movements go through a ramp (default 240 °/s, adjustable under *Settings* → *Servos*).
+- After power-up, the servos move straight to the
+  sitting pose when torque is enabled (feet far out, see [kinematik.md](kinematik.md#aufstehen-und-hinsetzen); the
+  actual position is unknown beforehand). For assembly, then use “All to 1500 µs”.
+- Importing a JSON file overwrites all 18 servos and saves immediately.
+- Calibrations from older firmware versions (reference 0°, version 1) are automatically converted to the assembly pose
+  on load and on import; servos that were never calibrated (1500 µs,
+  default slope) remain at default values. Recalibrate anyway after re-fitting the horns.
+- If `ASSEMBLY_POSE` in `robot_geometry.h` is changed, the horns must be realigned and
+  step 2 repeated.
 
-## Lagesensor
+## IMU
 
-Der MPU6050 liefert Nick und Roll mit denselben Vorzeichen wie die Körperhaltung:
-**Nick + = Nase hoch**, **Roll + = rechte Seite runter**. Die Einstellungen liegen im NVS.
+The MPU6050 provides pitch and roll with the same signs as the body posture:
+**pitch + = nose up**, **roll + = right side down**. The settings are stored in NVS.
 
-1. **Einbaulage** (*Einstellungen* → *Lagesensor*): Richtung des X-Pfeils auf der GY-521-Platine
-   (vorne/links/hinten/rechts) und Bauteilseite (oben/unten). Prüfen unter *Steuerung* → *Lage*:
-   Nase anheben → Nick wird positiv, rechte Seite absenken → Roll wird positiv. Sonst Einbaulage
-   ändern. (Eine Änderung löscht den Nullpunkt.)
-2. **Nullpunkt:** Roboter auf eine waagerechte Fläche stellen (stehend oder aufgebockt) und
-   **„Als waagerecht übernehmen“** drücken, ca. 2 s nicht berühren. Damit wird eine schief
-   eingebaute Platine ausgeglichen; die Anzeige zeigt danach 0°/0°.
-3. **Gyro-Nullpunkt:** wird bei jedem Start gemessen – aber nur übernommen, wenn der Roboter dabei
-   still stand. Bewegt er sich (z. B. in der Hand), gilt der zuletzt bei einer Kalibrierung
-   gespeicherte Wert. Im Stillstand wird er außerdem langsam nachgeführt (Temperaturdrift).
-   „Gyro neu messen“ misst ihn sofort neu (2 s ruhig halten).
+1. **Mounting orientation** (*Camera & IMU* page): direction of the X arrow on the GY-521 board
+   (front/left/rear/right) and component side (top/bottom). Check under *Control* → *Attitude*:
+   lift the nose → pitch becomes positive, lower the right side → roll becomes positive. Otherwise change the mounting
+   orientation. (A change clears the zero point.)
+2. **Zero point:** place the robot on a level surface (standing or jacked up) and
+   press **“Set zero point (level)”**; do not touch it for approx. 2 s. This compensates for a board
+   mounted at an angle; the display then shows 0°/0°.
+3. **Gyro zero:** measured at every start – but only applied if the robot was
+   standing still. If it is moving (e.g. held in the hand), the value last saved during a calibration
+   is used. When stationary, it is also slowly tracked (temperature drift).
+   “Recalibrate gyro” measures it again immediately (hold still for 2 s).
 
-Wackelt der Roboter während der Messung, bricht sie mit einer Meldung ab – einfach wiederholen.
-Ein falscher Gyro-Nullpunkt äußert sich als fester Winkelfehler von etwa 1° je 1 °/s.
+If the robot wobbles during the measurement, it aborts with a message – simply repeat it.
+A wrong gyro zero shows up as a fixed angle error of about 1° per 1 °/s.
